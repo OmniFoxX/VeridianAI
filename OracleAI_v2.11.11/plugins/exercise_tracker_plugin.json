@@ -1,0 +1,10 @@
+{
+  "id": "exercise-tracker",
+  "name": "Exercise Tracker",
+  "description": "Track workouts, activities, and fitness statistics.",
+  "version": "1.2",
+  "author": "OracleAI",
+  "enabled": false,
+  "type": "python_tool",
+  "hooks": {}
+}

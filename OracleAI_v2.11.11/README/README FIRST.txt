@@ -1,0 +1,1 @@
+Models in the "YourChosenDriveAndPath"\OracleAI_v2.11.11\bundled_models\ folder MUST go in the sister folder "YourChosenDriveAndPath\sage_data\models\ for OracleAI to work. If it doesn't work after setup, this is likely why. Copy the models to that folder, the relaunch OracleAI, enjoy!

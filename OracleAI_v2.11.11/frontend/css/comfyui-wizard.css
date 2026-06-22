@@ -1,0 +1,396 @@
+/* ============================================================
+   ComfyUI Setup Wizard — OracleAI v2.9.10
+   Matches OracleAI's existing modal/settings design language.
+   ============================================================ */
+
+.comfyui-wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: wizard-fade-in 0.2s ease;
+}
+
+@keyframes wizard-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.comfyui-wizard {
+  background: var(--bg-panel, #1a1a1a);
+  border: 1px solid var(--border, #333);
+  border-radius: 8px;
+  width: min(560px, 92vw);
+  max-height: 85vh;
+  overflow-y: auto;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  animation: wizard-slide-in 0.22s ease;
+}
+
+@keyframes wizard-slide-in {
+  from { transform: translateY(-18px); opacity: 0; }
+  to   { transform: translateY(0);     opacity: 1; }
+}
+
+.wizard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border, #333);
+  padding-bottom: 14px;
+}
+
+.wizard-title {
+  font-family: 'Cinzel', serif;
+  font-size: 1.1rem;
+  color: var(--gold, #c9a84c);
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.wizard-close {
+  background: none;
+  border: none;
+  color: var(--text-faint, #888);
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.wizard-close:hover {
+  color: var(--text, #eee);
+}
+
+.wizard-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.wizard-description {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.95rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.wizard-description strong {
+  color: var(--gold);
+}
+
+/* Step indicators */
+.wizard-steps {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wizard-step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.wizard-step-dot.active {
+  background: var(--gold, #c9a84c);
+}
+
+.wizard-step-dot.complete {
+  background: var(--success, #4caf50);
+}
+
+/* Install path input */
+.wizard-path-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.wizard-path-input {
+  flex: 1;
+  background: var(--bg-input, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text, #eee);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.8rem;
+  padding: 7px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.wizard-path-input:focus {
+  border-color: var(--gold, #c9a84c);
+}
+
+/* Progress bar */
+.wizard-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wizard-progress-label {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.88rem;
+  color: var(--text-muted);
+  min-height: 1.2em;
+}
+
+.wizard-progress-bar-track {
+  width: 100%;
+  height: 6px;
+  background: var(--bg-input, #111);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--border, #333);
+}
+
+.wizard-progress-bar-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--gold, #c9a84c), #e8c96a);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.wizard-progress-bar-fill.complete {
+  background: linear-gradient(90deg, #4caf50, #81c784);
+}
+
+.wizard-progress-bar-fill.error {
+  background: linear-gradient(90deg, #e53935, #ef9a9a);
+}
+
+/* Status messages */
+.wizard-status {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.78rem;
+  color: var(--text-faint, #888);
+  background: var(--bg-input, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  padding: 10px 12px;
+  min-height: 3.5em;
+  max-height: 120px;
+  overflow-y: auto;
+  line-height: 1.6;
+  display: none;
+}
+
+.wizard-status.visible {
+  display: block;
+}
+
+.wizard-status .log-line {
+  display: block;
+}
+
+.wizard-status .log-line.success { color: #81c784; }
+.wizard-status .log-line.error   { color: #ef9a9a; }
+.wizard-status .log-line.info    { color: var(--gold, #c9a84c); }
+
+/* Already installed notice */
+.wizard-already-installed {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(76, 175, 80, 0.1);
+  border: 1px solid rgba(76, 175, 80, 0.3);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  color: #81c784;
+}
+
+/* Footer buttons */
+.wizard-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  border-top: 1px solid var(--border, #333);
+  padding-top: 14px;
+  flex-wrap: wrap;
+}
+
+/* Reuse OracleAI's existing toolbar-btn + action-btn classes.
+   These extra modifiers handle wizard-specific sizing. */
+.wizard-btn-primary {
+  background: var(--gold, #c9a84c);
+  color: #111;
+  border: none;
+  border-radius: 4px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  letter-spacing: 0.04em;
+}
+
+.wizard-btn-primary:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.wizard-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.wizard-btn-secondary {
+  background: none;
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text-faint, #aaa);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.9rem;
+  padding: 8px 16px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.wizard-btn-secondary:hover {
+  border-color: var(--gold, #c9a84c);
+  color: var(--text, #eee);
+}
+
+/* Headless confirmed badge */
+.wizard-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.82rem;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-weight: 600;
+}
+
+.wizard-badge.headless {
+  background: rgba(76, 175, 80, 0.15);
+  border: 1px solid rgba(76, 175, 80, 0.4);
+  color: #81c784;
+}
+
+.wizard-badge.windowed {
+  background: rgba(255, 152, 0, 0.12);
+  border: 1px solid rgba(255, 152, 0, 0.35);
+  color: #ffb74d;
+}
+
+/* Model picker cards */
+.wizard-model-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wizard-model-card {
+  text-align: left;
+  background: var(--bg-input, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 12px 14px;
+  cursor: pointer;
+  font-family: 'Rajdhani', sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wizard-model-card:hover:not(:disabled) {
+  border-color: var(--gold, #c9a84c);
+  background: rgba(201, 168, 76, 0.06);
+}
+
+.wizard-model-card:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.wizard-model-card.selected {
+  border-color: var(--gold, #c9a84c);
+  box-shadow: 0 0 0 1px var(--gold, #c9a84c) inset;
+}
+
+.wizard-model-name {
+  color: var(--gold, #c9a84c);
+  font-weight: 600;
+  font-size: 0.98rem;
+  letter-spacing: 0.02em;
+}
+
+.wizard-model-meta {
+  color: var(--text-faint, #888);
+  font-size: 0.8rem;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.wizard-model-blurb {
+  color: var(--text-muted, #bbb);
+  font-size: 0.86rem;
+  line-height: 1.4;
+}
+
+.wizard-model-action {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wizard-model-del {
+  background: none;
+  border: 1px solid var(--border, #333);
+  border-radius: 4px;
+  color: var(--text-faint, #888);
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.82rem;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.wizard-model-del:hover:not(:disabled) {
+  border-color: #e57373;
+  color: #ef9a9a;
+}
+
+.wizard-model-tag {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--success, #81c784);
+  border: 1px solid rgba(129, 199, 132, 0.4);
+  border-radius: 10px;
+  padding: 1px 7px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.wizard-gpu-line {
+  font-family: 'Rajdhani', sans-serif;
+  font-size: 0.82rem;
+  color: var(--text-faint, #888);
+  background: var(--bg-input, #111);
+  border: 1px solid var(--border, #333);
+  border-radius: 6px;
+  padding: 6px 10px;
+}

@@ -1,0 +1,7 @@
+mcpServers:
+  - name: OracleAI
+    type: streamableHttp
+    url: http://127.0.0.1:8000/mcp/v1/jsonrpc
+    requestOptions:
+      headers:
+        Authorization: Bearer ${{ env.ORACLE_API_KEY }}

@@ -1,0 +1,13 @@
+OracleAI Community License v1.0
+
+Free for:
+- Personal use
+- Educational use  
+- Accessibility and assistive technology use
+- Non-commercial research
+
+Commercial, Enterprise, Governmental and all other deployment requires a paid license.
+Contact: silverfox4816@gmail.com RE: OracleAI Licensing Inquiry
+
+Modifications to encryption, authentication, or 
+hash-chain integrity systems require written permission.

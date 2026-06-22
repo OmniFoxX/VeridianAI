@@ -1,0 +1,10 @@
+{
+  "id": "task-prioritiser",
+  "name": "Task Prioritizer",
+  "description": "Multi-agent prioritization with 3 sub-agents for parallel dispatch.",
+  "version": "3.2",
+  "author": "OracleAI",
+  "enabled": true,
+  "type": "python_tool",
+  "hooks": {}
+}

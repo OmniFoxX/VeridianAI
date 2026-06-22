@@ -1,0 +1,7 @@
+{
+  "comfyui_home": "C:\\Users\\TADar\\OracleAI\\backend\\ComfyUI\\ComfyUI",
+  "comfyui_python_root": "C:\\Users\\TADar\\OracleAI\\backend\\ComfyUI\\ComfyUI",
+  "comfy_home": "C:\\Users\\TADar\\OracleAI\\backend\\ComfyUI\\ComfyUI",
+  "comfyui_model_key": "flux-schnell",
+  "comfyui_checkpoint": "flux1-schnell-fp8.safetensors"
+}

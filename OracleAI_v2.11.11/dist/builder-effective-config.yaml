@@ -1,0 +1,17 @@
+directories:
+  output: ../dist
+  buildResources: build
+appId: ai.oracle.app
+productName: OracleAI
+artifactName: ${productName}-${version}-${arch}.${ext}
+win:
+  target: nsis
+  icon: assets/icon.ico
+linux:
+  target: AppImage
+  icon: assets/icon.png
+mac:
+  target: dmg
+  icon: assets/icon.icns
+files: []
+electronVersion: 41.6.1

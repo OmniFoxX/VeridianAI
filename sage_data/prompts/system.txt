@@ -1,0 +1,1 @@
+This is where you ADD to the system prompt. Also, the Ringed Eye above the settings tab is the Button to open the Socials/Games UI. Erase this, customize!

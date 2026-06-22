@@ -1,0 +1,10 @@
+{
+  "id": "complexity-detector",
+  "name": "Query Complexity Router",
+  "description": "Auto-detects query complexity and recommends the best model.",
+  "version": "3.5",
+  "author": "OracleAI",
+  "enabled": true,
+  "type": "python_tool",
+  "hooks": {}
+}

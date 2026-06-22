@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OracleAI — not running yet</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0b1430; color: #e9edf6;
+    }
+    .card { max-width: 440px; text-align: center; padding: 34px 28px; }
+    .ring {
+      width: 88px; height: 88px; margin: 0 auto 20px; border-radius: 50%;
+      border: 3px solid #f0a500; box-shadow: 0 0 24px rgba(240,165,0,.35);
+      position: relative;
+    }
+    .ring::after {
+      content: ""; position: absolute; inset: 20px; border-radius: 50%;
+      background: radial-gradient(circle at 50% 42%, #ffd874, #f0820a);
+      box-shadow: 0 0 18px rgba(240,165,0,.5);
+    }
+    h1 { font-size: 18px; letter-spacing: .16em; color: #f0a500; margin: 0 0 12px; }
+    p { font-size: 14px; line-height: 1.6; opacity: .92; margin: 8px 0; }
+    .hint { font-size: 12.5px; opacity: .7; margin-top: 18px; }
+    code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 4px; }
+    button {
+      margin-top: 22px; background: #f0a500; color: #0b1430; border: 0;
+      border-radius: 8px; padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button:hover { background: #ffba1a; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="ring" aria-hidden="true"></div>
+    <h1>O R A C L E&nbsp;&nbsp;A I</h1>
+    <p>OracleAI isn't responding yet.</p>
+    <p>This installed app is just the interface &mdash; the OracleAI engine (and
+       <strong>Ollama</strong>) need to be running on this computer first.</p>
+    <p class="hint">Start OracleAI (run <code>start.bat</code> or open the OracleAI
+       desktop app), wait for the tiers to come online, then reload.</p>
+    <button onclick="location.reload()">Reload</button>
+  </div>
+</body>
+</html>

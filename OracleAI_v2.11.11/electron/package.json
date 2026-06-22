@@ -1,0 +1,41 @@
+{
+  "name": "oracleai",
+  "version": "2.11.11",
+  "description": "OracleAI — Local Multi-Tier Multi-AI Instance Training/Inference Interface",
+  "author": "OmniFoxX",
+  "homepage": "https://github.com/OmniFoxX",
+  "repository": "https://github.com/OmniFoxX",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "genmanifest": "py ../backend/build_integrity.py genmanifest",
+    "pack-win": "npm run genmanifest && electron-builder --win --dir",
+    "build-win": "npm run genmanifest && electron-builder --win",
+    "build-linux": "python3 ../backend/build_integrity.py genmanifest && electron-builder --linux",
+    "build-mac": "python3 ../backend/build_integrity.py genmanifest && electron-builder --mac"
+  },
+  "build": {
+    "appId": "ai.oracle.app",
+    "productName": "OracleAI",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
+    "directories": {
+      "output": "../dist"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "assets/icon.icns"
+    }
+  },
+  "devDependencies": {
+    "electron": "^41.5.0",
+    "electron-builder": "^26.8.1"
+  }
+}

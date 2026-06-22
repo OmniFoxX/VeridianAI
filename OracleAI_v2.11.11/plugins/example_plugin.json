@@ -1,0 +1,12 @@
+{
+  "id": "example-plugin",
+  "name": "Prepend/Append",
+  "description": "Prepends/Appends responses",
+  "version": "1.1",
+  "author": "Sage of OracleAI",
+  "enabled": false,
+  "hooks": {
+    "prepend_system": "Note: ALWAYS format code with proper syntax highlighting.",
+    "append_footer": "\n\n---\n*Response provided by Sage of OracleAI*"
+  }
+}

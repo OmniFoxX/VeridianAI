@@ -1,0 +1,98 @@
+{
+  "schema_version": 2,
+  "ui": {
+    "theme": "dark",
+    "haptic": false
+  },
+  "electron": {
+    "backend_mode": "vulkan",
+    "window": {
+      "width": 1280,
+      "height": 820,
+      "min_width": 900,
+      "min_height": 600
+    },
+    "health_probe": {
+      "poll_ms": 1500,
+      "probe_timeout_ms": 5000,
+      "total_timeout_ms": 90000
+    }
+  },
+  "network": {
+    "ports": {
+      "app": 8000,
+      "ipc_browser": 9999,
+      "sage_daemon": 9998,
+      "ollama_oracle": 11434,
+      "llama_sage": 11435,
+      "llama_daemon": 11436,
+      "llama_embed": 11437
+    },
+    "ollama_url": "http://localhost:11434",
+    "host": "127.0.0.1",
+    "node_server_enabled": false,
+    "node_name": "",
+    "remote_node_url": "",
+    "offload_enabled": false,
+    "multiuser_enabled": true,
+    "skill_share_enabled": false,
+    "relay_server_enabled": false,
+    "relay_source_enabled": false,
+    "relay_url": "",
+    "relay_peer_id": "",
+    "comfyui_autostart_enabled": false,
+    "comfyui_launch_cmd": ""
+  },
+  "paths": {
+    "models_dir": null,
+    "snapshots_dir": null,
+    "logs_dir": null
+  },
+  "inference": {
+    "backend": "ollama",
+    "default_model": null,
+    "secondary_model": "",
+    "tertiary_model": "",
+    "max_images_per_turn": 5,
+    "build_battle_rounds": 1,
+    "auto_route": true,
+    "gpu_acceleration": true,
+    "n_gpu_layers": -1,
+    "temperature": 0.5,
+    "max_tokens": -1,
+    "n_ctx": null
+  },
+  "context_sizing": {
+    "hard_cap_ctx": true,
+    "ctx_min": 8192,
+    "ctx_response_headroom": 1500,
+    "ctx_padding_factor": 1.0
+  },
+  "timeouts": {
+    "ollama_read_sec": 54000,
+    "stall_token_sec": 36000,
+    "stall_tool_sec": 36000
+  },
+  "prompts": {
+    "system_prompt_file": "../sage_data/prompts/system.txt",
+    "force_prompt_tier": null
+  },
+  "aiq_nudge": {
+    "enabled": true,
+    "watch_pattern": "nudge_*.txt"
+  },
+  "sage": {
+    "sage_mode": true,
+    "agentic_mode": true,
+    "web_search_enabled": false,
+    "code_exec_enabled": false,
+    "privacy_mode": false
+  },
+  "handoff_security": {
+    "cadence_max": 5,
+    "cadence_window_sec": 300.0,
+    "require_socket_auth": false,
+    "verify_respawn_hash": true,
+    "strict_respawn": false
+  }
+}

@@ -1,0 +1,1 @@
+The bundled models have been moved to be in the sage_data folder. If you ever wish to wipe sage_data, move your bundled models here first, wipe, then move them back.

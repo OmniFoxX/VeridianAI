@@ -1,0 +1,16 @@
+{
+  "name": "OracleAI",
+  "short_name": "OracleAI",
+  "description": "Local multi-tier AI assistant (Sage) — runs entirely on your own machine.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1430",
+  "theme_color": "#0b1430",
+  "orientation": "any",
+  "icons": [
+    { "src": "/static/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
