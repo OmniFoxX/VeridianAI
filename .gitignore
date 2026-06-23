@@ -24,7 +24,7 @@ sage_plm.pt
 mlm_training_data/
 *.gguf
 *.bin
-
+*.exe
 # OS junk
 .DS_Store
 Thumbs.db
