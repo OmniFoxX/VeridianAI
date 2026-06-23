@@ -57,15 +57,21 @@ SENSITIVE_GLOBS = [
 
 # What goes in the FULL manifest: shipped source/assets only — never data, secrets,
 # models, or caches.
-INCLUDE_EXT = {".py", ".js", ".html", ".css", ".bat", ".ps1", ".json",
-               ".webmanifest", ".txt", ".md", ".vbs"}
+# Hash CODE / static assets only. Deliberately NOT .json/.txt/.md — those are
+# runtime state (config.json, chat_memory.json) or docs that legitimately change,
+# and hashing them caused false "modified" flags on normal use (enabling
+# multiuser, creating a profile, even chatting).
+INCLUDE_EXT = {".py", ".js", ".html", ".css", ".bat", ".ps1",
+               ".webmanifest", ".vbs"}
 EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build",
                 "downloads", "archives", "logs", "uploads", "vlts_archives",
                 "reconstructs", "OracleAI_Icon_files",
                 # User-modifiable / runtime data — meant to change, never hashed:
                 "skills", "memory_log", "models", "bundled_models", "prompts"}
-# Never hash these specific files (generated/secret/self).
-EXCLUDE_FILES = {"build_manifest.json"}
+# Never hash these specific files (generated / runtime state / self) — belt &
+# suspenders in case a runtime extension is ever re-added to INCLUDE_EXT.
+EXCLUDE_FILES = {"build_manifest.json", "config.json", "chat_memory.json",
+                 "ui_prefs.json", ".backend_mode", "package-lock.json"}
 
 
 def _data_dir() -> Path:

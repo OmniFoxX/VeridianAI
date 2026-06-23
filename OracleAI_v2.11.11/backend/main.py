@@ -2786,7 +2786,9 @@ async def api_auth_setup(payload: dict):
         raise HTTPException(400, r.get("error", "could not create account"))
     tok = _session.create_session(r, ttl=_AUTH_TTL)
     resp = JSONResponse({"success": True, "username": r["username"], "is_owner": True})
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax", max_age=_AUTH_TTL)
+    # Session cookie (NO max_age) so it's discarded when the browser/app closes
+    # -> reopening requires a fresh sign-in. Server session still expires via TTL.
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
     return resp
 
 
@@ -2805,7 +2807,9 @@ async def api_auth_login(payload: dict, request: Request):
     tok = _session.create_session(r, ttl=_AUTH_TTL)
     resp = JSONResponse({"success": True, "username": r["username"],
                          "is_owner": r["is_owner"]})
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax", max_age=_AUTH_TTL)
+    # Session cookie (NO max_age) so it's discarded when the browser/app closes
+    # -> reopening requires a fresh sign-in. Server session still expires via TTL.
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
     return resp
 
 
@@ -2846,7 +2850,9 @@ async def api_auth_change_password(payload: dict, request: Request):
         {"username": chk["username"], "is_owner": chk["is_owner"], "ns": chk.get("ns")},
         ttl=_AUTH_TTL)
     resp = JSONResponse({"success": True})
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax", max_age=_AUTH_TTL)
+    # Session cookie (NO max_age) so it's discarded when the browser/app closes
+    # -> reopening requires a fresh sign-in. Server session still expires via TTL.
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
     return resp
 
 
