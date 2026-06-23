@@ -1,13 +1,25 @@
-OracleAI Community License v1.0
+OracleAI Community License v1.5
+Copyright (c) 2026 Todd Darimont. All Rights Reserved.
 
-Free for:
-- Personal use
-- Educational use  
+PERMITTED USE (No charge):
+- Personal, private, non-commercial use
+- Educational and research use
 - Accessibility and assistive technology use
-- Non-commercial research
 
-Commercial, Enterprise, Governmental and all other deployment requires a paid license.
+COMMERCIAL, ENTERPRISE, GOVERNMENTAL USE:
+Commercial, Enterprise, Governmental and any other deployment,
+integration, or redistribution requires a paid license agreement.
 Contact: silverfox4816@gmail.com RE: OracleAI Licensing Inquiry
 
-Modifications to encryption, authentication, or 
-hash-chain integrity systems require written permission.
+RESTRICTIONS:
+- Modifications to encryption, authentication, or hash-chain 
+  integrity systems require explicit written permission.
+- Redistribution of modified versions must clearly identify 
+  changes made and may not misrepresent the original software.
+
+EXPERIMENTAL FEATURES:
+Aether Network, BitChat integration, and Social integrations
+are provided as-is with no warranty of fitness or reliability.
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
+THE AUTHOR SHALL NOT BE LIABLE FOR ANY DAMAGES ARISING FROM USE.
