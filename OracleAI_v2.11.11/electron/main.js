@@ -19,7 +19,7 @@
  * No prior dance required. Electron handles the full startup.
  */
 
-const { app, BrowserWindow, Menu, shell, dialog } = require('electron');
+const { app, BrowserWindow, Menu, shell, dialog, session, ipcMain } = require('electron');
 const { spawn }  = require('child_process');
 const path       = require('path');
 const fs         = require('fs');
@@ -202,6 +202,23 @@ function createWindow() {
   mainWindow.loadURL(BACKEND_URL);
 
   mainWindow.on('closed', () => { mainWindow = null; });
+
+  // --- Unclickable-UI fix ---------------------------------------
+  // In Electron, an in-page modal (window.confirm/alert/prompt) blocks the
+  // renderer but does NOT blur the OS window, and on some machines the renderer
+  // is left without pointer/input focus afterwards -- so the UI stops
+  // responding to clicks until the window is re-focused. An OS dialog (the file
+  // picker, print dialog) blurs+refocuses the window, which is exactly why
+  // opening "Attach" frees it. Reclaiming webContents focus restores clicks.
+  // We do it on every window focus (covers OS dialogs) and on explicit request
+  // from the renderer after an in-page dialog (the 'oracle-unstick' channel,
+  // sent from frontend/js/ui-unstick.js via the preload whitelist).
+  const reclaimFocus = () => {
+    try { if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.focus(); } catch (e) {}
+  };
+  mainWindow.on('focus', reclaimFocus);
+  ipcMain.removeAllListeners('oracle-unstick');   // idempotent if createWindow runs again
+  ipcMain.on('oracle-unstick', reclaimFocus);
 
   // External links in system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -634,6 +651,11 @@ app.whenReady().then(async () => {
 // children spawned by start.bat. Previously kill('SIGTERM') only
 // touched the start.bat shell and left orphans behind.
 app.on('window-all-closed', () => {
+  // Security: clear the login cookie on close so reopening requires a fresh
+  // sign-in (the auth cookie is also session-scoped server-side now).
+  try {
+    session.defaultSession.clearStorageData({ storages: ['cookies'] }).catch(() => {});
+  } catch (e) { /* ignore */ }
   stopBackend();
   if (process.platform !== 'darwin') app.quit();
 });

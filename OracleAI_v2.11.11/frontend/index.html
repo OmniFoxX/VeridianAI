@@ -534,11 +534,11 @@ Space  Shoot / Action</div>
 <div class="socials-maint">
 <button class="toolbar-btn" id="socials-clear-thread" onclick="socialsClearThread()" disabled title="Pick a channel thread to clear its messages">Clear this thread</button>
 <span class="socials-maint-spacer"></span>
-<label class="socials-deleteall" title="When ticked, the next Delete clears messages from EVERY channel">
-<input id="socials-deleteall-arm" onchange="socialsArmDeleteAll(this.checked)" type="checkbox"/>
+<label class="socials-deleteall" title="When ticked, the next Delete clears messages from EVERY channel, not just the current thread">
+<input aria-label="Arm delete-all: clears every channel's messages" id="socials-deleteall-arm" onchange="socialsArmDeleteAll(this.checked)" title="Tick to arm the Delete button to clear every channel" type="checkbox"/>
 <span>Delete all channels</span>
 </label>
-<button class="toolbar-btn danger" id="socials-delete-all" onclick="socialsDeleteAll()" disabled>Delete</button>
+<button class="toolbar-btn danger" id="socials-delete-all" onclick="socialsDeleteAll()" title="Clear messages from every Social channel (tick the checkbox first to enable)" disabled>Delete</button>
 </div>
 <div class="socials-warn" id="socials-deleteall-warn" role="alert" style="display:none">&#9888; Heads up: the next click of <b>Delete</b> clears messages from <b>every</b> channel, not just this thread.</div>
 <div style="display:flex;gap:4px">
@@ -558,6 +558,9 @@ Space  Shoot / Action</div>
 <script src="/static/js/marked.min.js"></script>
 <script src="/static/js/highlight.min.js"></script>
 <!-- App scripts (order matters) -->
+<!-- Load first: wraps confirm/alert/prompt to clear the unclickable-UI bug
+     before any dialog can fire. -->
+<script src="/static/js/ui-unstick.js?v=2.11.12"></script>
 <script src="/static/js/haptic.js"></script>
 <!-- v2.1.6: ?v=... cache-bust query strings force Electron's Chromium
      cache to fetch fresh after edits. Bump these when shipping a UI

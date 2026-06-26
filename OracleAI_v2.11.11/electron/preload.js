@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // explicitly listed here. This prevents a compromised renderer
   // from firing arbitrary IPC events into main.js.
   send: (channel, data) => {
-    const allowed = ['command-palette-action', 'app-ready'];
+    const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick'];
     if (allowed.includes(channel)) {
       ipcRenderer.send(channel, data);
     }

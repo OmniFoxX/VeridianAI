@@ -43,7 +43,44 @@
        <strong>Ollama</strong>) need to be running on this computer first.</p>
     <p class="hint">Start OracleAI (run <code>start.bat</code> or open the OracleAI
        desktop app), wait for the tiers to come online, then reload.</p>
-    <button onclick="location.reload()">Reload</button>
+    <button id="reload-btn" onclick="tryReload()">Reload</button>
+    <p id="offline-status" class="hint" style="margin-top:14px" aria-live="polite"></p>
   </div>
+  <script>
+    // Why the old Reload "did nothing": the service worker is network-first for
+    // navigations, so a plain location.reload() while the engine was still down
+    // just re-served this same offline page -- no feedback, no recovery.
+    //
+    // Now we actively probe the health endpoint. /api/health is a normal (non-
+    // navigation) request, so the SW lets it hit the network directly: it fails
+    // while the engine is down and succeeds once it is up. We poll quietly and
+    // reload the instant it answers, and the button gives immediate feedback.
+    var checking = false;
+    function ping() {
+      return fetch('/api/health', { cache: 'no-store' })
+        .then(function (r) { return !!(r && r.ok); })
+        .catch(function () { return false; });
+    }
+    function tryReload() {
+      if (checking) return;
+      checking = true;
+      var s = document.getElementById('offline-status');
+      var b = document.getElementById('reload-btn');
+      if (s) s.textContent = 'Checking for the OracleAI engine…';
+      if (b) b.disabled = true;
+      ping().then(function (up) {
+        if (up) { location.reload(); return; }
+        if (s) s.textContent = 'Still not responding — make sure OracleAI is running, then try again.';
+        if (b) b.disabled = false;
+        checking = false;
+      });
+    }
+    // Quiet background auto-recovery: as soon as the engine is reachable, reload
+    // straight back into the app -- no click needed.
+    setInterval(function () {
+      if (checking) return;
+      ping().then(function (up) { if (up) location.reload(); });
+    }, 2500);
+  </script>
 </body>
 </html>

@@ -227,8 +227,12 @@
     function tab(id, label, count) {
       var on = (_activeThread === id);
       var badge = count ? (' <span class="socials-thread-count">' + count + "</span>") : "";
+      var tip = (id === "all")
+        ? "Show messages from every channel together"
+        : ("Show only the " + id + " thread");
       return '<button class="socials-thread' + (on ? " active" : "") + '" role="tab"'
         + ' aria-selected="' + (on ? "true" : "false") + '"'
+        + ' title="' + esc(tip) + '"'
         + ' onclick="socialsSelectThread(\'' + esc(id) + '\')">' + esc(label) + badge + "</button>";
     }
     var html = [tab("all", "All", _msgs.length)];

@@ -1119,12 +1119,19 @@ function scrollToBottom() {
   if (c) c.scrollTop = c.scrollHeight;
 }
 
+function _clearMessagesNow() {
+  // The actual wipe, with NO confirmation. Callers decide whether to prompt,
+  // so flows that have already saved the chat (e.g. archiveChat) don't fire a
+  // second, confusing "clear?" dialog -- which was also a native-modal trigger
+  // for the unclickable-UI bug.
+  messages = [];
+  warmSummary = null;  // #69: fresh conversation -> no trim
+  const c = document.getElementById("messages");
+  if (c) c.innerHTML = "";
+}
 function clearChat() {
   if (confirm("Are you sure you want to clear the chat? This cannot be undone.")) {
-    messages = [];
-    warmSummary = null;  // #69: fresh conversation -> no trim
-    const c = document.getElementById("messages");
-    if (c) c.innerHTML = "";
+    _clearMessagesNow();
     setStatus("Chat cleared");
   }
 }
@@ -1265,7 +1272,7 @@ async function archiveChat() {
     const result = await resp.json();
     if (result.success) {
       setStatus(`Chat archived: ${result.timestamp}`);
-      clearChat();
+      _clearMessagesNow();   // it's safely archived now -> wipe without re-confirming
     } else {
       setStatus(`Archive failed: ${result.error}`);
     }
