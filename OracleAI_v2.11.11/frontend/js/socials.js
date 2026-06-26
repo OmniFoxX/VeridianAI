@@ -14,6 +14,8 @@
 
   var _feedTimer = null;
   var _last = null;          // last /api/socials/status (so peers polling knows what's connected)
+  var _msgs = [];            // last /api/socials/recent messages (every platform, newest last)
+  var _activeThread = "all"; // which channel thread the feed shows ("all" = merged view)
 
   // Swap the game canvas/scoreboard/controls for the full Socials view.
   function socialsOnTab(show) {
@@ -69,6 +71,7 @@
     }
     var tg = $("toggle-socials-autoreply"); if (tg) tg.checked = !!(d && d.auto_reply);
     _renderConfig((d && d.config) || {});
+    _renderThreads();   // channel list drives the thread tabs
   }
 
   function _renderConfig(cfg) {
@@ -204,16 +207,116 @@
     toast(d && d.auto_reply ? "Sage auto-reply ON" : "Sage auto-reply OFF");
   }
 
-  async function socialsFeed() {
+  // --- Per-channel threads -------------------------------------------------
+  // Each Social channel gets its own thread tab; the feed shows only the active
+  // one. "all" is a merged convenience view. Counts come from the buffered feed.
+  function _threadCounts() {
+    var counts = {};
+    for (var i = 0; i < _msgs.length; i++) {
+      var p = (_msgs[i].platform || "").toLowerCase();
+      counts[p] = (counts[p] || 0) + 1;
+    }
+    return counts;
+  }
+
+  function _renderThreads() {
+    var box = $("socials-threads"); if (!box) return;
+    var chans = (_last && _last.channels) || {};
+    var names = Object.keys(chans);
+    var counts = _threadCounts();
+    function tab(id, label, count) {
+      var on = (_activeThread === id);
+      var badge = count ? (' <span class="socials-thread-count">' + count + "</span>") : "";
+      return '<button class="socials-thread' + (on ? " active" : "") + '" role="tab"'
+        + ' aria-selected="' + (on ? "true" : "false") + '"'
+        + ' onclick="socialsSelectThread(\'' + esc(id) + '\')">' + esc(label) + badge + "</button>";
+    }
+    var html = [tab("all", "All", _msgs.length)];
+    for (var i = 0; i < names.length; i++) html.push(tab(names[i], names[i], counts[names[i]] || 0));
+    box.innerHTML = html.join("");
+    // Keep the per-thread Clear button in sync with the active thread.
+    var cb = $("socials-clear-thread");
+    if (cb) {
+      var isAll = (_activeThread === "all");
+      cb.disabled = isAll;
+      cb.textContent = isAll ? "Clear this thread" : ("Clear " + _activeThread);
+      cb.title = isAll
+        ? "Pick a channel thread to clear its messages (or use Delete all)"
+        : ("Remove the messages buffered for the " + _activeThread + " thread");
+    }
+  }
+
+  function _renderFeed() {
     var box = $("socials-feed"); if (!box) return;
+    var msgs = (_activeThread === "all")
+      ? _msgs
+      : _msgs.filter(function (m) { return (m.platform || "").toLowerCase() === _activeThread; });
+    if (!msgs.length) {
+      box.innerHTML = (_activeThread === "all")
+        ? "<i>No messages yet.</i>"
+        : "<i>No messages in this thread yet.</i>";
+    } else {
+      box.innerHTML = msgs.slice(-50).map(function (m) {
+        // In a single-channel thread the platform is implied, so show just the sender.
+        var who = (_activeThread === "all" ? ((m.platform || "") + "/") : "") + (m.sender || "?");
+        return "<div><b>" + esc(who) + ":</b> " + esc(m.content || "") + "</div>";
+      }).join("");
+    }
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function socialsSelectThread(name) {
+    _activeThread = name || "all";
+    // Convenience: selecting a channel thread also points the Send box at it.
+    if (_activeThread !== "all") {
+      var sel = $("socials-target");
+      if (sel) for (var i = 0; i < sel.options.length; i++) {
+        if (sel.options[i].value === _activeThread) { sel.value = _activeThread; break; }
+      }
+    }
+    _renderThreads();
+    _renderFeed();
+  }
+
+  async function socialsClearThread() {
+    if (_activeThread === "all") return;            // button is disabled in this state anyway
+    var ch = _activeThread;
+    var d = await jpost("/api/socials/clear", { channel: ch });
+    if (d && d.ok) {
+      _msgs = _msgs.filter(function (m) { return (m.platform || "").toLowerCase() !== ch; });
+      _renderThreads(); _renderFeed();
+      toast("Cleared the " + ch + " thread (" + (d.removed || 0) + " message" + (d.removed === 1 ? "" : "s") + ")");
+    } else { toast("Clear failed"); }
+  }
+
+  function socialsArmDeleteAll(on) {
+    var warn = $("socials-deleteall-warn"); if (warn) warn.style.display = on ? "block" : "none";
+    var btn = $("socials-delete-all"); if (btn) btn.disabled = !on;
+  }
+
+  async function socialsDeleteAll() {
+    var arm = $("socials-deleteall-arm");
+    if (!arm || !arm.checked) { toast("Tick the box first to delete every channel"); return; }
+    if (!window.confirm("Delete recent messages from ALL Social channels?\n\n"
+        + "This clears every thread, not just the one you are viewing. It cannot be undone.\n"
+        + "(Nothing is saved to disk or shared across user profiles.)")) return;
+    var d = await jpost("/api/socials/clear", { all: true });
+    if (d && d.ok) {
+      _msgs = [];
+      arm.checked = false; socialsArmDeleteAll(false);   // disarm after firing
+      _renderThreads(); _renderFeed();
+      toast("Cleared all channels (" + (d.removed || 0) + " message" + (d.removed === 1 ? "" : "s") + ")");
+    } else { toast("Delete failed"); }
+  }
+
+  async function socialsFeed() {
+    if (!$("socials-feed")) return;
     try {
       var d = await jget("/api/socials/recent");
-      var msgs = (d && d.messages) || [];
-      box.innerHTML = msgs.length ? msgs.slice(-30).map(function (m) {
-        return "<div><b>" + esc((m.platform || "") + "/" + (m.sender || "?")) + ":</b> " + esc(m.content || "") + "</div>";
-      }).join("") : "<i>No messages yet.</i>";
-      box.scrollTop = box.scrollHeight;
-    } catch (e) { /* transient */ }
+      _msgs = (d && d.messages) || [];
+    } catch (e) { return; /* transient */ }
+    _renderThreads();
+    _renderFeed();
   }
   function _startFeed() { _stopFeed(); _feedTimer = setInterval(function () { socialsFeed(); socialsPeers(); }, 5000); socialsFeed(); socialsPeers(); }
   function _stopFeed() { if (_feedTimer) { clearInterval(_feedTimer); _feedTimer = null; } }
@@ -223,4 +326,6 @@
   window.socialsSend = socialsSend; window.socialsAutoReply = socialsAutoReply; window.socialsFeed = socialsFeed;
   window.socialsSaveDiscord = socialsSaveDiscord; window.socialsSaveBitchat = socialsSaveBitchat; window.socialsClearToken = socialsClearToken;
   window.socialsSaveMastodon = socialsSaveMastodon; window.socialsSaveBluesky = socialsSaveBluesky;
+  window.socialsSelectThread = socialsSelectThread; window.socialsClearThread = socialsClearThread;
+  window.socialsArmDeleteAll = socialsArmDeleteAll; window.socialsDeleteAll = socialsDeleteAll;
 })();

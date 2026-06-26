@@ -771,7 +771,13 @@ async def _init_tier_cache_on_startup():
     """Seed the tier ctx cache so subsequent UI refreshes know what
     ctx size each llama-server process is actually running with."""
     tier_lifecycle.init_cache(config)
-    await tier_lifecycle.ensure_bitchat_gateway()
+    # BitChat is OPT-IN: do NOT scan at boot. The BLE gateway starts only when
+    # the user clicks Connect (POST /api/socials/connect). Power users can force
+    # boot autostart by setting "bitchat_autostart": true in config.json.
+    if config.get("bitchat_autostart", False):
+        await tier_lifecycle.ensure_bitchat_gateway()
+    else:
+        print("[tier] bitchat: opt-in -- gateway NOT auto-started (no BLE scan at boot)")
 
 # --- Frontend cache-busting (2026-06-09) --------------------------------------
 # Electron/browser were serving STALE frontend code: the asset URLs carry a fixed
@@ -1162,9 +1168,21 @@ async def api_socials_connect(request: Request, payload: dict):
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
     if payload.get("connect", True):
+        if name == "bitchat":
+            # Make sure the BLE gateway process is actually running first.
+            try:
+                await tier_lifecycle.ensure_bitchat_gateway()
+            except Exception as exc:
+                print(f"[socials] bitchat gateway start failed: {exc}")
         ok = await socials_router.connect(name)
     else:
         ok = await socials_router.disconnect(name)
+        if name == "bitchat":
+            # 'Off' means off: stop the gateway so BLE scanning fully ceases.
+            try:
+                await tier_lifecycle.stop_bitchat_gateway()
+            except Exception as exc:
+                print(f"[socials] bitchat gateway stop failed: {exc}")
     return {"ok": bool(ok), **socials_router.status()}
 
 
@@ -1190,6 +1208,25 @@ async def api_socials_recent(request: Request):
     if socials_router is None:
         return {"messages": []}
     return {"messages": socials_router.recent(limit=30)}
+
+
+@app.post("/api/socials/clear")
+async def api_socials_clear(request: Request, payload: dict):
+    """Clear buffered Socials messages. Body: {channel: "discord"} clears that
+    one thread; {all: true} clears every channel. The feed buffer is in-memory
+    only (nothing persisted, nothing shared across user profiles)."""
+    if not _is_local_client(request):
+        raise HTTPException(404)
+    if socials_router is None:
+        raise HTTPException(503, "socials unavailable")
+    if payload.get("all"):
+        removed = socials_router.clear_recent(None)
+        return {"ok": True, "removed": removed, "scope": "all"}
+    name = (payload.get("channel") or "").strip().lower()
+    if not name:
+        raise HTTPException(400, "channel required (or pass all:true)")
+    removed = socials_router.clear_recent(name)
+    return {"ok": True, "removed": removed, "scope": name}
 
 
 @app.post("/api/socials/auto-reply")
@@ -5297,13 +5334,3 @@ async def api_abort():
     return {"status": "aborted"}
 
 
-# ====================================================================
-#  v2.1.5: Sage Daemon HTTP wrappers (Phase B)
-# ====================================================================
-# The daemon (sage_daemon.py) runs as its own Python process on TCP
-# 9998 and handles out-of-band mechanics (chain digest, KB
-# consolidation, anomaly monitor). These endpoints proxy HTTP calls
-# from the frontend / external tooling into the daemon's TCP protocol.
-#
-# Lazy import + per-call try/except so a daemon outage degrades
-# gracefully (HTTP 503-style JSON) without breaking main.py at im

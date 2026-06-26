@@ -230,6 +230,29 @@ async def ensure_bitchat_gateway(force_restart: bool = False) -> dict:
             "message": "BitChat BLE gateway started"}
 
 
+async def stop_bitchat_gateway() -> dict:
+    """Stop the BitChat BLE gateway so scanning fully ceases.
+    Tries a graceful /shutdown first, then guarantees the process is gone."""
+    url = "http://127.0.0.1:8080"
+    # Graceful: ask the gateway to leave the mesh and exit cleanly.
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as c:
+            await c.post(f"{url}/shutdown")
+    except Exception:
+        pass  # gateway may already be exiting or down
+
+    # Guarantee: kill anything still bound to the port.
+    pid = find_pid_by_port(8080)
+    if pid is not None:
+        print(f"[tier] bitchat: stopping PID {pid}")
+        kill_process_graceful(pid)
+        wait_port_free(8080, timeout=10.0)
+    freed = find_pid_by_port(8080) is None
+    return {"status": "ok" if freed else "failed",
+            "message": "BitChat gateway stopped" if freed
+                       else "port 8080 still busy"}
+
+
 # ------------------
 #  LOW-LEVEL HELPERS
 # ------------------

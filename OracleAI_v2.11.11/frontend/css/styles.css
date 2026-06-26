@@ -1409,6 +1409,79 @@ pre:hover .copy-btn      { opacity: 1; }
   border-color: var(--error);
   color: var(--error);
 }
+.toolbar-btn:disabled,
+.toolbar-btn:disabled:hover {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+/* ── Socials: per-channel threads + maintenance ------------------ */
+.socials-threads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 2px;
+}
+.socials-thread {
+  padding: 2px 9px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--t);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.socials-thread:hover { border-color: var(--gold); color: var(--gold); }
+.socials-thread.active {
+  background: var(--gold-glow);
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.socials-thread-count {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+}
+.socials-maint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+.socials-maint-spacer { flex: 1 1 auto; }
+.socials-deleteall {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.socials-deleteall input { cursor: pointer; }
+.socials-warn {
+  margin-top: 4px;
+  padding: 5px 8px;
+  border: 1px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 193, 77, 0.10);
+  color: var(--warning);
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.35;
+}
 
 /* ── Modal Overlay ----------------------------------------------- */
 .modal-overlay {

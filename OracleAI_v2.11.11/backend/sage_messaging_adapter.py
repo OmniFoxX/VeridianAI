@@ -243,6 +243,23 @@ class SageChannelRouter:
             })
         return out
 
+    def clear_recent(self, platform: str = None) -> int:
+        """Drop buffered messages from the recent feed and return how many were
+        removed. platform=None clears every channel; a platform name (e.g.
+        "discord") clears only that channel's thread. The buffer is an in-memory
+        deque -- nothing is persisted to disk and nothing is shared across user
+        profiles -- so this fully clears what the Socials feed can show."""
+        plat = (platform or "").strip().lower()
+        if not plat:
+            n = len(self._recent)
+            self._recent.clear()
+            return n
+        kept = [m for m in self._recent if (m.platform or "").lower() != plat]
+        removed = len(self._recent) - len(kept)
+        self._recent.clear()
+        self._recent.extend(kept)   # deque keeps maxlen; order preserved
+        return removed
+
     def status(self) -> dict:
         import sys
         chans = {}

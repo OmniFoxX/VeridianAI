@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OracleAI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Rajdhani:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/styles.css?v=2.9.10">
+  <link rel="stylesheet" href="/static/css/command-palette.css?v=2.9.10">
+  <link id="hljs-theme" rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark-dimmed.min.css">
+  <link rel="stylesheet" href="/static/css/comfyui-wizard.css?v=2.9.10">
+
+  <!-- PWA: installable app + icons -->
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="theme-color" content="#0b1430">
+  <link rel="icon" href="/static/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png">
+</head>
+<script src="/static/js/comfyui-wizard.js?v=2.9.10"></script>
+<script>
+  // PWA: register the service worker (installability + friendly offline page
+  // when the backend/Ollama isn't running).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function (e) {
+        console.warn('[PWA] service worker registration failed:', e);
+      });
+    });
+  }
+</script>
+<body>
+<a href="#main-content" class="skip-link">Skip to main content</a>
+
+<header class="app-header">
+  <div class="header-brand">
+    <button class="oracle-eye" id="oracle-eye" onclick="openGamePanel(); GameManager.start(GameManager.currentGameName())" title="Click to open/reset games" type="button">
+      <div class="eye-outer"></div>
+      <div class="eye-inner"></div>
+      <div class="eye-pupil"></div>
+    </button>
+    <span class="brand-name">ORACLE<span class="brand-ai">AI</span></span>
+  </div>
+
+  <div class="header-controls">
+    <select id="model-select" class="model-selector"
+            onchange="onModelChange(this.value)">
+      <option value="">— Select Model —</option>
+    </select>
+
+    <div class="header-toggles">
+      <button class="icon-btn" id="privacy-btn"
+              title="Privacy Mode" onclick="togglePrivacy()">🔒</button>
+      <button class="icon-btn" id="haptic-btn"
+              title="Haptic feedback" onclick="toggleHaptic()">📳</button>
+      <button class="icon-btn" id="theme-btn"
+              title="Toggle light/dark" onclick="toggleTheme()">○</button>
+      <button class="icon-btn" id="sidebar-btn"
+              title="Toggle sidebar" onclick="toggleSidebar()">≡</button>
+    </div>
+  </div>
+</header>
+
+<!-- === Body ===================================================== -->
+<div class="app-body">
+
+  <!-- ── Sidebar ----------------------------------------------- -->
+  <aside class="sidebar" id="sidebar">
+    <nav class="sidebar-nav">
+      <button class="nav-tab active" onclick="switchPanel('hardware', this)">HARDWARE</button>
+      <button class="nav-tab"        onclick="switchPanel('settings',  this)">SETTINGS</button>
+      <button class="nav-tab"        onclick="switchPanel('plugins',   this)">PLUGINS</button>
+    </nav>
+
+    <!-- Hardware panel -->
+    <div class="panel active" id="panel-hardware">
+      <h2 class="panel-header">System Intelligence</h2>
+      <div id="hardware-info">
+        <div class="loading-placeholder">Scanning hardware…</div>
+      </div>
+      <div id="hw-toggles"></div>
+    </div>
+
+    <!-- Settings panel -->
+    <div class="panel" id="panel-settings">
+      <h2 class="panel-header">Configuration</h2>
+
+      <div class="setting-group">
+        <label class="setting-label">Backend</label>
+        <select id="setting-backend" class="setting-select"
+                onchange="updateSetting('backend', this.value); onBackendChange(this.value); reloadModels()">
+          <option value="ollama">Ollama (recommended)</option>
+          <option value="llamacpp">llama.cpp (GGUF files)</option>
+        </select>
+      </div>
+
+      <div class="setting-group" id="ollama-url-row">
+        <label class="setting-label">Ollama URL</label>
+        <input id="setting-ollama-url" class="setting-input" type="text"
+               placeholder="http://localhost:11434"
+               onchange="updateSetting('ollama_url', this.value); reloadModels()">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="Sampling randomness. Lower (~0.2) = focused and consistent; higher (~1.0+) = more creative and varied. Changes how varied the wording is, not the stance the model takes.">Temperature &nbsp;
+          <span id="temp-display" style="color:var(--gold)">0.7</span>
+        </label>
+        <input id="setting-temperature" class="setting-range" type="range"
+               min="0" max="2" step="0.05" value="0.7"
+               oninput="document.getElementById('temp-display').textContent=parseFloat(this.value).toFixed(2)"
+               onchange="updateSetting('temperature', parseFloat(this.value))">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="Nucleus sampling: keep the smallest set of most-likely tokens whose probabilities add up to Top-P. Lower = more focused, higher = more varied. 0.9 is typical.">Top-P &nbsp;
+          <span id="top-p-display" style="color:var(--gold)">0.90</span>
+        </label>
+        <input id="setting-top-p" class="setting-range" type="range"
+               min="0" max="1" step="0.01" value="0.9"
+               oninput="document.getElementById('top-p-display').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="Top-K: only sample from the K most-likely next tokens. Lower = safer/more repetitive, higher = more variety. 40 is typical; 0 disables the limit.">Top-K &nbsp;
+          <span id="top-k-display" style="color:var(--gold)">40</span>
+        </label>
+        <input id="setting-top-k" class="setting-range" type="range"
+               min="0" max="100" step="1" value="40"
+               oninput="document.getElementById('top-k-display').textContent=this.value">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="Repeat penalty: discourages reusing recent tokens. 1.0 = off, ~1.1 is typical. Too high can hurt coherence.">Repeat Penalty &nbsp;
+          <span id="repeat-penalty-display" style="color:var(--gold)">1.10</span>
+        </label>
+        <input id="setting-repeat-penalty" class="setting-range" type="range"
+               min="1" max="2" step="0.01" value="1.1"
+               oninput="document.getElementById('repeat-penalty-display').textContent=parseFloat(this.value).toFixed(2)">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="Auto-Re-Prompt: how many times to auto-send the continue message before stopping (your infinite-loop guard). Only used when the Auto-Re-Prompt toggle is on.">Auto-Continue Max</label>
+        <input id="setting-auto-reprompt-max" class="setting-input" type="number"
+               min="1" max="50" step="1" value="3"
+               title="Maximum automatic continue messages per chain.">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label" title="The exact message Auto-Re-Prompt sends to continue a task or debate.">Auto-Continue Text</label>
+        <input id="setting-auto-reprompt-text" class="setting-input" type="text"
+               value="Please continue."
+               title="Sent automatically when Auto-Re-Prompt continues a task.">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">Max Tokens</label>
+        <!-- v2.1.8 max_tokens=-1 trap fix:
+             Backend treats -1 as "unlimited" (Ollama num_predict=-1, llama-server
+             omits the field entirely). The old min="64" / hardcoded value="2048"
+             mismatched the backend default (-1) — settings.js would programmatically
+             set -1 into a field that says "minimum 64", which broke save flows and
+             confused users. Now: min="-1" accepts the sentinel, placeholder shows
+             the meaning, default rendering is controlled by settings.js
+             (blank = use backend default). Users who want a cap type a positive
+             integer; users who want unlimited leave it blank. -->
+        <input id="setting-max-tokens" class="setting-input" type="number"
+               min="-1" max="131072" step="64"
+               placeholder="blank = unlimited"
+               title="Blank or -1 = unlimited. Set a positive integer to cap the response length."
+               onchange="updateSetting('max_tokens', sanitizeMaxTokensInput(this.value))">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">Context Window (n_ctx)</label>
+        <input id="setting-n-ctx" class="setting-input" type="number"
+               value="4096" min="512" max="131072" step="512"
+               onchange="updateSetting('n_ctx', parseInt(this.value))">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">GPU Layers <span style="color:var(--text-faint)">(-1 = all)</span></label>
+        <input id="setting-gpu-layers" class="setting-input" type="number"
+               value="-1" min="-1" max="256"
+               onchange="updateSetting('n_gpu_layers', parseInt(this.value))">
+      </div>
+
+      <div class="setting-group">
+        <label class="setting-label">System Prompt</label>
+        <textarea id="setting-system-prompt" class="setting-textarea" rows="4"
+                  oninput="updateSystemPromptDebounced(this.value)"
+                  onblur="updateSetting('system_prompt', this.value)"></textarea>
+      </div>
+
+      <!-- Sage / Agent Settings -->
+      <div class="settings-section">
+        <div class="settings-section-title">Sage AI Agent</div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label">Sage Mode</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-sage" checked
+                   onchange="updateSetting('sage_mode', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label">Agentic Mode</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-agentic" checked
+                   onchange="updateSetting('agentic_mode', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Symposium: two models debate opposing sides of your next message and Sage moderates. Primary slot moderates; secondary + tertiary debate. Resets off each session.">Symposium Mode</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-symposium"
+                   onchange="if(this.checked)setStatus('Symposium is a reasoning exercise -- verify any facts, dates, or figures independently.')"
+                   title="When ON, your next message is a debate proposition. Symposium is a reasoning exercise, not a fact source -- double-check any empirical claims.">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+		<div class="hw-toggle-row" style="margin-bottom:6px">
+		  <span class="hw-toggle-label" title="Build Battle: two models compete to write the best code for your specification, critique each other, then Sage judges. Primary slot judges; secondary + tertiary build. Resets off each session.">Build Battle</span>
+		  <label class="toggle-switch">
+			<input type="checkbox" id="toggle-build-battle"
+				onchange="var _r=document.getElementById('build-battle-rounds-row');if(_r)_r.style.display=this.checked?'':'none';if(this.checked)setStatus('Build Battle: describe a coding challenge and the models will compete to solve it. Review all generated code before use.')"
+				title="When ON, your next message is a coding specification. Two models build, critique, and refine — Sage judges the result.">
+			<span class="toggle-track"></span>
+		  </label>
+		</div>
+        <div class="hw-toggle-row" id="build-battle-rounds-row" style="margin-bottom:6px;display:none">
+          <span class="hw-toggle-label" title="How many Critique &amp; Refine passes each builder runs before final submissions. More rounds dig deeper but take more time and compute.">Build Battle Rounds</span>
+          <select id="build-battle-rounds" class="setting-select" style="width:auto" title="Critique &amp; Refine passes (1-3).">
+            <option value="1" selected>1 (quick)</option>
+            <option value="2">2 (deeper)</option>
+            <option value="3">3 (thorough)</option>
+          </select>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Auto-Re-Prompt: after each reply finishes, automatically send a continue message (set the text and limit below) so long research or debates finish while you are away. Stops at the limit. Resets off each session.">Auto-Re-Prompt</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-auto-reprompt"
+                   title="When ON, OracleAI auto-sends a continue message after each reply, up to the Auto-Continue Max.">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label">Web Search</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-websearch" checked
+                   onchange="updateSetting('web_search_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row">
+          <span class="hw-toggle-label">Code Execution</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-codeexec" checked
+                   onchange="updateSetting('code_exec_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row" style="margin-top:6px">
+          <span class="hw-toggle-label" title="Let Sage's browser keep cookies between sessions (faster logins). OFF by default: bookmarks and history persist, but cookies are cleared each session. Cookies can hold personal/session data.">Browser keeps cookies (opt-in)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-browser-cookies" onchange="setBrowserCookies(this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Developer Mode -->
+      <div class="settings-section">
+        <div class="settings-section-title">Developer Mode</div>
+        <div class="hw-toggle-row">
+          <span class="hw-toggle-label" title="Show or hide the background log terminals (Ollama, Sage, Daemon, Overseer, model servers). Off = clean desktop; on = all logs visible. Takes effect when you restart OracleAI.">Show log terminals</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-devmode" onchange="setDevMode(this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Build integrity / provenance -->
+      <div class="settings-section">
+        <div class="settings-section-title">Build</div>
+        <div class="setting-group">
+          <span id="build-integrity-status" class="setting-label" style="display:block">Checking build&hellip;</span>
+          <a href="https://github.com/OmniFoxX" target="_blank" rel="noopener"
+             class="setting-label" style="opacity:.65;font-size:12px;text-decoration:none">Canonical source: github.com/OmniFoxX</a>
+        </div>
+      </div>
+
+      <!-- Tavily API Key -->
+      <div class="settings-section">
+        <div class="settings-section-title">Tavily API Key</div>
+        <div id="tavily-status" class="api-key-display">
+          <span class="key-status none">No key set</span>
+        </div>
+        <div class="setting-group" style="margin-top:6px">
+		  <label for="tavily-input" class="sr-only">Tavily API Key</label>	
+          <input id="tavily-input" class="setting-input" type="password"
+                 placeholder="Enter Tavily API key…">
+          <div style="display:flex;gap:4px;margin-top:4px">
+            <button class="toolbar-btn" onclick="saveTavilyKey()" style="flex:1">Save</button>
+            <button class="toolbar-btn" onclick="document.getElementById('tavily-input').value=''" style="flex:1">Clear</button>
+            <button class="toolbar-btn danger" onclick="deleteTavilyKey()" style="flex:1">Delete</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-Model -->
+      <div class="settings-section">
+        <div class="settings-section-title">Multi-Model Routing</div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label">Auto-Route by Complexity</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-autoroute"
+                   onchange="updateSetting('auto_route', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="Your main model. Auto-route sends most turns here, and it is the agentic model that uses tools.">Primary Model</label>
+          <select id="setting-primary-model" class="setting-select"
+                  onchange="onModelChange(this.value)">
+            <option value="">— Select Model —</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="A second model auto-route can choose, e.g. a larger model for heavy queries or a vision model for images.">Secondary Model</label>
+          <select id="setting-secondary-model" class="setting-select"
+                  onchange="updateSetting('secondary_model', this.value)">
+            <option value="">— None —</option>
+          </select>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="An optional third model in the routing pool, e.g. a dedicated vision model or a future Symposium participant.">Tertiary Model</label>
+          <select id="setting-tertiary-model" class="setting-select"
+                  onchange="updateSetting('tertiary_model', this.value)">
+            <option value="">— None —</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Sage Network - Skill/Compute Sharing (Local/Home Network)</div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Let your OTHER machines reach this one over your LAN, token-encrypted. OFF by default; only the node surface is exposed, settings and token stay local.">Serve peers (node server)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-node-server"
+                   onchange="updateSetting('node_server_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Bind the server to your LAN so peers can reach it. The LAN guard keeps only the encrypted node surface reachable. Takes effect on RESTART.">Bind to LAN (restart to apply)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-bind-lan" onchange="snSetBind(this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">This machine's address (give to your other node): <span id="sn-lan-addr">-</span></label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Device name (used by Sage Network + relay)</label>
+          <input id="setting-node-name" class="setting-select" type="text"
+                 placeholder="e.g. desktop"
+                 onchange="updateSetting('node_name', this.value)">
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="A non-secret fingerprint of this node's home token. Two nodes are paired when their fingerprints match.">Token fingerprint: <span id="sn-fingerprint">-</span></label>
+          <button class="toolbar-btn" onclick="snRevealToken()">Reveal token to copy</button>
+          <button class="toolbar-btn danger" onclick="snResetToken()">Reset (new token)</button>
+          <div id="sn-token-box" style="display:none;margin-top:6px">
+            <input id="sn-token" class="setting-select" type="text" readonly>
+            <button class="toolbar-btn" onclick="snCopyToken()">Copy</button>
+          </div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="Paste the home token from your OTHER machine so this one shares it (pairs the two).">Pair: paste a token from another node</label>
+          <input id="sn-paste-token" class="setting-select" type="text"
+                 placeholder="paste token from your other node">
+          <button class="toolbar-btn" onclick="snSetToken()">Set token</button>
+        </div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Route heavy tasks (image generation now; big queries later) to the remote node instead of running locally. OFF = everything stays on this machine, even if a remote URL is set.">Offload heavy tasks to remote</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-offload" onchange="updateSetting('offload_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Remote node URL (machine to offload to)</label>
+          <input id="setting-remote-node-url" class="setting-select" type="text"
+                 placeholder="http://192.168.x.x:8000"
+                 onchange="updateSetting('remote_node_url', this.value)">
+          <button class="toolbar-btn" onclick="snPairTest()">Test pairing</button>
+          <div id="sn-pair-result" style="margin-top:6px;font-size:0.85em;opacity:0.8"></div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Image Generation (ComfyUI)</div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Launch ComfyUI automatically when OracleAI starts, and shut it down when OracleAI closes (which clears ComfyUI's job queue). If ComfyUI is already running, it is left alone. OFF by default. Takes effect on RESTART.">Auto-launch ComfyUI with the app (restart to apply)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-comfyui-autostart" onchange="updateSetting('comfyui_autostart_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="Optional. Leave blank to auto-detect your Start Menu ComfyUI shortcut, the desktop app, or a portable run_*.bat. Set this only if auto-detect cannot find ComfyUI.">ComfyUI launch command (optional - blank = auto-detect)</label>
+          <input id="setting-comfyui-launch-cmd" class="setting-select" type="text"
+                 placeholder="auto-detect (or full path to ComfyUI.exe)"
+                 onchange="updateSetting('comfyui_launch_cmd', this.value)">
+          <div style="font-size:0.8em;opacity:0.7;margin-top:3px">OracleAI owns the process it starts, so closing OracleAI clears ComfyUI's queue. Prompt-based image generation needs ComfyUI running.</div>
+        </div>
+
+        <div class="setting-group">
+          <label class="setting-label" title="Choose which downloaded model image generation uses, or download another.">Image model</label>
+          <button class="setting-select" type="button" style="cursor:pointer;text-align:left" onclick="ComfyUIWizard.manage()">Manage / change models…</button>
+          <div style="font-size:0.8em;opacity:0.7;margin-top:3px">Pick the active model or download more (SD 1.5, SDXL, Flux). Your choice is remembered.</div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-section-title">Aether Network - Skill/Compute Sharing (Experimental)</div>
+        <div class="hw-toggle-row" style="margin-bottom:6px">
+          <span class="hw-toggle-label" title="Let this Sage SERVE its promoted skills to peers and fetch theirs. OFF by default. Everything fetched lands quarantined; you promote explicitly. Takes effect on RESTART.">Enable skill sharing (restart to apply)</span>
+          <label class="toggle-switch">
+            <input type="checkbox" id="toggle-skill-share"
+                   onchange="updateSetting('skill_share_enabled', this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label" title="Your Sage's public identity. Share this fingerprint out-of-band so peers can trust skills you author.">Your identity fingerprint: <span id="sk-fingerprint">-</span></label>
+          <button class="toolbar-btn" onclick="skCopyIdentity()">Copy public key</button>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Trusted authors (import a peer's key to allow promoting their skills)</label>
+          <div id="sk-trusted-list" style="font-size:0.85em;opacity:0.85;margin:4px 0"></div>
+          <input id="sk-key-label" class="setting-select" type="text" placeholder="label (e.g. Mom's laptop)">
+          <input id="sk-key-pub" class="setting-select" type="text" placeholder="paste peer's public key">
+          <button class="toolbar-btn" onclick="skAddKey()">Trust this key</button>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Browse a peer or pool</label>
+          <input id="sk-peer-url" class="setting-select" type="text" placeholder="http://192.168.x.x:8000">
+          <button class="toolbar-btn" onclick="skBrowse()">Browse</button>
+          <div id="sk-browse-result" style="margin-top:6px;font-size:0.85em"></div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)</label>
+          <div class="hw-toggle-row" style="margin-bottom:4px">
+            <span class="hw-toggle-label" title="Host the relay broker on THIS machine so peers can rendezvous here. Takes effect on RESTART.">Host the relay here</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-relay-server" onchange="updateSetting('relay_server_enabled', this.checked)"><span class="toggle-track"></span></label>
+          </div>
+          <div class="hw-toggle-row" style="margin-bottom:4px">
+            <span class="hw-toggle-label" title="Serve MY skills over the relay so peers can reach me even when I have no public address. Takes effect on RESTART.">Serve my skills via relay</span>
+            <label class="toggle-switch"><input type="checkbox" id="toggle-relay-source" onchange="updateSetting('relay_source_enabled', this.checked)"><span class="toggle-track"></span></label>
+          </div>
+          <input id="sk-relay-url" class="setting-select" type="text" placeholder="relay URL (e.g. http://desktop-ip:8000)" onchange="updateSetting('relay_url', this.value)">
+          <input id="sk-relay-target" class="setting-select" type="text" placeholder="browse: target device name">
+          <button class="toolbar-btn" onclick="skBrowseRelay()">Browse via relay</button>
+          <div style="font-size:0.8em;opacity:0.7;margin-top:3px">Toggles take effect on restart. Your device name is set in the Sage Network section above.</div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Import a .skill file (offline -- no network needed)</label>
+          <input id="sk-import-file" class="setting-select" type="file" accept=".skill,.json,application/json">
+          <button class="toolbar-btn" onclick="skImport()">Import</button>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Your skills <button class="toolbar-btn" onclick="skLoadLocal()">Refresh</button></label>
+          <div id="sk-local-list" style="font-size:0.85em;margin-top:4px"></div>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">IP Access (Aether) &mdash; status: <span id="ip-lockdown-state">public</span>
+            <button class="toolbar-btn" onclick="ipLoad()">Refresh</button></label>
+          <label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="toggle-ip-lockdown" onchange="ipLockdown(this.checked)">
+            <span class="hw-toggle-label" title="Lockdown: ONLY allowlisted IPs may reach the Aether peer surface. Off = public (the denylist still applies).">Lockdown (allowlist-only)</span>
+          </label>
+          <input id="ip-entry" class="setting-select" type="text" placeholder="IP or CIDR  e.g. 203.0.113.5  or  203.0.113.0/24" style="width:100%;margin-top:4px">
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="toolbar-btn danger" onclick="ipAdd('deny')" title="Block this IP/range everywhere, even the peer surface">Block</button>
+            <button class="toolbar-btn" onclick="ipAdd('allow')" title="Allow this IP/range to reach the peer surface when Lockdown is on">Allow</button>
+          </div>
+          <label class="setting-label" style="margin-top:6px">Denylist (always blocked)</label>
+          <div id="ip-deny-list" style="font-size:0.85em">none</div>
+          <label class="setting-label" style="margin-top:6px">Allowlist (lockdown peers)</label>
+          <div id="ip-allow-list" style="font-size:0.85em">none</div>
+        </div>
+        <div class="setting-group">
+          <button class="toolbar-btn danger" onclick="skKillSwitch()" title="Go dark: instantly disable skill sharing, relay hosting/serving, and node serving. Restart to fully sever any running services.">&dagger; et tu, Brute? - Kill Switch -</button>
+        </div>
+        <div class="setting-group">
+          <label class="setting-label">Voice &mdash; <span id="voice-status">checking&hellip;</span>
+            <button class="toolbar-btn" onclick="voiceRefreshStatus()">Refresh</button></label>
+          <div id="voice-setup-hint" style="font-size:0.8em;opacity:0.9;margin:2px 0;display:none;white-space:pre-wrap;user-select:all"></div>
+          <label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="toggle-voice-speak" onchange="voiceToggleSpeak(this.checked)">
+            <span class="hw-toggle-label" title="Read Sage's replies aloud with your device's built-in offline voice.">Speak replies aloud</span>
+          </label>
+          <div style="display:flex;gap:6px;margin:2px 0">
+            <select id="voice-tts-voice" class="setting-select" style="flex:1"
+                    onchange="voiceSelectVoice(this.value)" title="Pick the voice used to read replies aloud"></select>
+            <button class="toolbar-btn" onclick="voiceTestSpeak()" title="Hear the selected voice">Test</button>
+          </div>
+          <label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+            <input type="checkbox" id="toggle-voice-wake" onchange="voiceToggleWake(this.checked)">
+            <span class="hw-toggle-label" title="Hands-free: always listen for the wake word, then take the next sentence as a command.">Wake word (always listening) &mdash; opt-in</span>
+          </label>
+          <div id="voice-wake-note" style="font-size:0.8em;opacity:0.85;margin-top:2px">
+            🔒 Offline &amp; private: audio is transcribed on this machine and immediately discarded &mdash; nothing is recorded or uploaded. Recognized text enters only your normal (encrypted) chat. Always-listening keeps your microphone open until you switch it back off.
+          </div>
+        </div>
+      </div>
+
+      <button class="action-btn" onclick="clearChat()">✕ &nbsp;Clear Chat</button>
+      <button class="action-btn secondary" onclick="reloadModels()">↻ &nbsp;Refresh Models</button>
+    </div>
+
+    <!-- Plugins panel -->
+    <div class="panel" id="panel-plugins">
+      <h2 class="panel-header">Extensions</h2>
+      <div id="plugins-list">
+        <div class="loading-placeholder">Loading plugins…</div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ── Chat area --------------------------------------------- -->
+  <span id="main-content" tabindex="-1"></span>
+  <main class="chat-area" id="chat-area">
+    <!-- Toolbar: Archive, Print, Privacy -->
+    <div class="chat-toolbar">
+      <button class="toolbar-btn" onclick="archiveChat()" title="Archive current chat">📦 Archive</button>
+      <button class="toolbar-btn" onclick="showLoadArchive()" title="Load an archived chat">📂 Load</button>
+      <button class="toolbar-btn" onclick="printChat()" title="Print chat">🖨️ Print</button>
+      <button class="toolbar-btn" id="privacy-toolbar-btn"
+              onclick="togglePrivacy()" title="Toggle privacy blur">🔒 Privacy</button>
+    </div>
+
+    <div class="messages-container" id="messages" aria-live="polite"></div>
+
+    <!-- Vibe Coding Bar -->
+    <div class="vibe-bar" id="vibe-bar"></div>
+
+    <div class="input-container">
+      <div class="file-preview" id="file-preview"></div>
+      <div class="input-row">
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="attach-btn" type="button" id="voice-mic-btn"
+                  title="Voice input — push to talk: click, speak, and it types your words and sends"
+                  aria-label="Voice input, push to talk" onclick="voicePushToTalk()">🎤</button>
+          <label class="attach-btn" for="file-input" title="Attach file">📎</label>
+          <input type="file" id="file-input" multiple style="display:none"
+                 onchange="handleFileAttach(event)">
+          <button class="attach-btn" type="button" id="gen-image-btn"
+                  title="Generate an image from the prompt in the box"
+                  onclick="generateImageManual()">🎨</button>
+        </div>
+
+        <label for="user-input" class="sr-only">Ask the Oracle</label>
+		<textarea id="user-input" class="user-input"
+                  placeholder="Ask the Oracle…" rows="4"
+                  onkeydown="handleInputKey(event)"
+                  oninput="autoResize(this)"></textarea>
+
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="send-btn nudge-btn" id="nudge-btn"
+                  onclick="handleNudgeClick()"
+                  title="AI QNudge — send Sage a steering nudge mid-task (no interruption)">👋</button>
+          <button class="send-btn" id="send-btn"
+                  onclick="handleSendClick()" title="Send  (Enter)">▶</button>
+          <button class="vibe-toggle" id="vibe-toggle"
+                  onclick="toggleVibeBar()" title="Vibe Coding prompts">✨</button>
+        </div>
+      </div>
+      <div class="input-footer">
+        <span id="status-text" class="status-text" role="status">Connecting…</span>
+        <span id="token-count" class="token-count"></span>
+      </div>
+      <div class="input-disclaimer">Sage is an AI and can make mistakes — especially on events after your selected model's training cutoff. Always double-check important answers.</div>
+    </div>
+  </main>
+
+  <!-- ── Oracle panel (games) ---------------------------------- -->
+  <aside class="oracle-panel" id="oracle-panel">
+    <div class="oracle-panel-header">
+      <button class="game-close-btn" onclick="closeGamePanel()" title="Close">✕</button>
+      <span class="panel-title">Oracle is thinking…</span>
+      <div class="game-selector">
+        <button class="game-tab active" title="Asteroids"
+                onclick="switchGame('asteroids', this)">☄</button>
+        <button class="game-tab" title="Snake"
+                onclick="switchGame('snake', this)">🐍</button>
+        <button class="game-tab" title="Tic-Tac-Toe"
+                onclick="switchGame('tictactoe', this)">✕○</button>
+        <button class="game-tab" title="Socials"
+                onclick="switchGame('socials', this)">📡</button>
+      </div>
+    </div>
+
+    <canvas id="game-canvas" width="300" height="320"></canvas>
+
+    <!-- Scoreboard -->
+    <div class="scoreboard-container" id="scoreboard-container">
+      <div class="scoreboard-title">
+        <span>Top 10</span>
+        <button class="scoreboard-clear" onclick="clearScoreboard()">Clear</button>
+      </div>
+      <div id="scoreboard-entries"></div>
+    </div>
+
+    <div class="game-info">
+      <span id="game-score">Score: 0</span>
+      <span class="game-hint">Play while the Oracle thinks…</span>
+    </div>
+
+    <div class="game-controls" id="game-controls">↑↓←→  Move / Rotate
+Space  Shoot / Action</div>
+
+    <!-- Socials: full-area tab view (hidden until the 📡 tab is selected) -->
+    <div class="socials-view" id="socials-view" style="display:none;flex-direction:column;gap:8px;padding:2px">
+      <div class="scoreboard-title">
+        <span>📡 Socials — <span id="socials-status" style="opacity:0.8;font-weight:normal">…</span></span>
+        <button class="scoreboard-clear" onclick="socialsRefresh()">Refresh</button>
+      </div>
+      <div id="socials-channels" style="font-size:0.85em"></div>
+      <div id="socials-peers" style="font-size:0.8em;opacity:0.85;margin:2px 0"></div>
+      <div id="socials-setup-hint" style="font-size:0.78em;opacity:0.9;white-space:pre-wrap;user-select:all;display:none"></div>
+      <details id="socials-config-wrap" style="font-size:0.84em">
+        <summary style="cursor:pointer;opacity:0.85">Channel settings (token / host)</summary>
+        <div id="socials-config" style="margin-top:4px"></div>
+      </details>
+      <label class="hw-toggle" style="display:flex;gap:6px;align-items:center">
+        <input type="checkbox" id="toggle-socials-autoreply" onchange="socialsAutoReply(this.checked)">
+        <span class="hw-toggle-label" title="When ON, Sage auto-replies to messages mentioning the wake word on CONNECTED channels. Off by default.">Sage auto-reply (opt-in)</span>
+      </label>
+      <div id="socials-feed" style="flex:1 1 auto;min-height:200px;max-height:46vh;overflow:auto;font-size:0.82em;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px;background:rgba(0,0,0,0.15)"></div>
+      <div style="display:flex;gap:4px">
+        <select id="socials-target" class="setting-select" style="width:96px" title="Channel to send to"></select>
+        <input id="socials-text" class="setting-select" type="text" placeholder="message…" style="flex:1"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();socialsSend();}">
+        <button class="toolbar-btn" onclick="socialsSend()">Send</button>
+      </div>
+    </div>
+  </aside>
+
+</div><!-- .app-body -->
+
+<!-- ── Modals (hidden by default) ----------------------------- -->
+<div id="modal-root"></div>
+
+<!-- External libs -->
+<!-- v2.1.11: vendored locally after Sage's WCAG audit pass so the UI works
+     fully offline. Both paths use leading slash so they resolve from /
+     regardless of the route the page was loaded under. -->
+<script src="/static/js/marked.min.js"></script>
+<script src="/static/js/highlight.min.js"></script>
+
+<!-- App scripts (order matters) -->
+<script src="/static/js/haptic.js"></script>
+<!-- v2.1.6: ?v=... cache-bust query strings force Electron's Chromium
+     cache to fetch fresh after edits. Bump these when shipping a UI
+     change so users don't have to hunt down Electron's userData cache. -->
+<script src="/static/js/games.js?v=2.9.10"></script>
+<script src="/static/js/socials.js?v=2.11.11"></script>
+<script src="/static/js/hardware.js?v=2.9.10"></script>
+<script src="/static/js/settings.js?v=2.9.10"></script>
+<script src="/static/js/chat.js?v=2.9.10"></script>
+<script src="/static/js/app.js?v=2.9.10"></script>
+<script src="/static/js/auth.js?v=2.9.10"></script>
+<script src="/static/js/skills.js?v=2.9.10"></script>
+<!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
+     during the WCAG-pass edit. Without this line, the IIFE in
+     command-palette.js never runs, the Ctrl+Shift+Space keydown listener
+     never attaches, and the palette is unreachable even though both the
+     JS file and its CSS file are on disk. -->
+<script src="/static/js/command-palette.js?v=2.9.10"></script>
+
+<!-- WCAG 3.3.3 - Error announcement region -->
+<div id="error-announce" role="alert" aria-live="assertive" aria-atomic="true" class="sr-only"></div>
+<div id="error-live-region" aria-live="polite" class="sr-only"></div>
+<!-- v2.1.11 fix: the .sr-only rule used to live as raw CSS bare in <body>
+     with no <style> wrapper, so the browser rendered it as literal text
+     and the rule never applied — meaning the two divs above were
+     visible on every page load instead of being SR-only. Wrapping it
+     in <style> restores the "screen-reader only" intent. -->
+<style>
+  .sr-only {
+    position: absolute;
+    width:    1px;
+    height:   1px;
+    padding:  0;
+    margin:  -1px;
+    overflow: hidden;
+    clip:     rect(0, 0, 0, 0);
+    border:   0;
+  }
+</style>
+
+<!-- First-run AI disclaimer acknowledgment (shown once per browser/device) -->
+<script>
+(function () {
+  try { if (localStorage.getItem('oai_disclaimer_ack') === '1') return; }
+  catch (e) { /* storage blocked -> just show it this load */ }
+  function show() {
+    if (document.getElementById('oai-disclaimer-overlay')) return;
+    var ov = document.createElement('div');
+    ov.id = 'oai-disclaimer-overlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,0.80);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
+    ov.innerHTML =
+      '<div style="max-width:480px;margin:20px;background:#0b1430;border:1px solid rgba(240,165,0,0.35);border-radius:14px;padding:26px 26px 22px;box-shadow:0 20px 60px rgba(0,0,0,0.55);font-family:\'Segoe UI\',system-ui,sans-serif;color:#e9edf6">' +
+        '<div style="font-size:17px;letter-spacing:.14em;color:#f0a500;text-align:center;margin-bottom:14px">WELCOME TO ORACLE AI</div>' +
+        '<p style="font-size:13.5px;line-height:1.6;margin:8px 0">Sage is a <strong>local AI assistant</strong> and can make mistakes or produce inaccurate information &mdash; especially about events after its training cutoff.</p>' +
+        '<p style="font-size:13.5px;line-height:1.6;margin:8px 0">Always verify important answers against reliable sources. Sage does not provide professional legal, medical, or financial advice.</p>' +
+        '<button id="oai-disc-ok" style="margin-top:16px;width:100%;background:#f0a500;color:#0b1430;border:0;border-radius:9px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">I understand</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+    var btn = document.getElementById('oai-disc-ok');
+    btn.focus();
+    btn.addEventListener('click', function () {
+      try { localStorage.setItem('oai_disclaimer_ack', '1'); } catch (e) {}
+      ov.remove();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show);
+  else show();
+})();
+</script>
+
+
+</body>
+</html>

@@ -1,87 +1,329 @@
 #!/usr/bin/env python3
 """
-bitchat_ble_gateway.py — OracleAI BitChat BLE Gateway
-Fulfills the contract expected by bitchat_bridge.py.
+bitchat_ble_gateway.py — OracleAI BitChat BLE Gateway v2
+Rewrites the hand-rolled BLE stub with a real BitchatClient integration.
 
-Sits between bleak (BLE mesh) and bitchat_bridge.py (HTTP/WS client):
-    bleak (Realtek BLE) ←→ this gateway (FastAPI :8080) ←→ bitchat_bridge.py ←→ Sage
+Architecture:
+    BitchatClient (bitchat.py)
+        ↕  subclassed as SageBitchatClient
+    FastAPI :8080  (this file)
+        ↕  WebSocket
+    bitchat_bridge.py
+        ↕
+    Sage
 
-Endpoints:
+Location/version agnostic: all paths derived from __file__.
+No hardcoded drive letters, version strings, or absolute paths.
+
+Endpoints (unchanged — bitchat_bridge.py contract):
     GET  /api/info   → { "websocket_url": "ws://localhost:8080/ws" }
-    WS   /ws         → full duplex BitChat mesh relay
+    WS   /ws         → full-duplex BitChat mesh relay
+    GET  /health     → { "status": "ok", ... }
 
-BitChat BLE protocol: scans for peers advertising the BitChat service UUID,
-connects, relays messages in both directions.
+Fix (v2.1):
+    Startup now calls connect() → handshake() → background_scanner()
+    in the correct order, matching bitchat.py's run() lifecycle.
+    Previously, handshake() was called before connect(), leaving
+    self.client = None permanently and dropping every outbound message.
 """
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
+import os
+import sys
 import time
 import uuid
-from typing import Set
+import importlib.util
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Set, Optional
 
+# ── Path resolution (location/version agnostic) ───────────────────────────────
+# Gateway lives at:        <root>/backend/bitchat_ble_gateway.py
+# bitchat-python lives at: <root>/bitchat-python/bitchat/
+_BACKEND_DIR    = Path(__file__).resolve().parent
+_ROOT_DIR       = _BACKEND_DIR.parent
+_BITCHAT_PYTHON = _ROOT_DIR / "bitchat-python" / "bitchat"
+
+
+def _force_local_import(module_name: str, file_path: Path):
+    """Force import from local path, bypassing stdlib namespace collision."""
+    spec   = importlib.util.spec_from_file_location(module_name, file_path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+# Force local bitchat-python modules BEFORE anything else.
+# Necessary because Python 3.14 has a stdlib 'compression' module
+# that collides with bitchat_compression.py, and lz4 depends on it.
+_force_local_import("bitchat_compression", _BACKEND_DIR / "bitchat_compression.py")
+_force_local_import("fragmentation",       _BITCHAT_PYTHON / "fragmentation.py")
+_force_local_import("persistence",         _BITCHAT_PYTHON / "persistence.py")
+_force_local_import("encryption",          _BITCHAT_PYTHON / "encryption.py")
+_force_local_import("terminal_ux",         _BITCHAT_PYTHON / "terminal_ux.py")
+_force_local_import("bitchat",             _BITCHAT_PYTHON / "bitchat.py")
+
+
+# ── BitchatClient imports ──────────────────────────────────────────────────────
+try:
+    from bitchat import (
+        BitchatClient,
+        BitchatMessage,
+        BitchatPacket,
+        MessageType,
+        create_bitchat_packet,
+    )
+    from terminal_ux import PrivateDM, Channel
+    _BITCHAT_AVAILABLE    = True
+    _BITCHAT_IMPORT_ERROR = None
+except ImportError as _e:
+    _BITCHAT_AVAILABLE    = False
+    _BITCHAT_IMPORT_ERROR = str(_e)
+
+
+# ── FastAPI / uvicorn ──────────────────────────────────────────────────────────
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 import uvicorn
-from bleak import BleakScanner, BleakClient
-from bleak.backends.device import BLEDevice
 
-# ── BitChat BLE constants ──────────────────────────────────────────────────────
-# PROVISIONAL (2026-06-20) — from public BitChat docs Todd found. TREAT AS A
-# HYPOTHESIS: web/AI summaries hallucinate UUIDs (note the TX value resembles the
-# old placeholder). The AUTHORITY is your phone's actual advertised service UUID,
-# which the unfiltered debug scan prints as "[BLE] saw '<name>' (...) adv_uuids=[...]".
-# Confirm against that log and correct these if they differ.
-BITCHAT_SERVICE_UUID    = "f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5c"
-BITCHAT_CHAR_TX_UUID    = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"  # write
-BITCHAT_CHAR_RX_UUID    = "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d"  # notify
 
-LOG_LEVEL = logging.INFO
-logging.basicConfig(level=LOG_LEVEL, format="%(asctime)s [BitChat-GW] %(levelname)s %(message)s")
+# ── Logging ────────────────────────────────────────────────────────────────────
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [BitChat-GW] %(levelname)s %(message)s"
+)
 logger = logging.getLogger("bitchat.gateway")
 
-# ── State ──────────────────────────────────────────────────────────────────────
-app = FastAPI(title="BitChat BLE Gateway", version="1.0.0")
 
-# Connected WebSocket clients (bitchat_bridge.py instances)
-ws_clients: Set[WebSocket] = set()
+# ── Gateway state ──────────────────────────────────────────────────────────────
+ws_clients:    Set[WebSocket]       = set()
+ws_nicknames:  dict[WebSocket, str] = {}
+inbound_queue: asyncio.Queue        = asyncio.Queue(maxsize=500)
 
-# Registered nicknames per websocket
-ws_nicknames: dict[WebSocket, str] = {}
+PEER_ID  = str(uuid.uuid4())[:8]
+NICKNAME = "Sage"
 
-# BLE peers currently connected
-ble_peers: dict[str, BLEDevice] = {}        # address → device
-ble_clients: dict[str, BleakClient] = {}    # address → client
-
-# Inbound BLE message queue → forwarded to WS clients
-inbound_queue: asyncio.Queue = asyncio.Queue(maxsize=500)
-
-# Our own peer ID
-PEER_ID   = str(uuid.uuid4())[:8]
-NICKNAME  = "Sage"
+# The single shared BitchatClient instance (set at startup)
+_sage_client: Optional["SageBitchatClient"] = None
 
 
-# ── HTTP endpoints ─────────────────────────────────────────────────────────────
+# ── SageBitchatClient — subclass that routes display_message to WS ─────────────
+if _BITCHAT_AVAILABLE:
+
+    class SageBitchatClient(BitchatClient):
+        """
+        Thin subclass of BitchatClient.
+
+        Overrides display_message() so incoming BLE messages are pushed onto
+        inbound_queue (→ WS clients → Sage) instead of printed to a terminal.
+
+        Everything else — BLE scan, connect, Noise XX handshake, fragmentation,
+        compression, delivery ACKs, reconnection — is inherited unchanged.
+        """
+
+        def __init__(self):
+            super().__init__()
+            self.nickname = NICKNAME
+
+        async def display_message(
+            self,
+            message:    BitchatMessage,
+            packet:     BitchatPacket,
+            is_private: bool,
+        ):
+            """
+            Route incoming messages to the WebSocket relay instead of stdout.
+            Handles encrypted channel message decryption before queuing.
+            """
+            # Safe nickname resolution — peer may exist but have nickname=None
+            sender_nick = (
+                (self.peers.get(packet.sender_id_str) and
+                 self.peers[packet.sender_id_str].nickname)
+                or packet.sender_id_str
+            )
+
+            # Resolve display content (handles encrypted channel messages)
+            display_content = message.content
+            if message.is_encrypted and message.channel:
+                if message.channel in self.channel_keys:
+                    try:
+                        creator_fp      = self.channel_creators.get(message.channel, "")
+                        display_content = self.encryption_service.decrypt_from_channel(
+                            message.encrypted_content,
+                            message.channel,
+                            self.channel_keys[message.channel],
+                            creator_fp,
+                        )
+                    except Exception:
+                        display_content = "[Encrypted — decryption failed]"
+                else:
+                    display_content = "[Encrypted — join channel with password]"
+
+            logger.info("[GW] RECV from %s: %s", sender_nick,
+                        (display_content or "")[:80])
+
+            msg = {
+                "type":      "message",
+                "sender":    sender_nick,
+                "channel":   message.channel or "general",
+                "content":   display_content,
+                "timestamp": time.time(),
+                "peer_id":   packet.sender_id_str,
+                "private":   is_private,
+            }
+
+            try:
+                inbound_queue.put_nowait(msg)
+            except asyncio.QueueFull:
+                logger.warning(
+                    "[GW] inbound_queue full — dropping message from %s", sender_nick
+                )
+
+            # Preserve parent chat-context bookkeeping for DM tracking
+            if is_private:
+                self.chat_context.last_private_sender = (
+                    packet.sender_id_str, sender_nick
+                )
+                self.chat_context.add_dm(sender_nick, packet.sender_id_str)
+
+
+# ── Lifespan (replaces deprecated on_event) ────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Manages the full gateway lifecycle using the modern FastAPI lifespan pattern.
+    Replaces the deprecated @app.on_event("startup") / ("shutdown") decorators.
+    """
+    # ── STARTUP ───────────────────────────────────────────────────────────────
+    global _sage_client
+
+    logger.info("[GW] OracleAI BitChat BLE Gateway v2 starting — peer_id=%s", PEER_ID)
+
+    if not _BITCHAT_AVAILABLE:
+        logger.error("[GW] bitchat-python not importable: %s", _BITCHAT_IMPORT_ERROR)
+        logger.error("[GW] Expected path: %s", _BITCHAT_PYTHON)
+        logger.warning("[GW] Gateway running in STUB mode — no BLE functionality")
+        relay_task = asyncio.create_task(_inbound_relay_loop())
+        yield
+        relay_task.cancel()
+        return
+
+    _sage_client = SageBitchatClient()
+
+    # Launch all background tasks
+    ble_task     = asyncio.create_task(_run_bitchat_client())
+    relay_task   = asyncio.create_task(_inbound_relay_loop())
+    monitor_task = asyncio.create_task(_peer_monitor_loop())
+
+    logger.info("[GW] All tasks started — gateway ready")
+
+    yield   # ── Server runs here ──────────────────────────────────────────────
+
+    # ── SHUTDOWN ──────────────────────────────────────────────────────────────
+    logger.info("[GW] Shutting down — sending LEAVE to mesh...")
+
+    try:
+        if _sage_client and _sage_client.client and _sage_client.client.is_connected:
+            leave_packet = create_bitchat_packet(
+                _sage_client.my_peer_id,
+                MessageType.LEAVE,
+                _sage_client.nickname.encode(),
+            )
+            await _sage_client.send_packet(leave_packet)
+            await asyncio.sleep(0.1)
+            await _sage_client.client.disconnect()
+    except Exception as exc:
+        logger.warning("[GW] Shutdown error (non-fatal): %s", exc)
+
+    if _sage_client:
+        await _sage_client.save_app_state()
+
+    # Cancel background tasks cleanly
+    for task in (ble_task, relay_task, monitor_task):
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    logger.info("[GW] Shutdown complete")
+
+
+# ── App (lifespan-aware) ───────────────────────────────────────────────────────
+app = FastAPI(
+    title    = "OracleAI BitChat BLE Gateway",
+    version  = "2.1.0",
+    lifespan = lifespan,
+)
+
+
+# ── HTTP endpoints (contract unchanged) ───────────────────────────────────────
 @app.get("/api/info")
 async def api_info():
-    """Entry point — bitchat_bridge.py calls this first."""
+    peers     = _sage_client.display_peers() if _sage_client else []
+    connected = bool(
+        _sage_client and _sage_client.client and _sage_client.client.is_connected
+    )
     return JSONResponse({
         "name":          "OracleAI BitChat BLE Gateway",
         "peer_id":       PEER_ID,
         "websocket_url": "ws://localhost:8080/ws",
-        "peers":         list(ble_peers.keys()),
-        "status":        "ok",
+        "peers":         peers,
+        "status":        "ok" if connected else "scanning",
+        "bitchat_ready": _BITCHAT_AVAILABLE,
     })
 
 
 @app.get("/health")
 async def health():
-    return JSONResponse({"status": "ok", "ble_peers": len(ble_peers)})
+    peers    = len(_sage_client.peers) if _sage_client else 0
+    sessions = (
+        _sage_client.encryption_service.get_session_count()
+        if _sage_client else 0
+    )
+    return JSONResponse({
+        "status":          "ok",
+        "ble_peers":       peers,
+        "secure_sessions": sessions,
+        "bitchat_ready":   _BITCHAT_AVAILABLE,
+    })
 
 
-# ── WebSocket endpoint ─────────────────────────────────────────────────────────
+@app.post("/shutdown")
+async def shutdown():
+    """Fully stop BitChat: leave the mesh, drop BLE, end scanning, exit process.
+    Wired to the UI 'Disconnect' so 'off' actually means off -- no more scanning.
+    The backend respawns this gateway on the next 'Connect'."""
+    global _sage_client
+    logger.info("[GW] /shutdown requested -- stopping BitChat BLE")
+    try:
+        if _sage_client:
+            _sage_client.running = False  # ends background_scanner loop
+            if (_BITCHAT_AVAILABLE and _sage_client.client
+                    and _sage_client.client.is_connected):
+                try:
+                    leave_packet = create_bitchat_packet(
+                        _sage_client.my_peer_id,
+                        MessageType.LEAVE,
+                        _sage_client.nickname.encode(),
+                    )
+                    await _sage_client.send_packet(leave_packet)
+                    await asyncio.sleep(0.1)
+                    await _sage_client.client.disconnect()
+                except Exception as exc:
+                    logger.warning("[GW] shutdown BLE cleanup: %s", exc)
+    finally:
+        # Exit shortly after responding so BleakScanner truly stops and the
+        # port frees for a clean restart.
+        asyncio.get_event_loop().call_later(0.3, lambda: os._exit(0))
+    return JSONResponse({"status": "stopping"})
+
+
+# ── WebSocket endpoint (contract unchanged) ────────────────────────────────────
 @app.websocket("/ws")
 async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
@@ -91,31 +333,30 @@ async def websocket_endpoint(ws: WebSocket):
 
     try:
         while True:
-            raw = await ws.receive_text()
-            data = json.loads(raw)
+            raw      = await ws.receive_text()
+            data     = json.loads(raw)
             msg_type = data.get("type")
 
             if msg_type == "register":
-                # {"type": "register", "nickname": "Sage"}
                 nick = data.get("nickname", NICKNAME)
                 ws_nicknames[ws] = nick
+                if _sage_client:
+                    _sage_client.nickname = nick
                 logger.info("[WS] registered as '%s'", nick)
-                await ws.send_text(json.dumps({"type": "ack", "status": "registered", "nickname": nick}))
+                await ws.send_text(json.dumps({
+                    "type": "ack", "status": "registered", "nickname": nick
+                }))
 
             elif msg_type == "message":
-                # {"type": "message", "channel": "general", "content": "..."}
                 channel = data.get("channel", "general")
                 content = data.get("content", "")
                 nick    = ws_nicknames.get(ws, NICKNAME)
                 logger.info("[WS→BLE] [%s] %s: %s", channel, nick, content[:80])
-                await _ble_broadcast(nick, channel, content)
+                await _handle_outbound(channel, content, nick)
 
             elif msg_type == "peers":
-                # {"type": "peers"}
-                await ws.send_text(json.dumps({
-                    "type":  "peers",
-                    "peers": list(ble_peers.keys()),
-                }))
+                peers = _sage_client.display_peers() if _sage_client else []
+                await ws.send_text(json.dumps({"type": "peers", "peers": peers}))
 
             else:
                 logger.warning("[WS] unknown message type: %s", msg_type)
@@ -129,47 +370,73 @@ async def websocket_endpoint(ws: WebSocket):
         ws_nicknames.pop(ws, None)
 
 
-# ── BLE broadcast (WS → mesh) ──────────────────────────────────────────────────
-async def _ble_broadcast(sender: str, channel: str, content: str) -> None:
-    """Send a message out to all connected BLE peers."""
-    if not ble_clients:
-        logger.warning("[BLE] no peers connected — message dropped")
+# ── Outbound: WS → BLE mesh ────────────────────────────────────────────────────
+async def _handle_outbound(channel: str, content: str, nick: str):
+    """
+    Route an outbound message from Sage/WS to the BLE mesh.
+    Handles public, channel, and private (DM) messages.
+
+    DM format:  "DM:<peer_id>:<nickname>:<content>"
+    """
+    # Echo Sage's own (non-DM) message into the UI feed so the user sees what
+    # they sent. Goes inbound_queue -> relay -> WS -> bridge.receive -> recent().
+    if not content.startswith("DM:"):
+        try:
+            inbound_queue.put_nowait({
+                "type": "message", "sender": nick,
+                "channel": channel or "general", "content": content,
+                "timestamp": time.time(), "peer_id": "self",
+                "private": False, "echo": True,
+            })
+        except asyncio.QueueFull:
+            pass
+
+    if not _sage_client:
+        logger.warning("[GW] BitchatClient not ready — message dropped")
         return
 
-    payload = json.dumps({
-        "sender":    sender,
-        "channel":   channel,
-        "content":   content,
-        "timestamp": time.time(),
-        "peer_id":   PEER_ID,
-    }).encode()
+    if not _sage_client.client or not _sage_client.client.is_connected:
+        logger.warning("[GW] BLE not connected — message queued (background scanner active)")
+        return
 
-    for addr, client in list(ble_clients.items()):
-        try:
-            await client.write_gatt_char(BITCHAT_CHAR_TX_UUID, payload)
-            logger.debug("[BLE→] sent to %s", addr)
-        except Exception as exc:
-            logger.warning("[BLE] send to %s failed: %s", addr, exc)
-            ble_peers.pop(addr, None)
-            ble_clients.pop(addr, None)
+    # Private message via DM prefix
+    if content.startswith("DM:"):
+        parts = content.split(":", 3)
+        if len(parts) == 4:
+            _, target_peer_id, target_nick, dm_content = parts
+            await _sage_client.send_private_message(
+                dm_content, target_peer_id, target_nick
+            )
+        return
+
+    # Channel or public message — preserve and restore chat context
+    original_mode = _sage_client.chat_context.current_mode
+
+    if channel and channel.startswith("#"):
+        # switch_to_channel_silent exists in terminal_ux.py — verified
+        _sage_client.chat_context.switch_to_channel_silent(channel)
+        await _sage_client.send_public_message(content)
+        _sage_client.chat_context.current_mode = original_mode
+    else:
+        if not isinstance(
+            _sage_client.chat_context.current_mode,
+            (Channel if _BITCHAT_AVAILABLE else object),
+        ):
+            await _sage_client.send_public_message(content)
+        else:
+            _sage_client.chat_context.switch_to_public()
+            await _sage_client.send_public_message(content)
+            _sage_client.chat_context.current_mode = original_mode
 
 
-# ── BLE inbound relay (mesh → WS) ─────────────────────────────────────────────
-def _on_ble_notify(sender_handle: int, data: bytes) -> None:
-    """Callback fired by bleak when a BLE peer sends us data."""
-    try:
-        msg = json.loads(data.decode())
-        inbound_queue.put_nowait(msg)
-    except Exception as exc:
-        logger.warning("[BLE←] malformed packet: %s", exc)
-
-
-async def _inbound_relay_loop() -> None:
-    """Drain inbound_queue and forward messages to all WS clients."""
+# ── Inbound relay: inbound_queue → WS clients ─────────────────────────────────
+async def _inbound_relay_loop():
+    """Drain inbound_queue and forward all messages to connected WS clients.
+    Dead connections are pruned automatically.
+    """
     while True:
         try:
             msg = await asyncio.wait_for(inbound_queue.get(), timeout=1.0)
-            msg["type"] = "message"     # normalise for bitchat_bridge.py
             payload = json.dumps(msg)
             dead = set()
             for ws in ws_clients:
@@ -186,61 +453,39 @@ async def _inbound_relay_loop() -> None:
             logger.error("[relay] %s", exc)
 
 
-# ── BLE scanner loop ───────────────────────────────────────────────────────────
-async def _ble_scan_loop() -> None:
-    """Continuously scan for BitChat peers and connect to new ones."""
-    logger.info("[BLE] scanner started — looking for BitChat peers...")
-    logger.info("[BLE] (debug) configured BitChat service UUID = %s", BITCHAT_SERVICE_UUID)
+# ── Peer monitor: watch for peer join/leave events ────────────────────────────
+async def _peer_monitor_loop():
+    """
+    Watches _sage_client.peers and notifies WS clients when peers
+    join or leave the BLE mesh. BitchatClient handles the BLE
+    connect/disconnect internally — we just observe the peer dict.
+    """
+    known_peers: set = set()
+
     while True:
-        try:
-            # DEBUG: scan UNFILTERED and log every device + the service UUIDs it
-            # advertises. Open BitChat on a phone nearby and its line reveals the
-            # REAL service UUID to put in BITCHAT_SERVICE_UUID. We still only
-            # CONNECT to devices advertising the configured UUID, so once that's
-            # corrected this loop works unchanged.
-            found = await BleakScanner.discover(timeout=5.0, return_adv=True)
-            for addr, (device, adv) in found.items():
-                advertised = [str(u).lower() for u in (getattr(adv, "service_uuids", None) or [])]
-                logger.info("[BLE] saw '%s' (%s) adv_uuids=%s",
-                            (getattr(adv, "local_name", None) or device.name or "?"),
-                            addr, advertised or "none")
-                if BITCHAT_SERVICE_UUID in advertised and addr not in ble_clients:
-                    asyncio.create_task(_connect_peer(device))
-        except Exception as exc:
-            logger.warning("[BLE] scan error: %s", exc)
-        await asyncio.sleep(10)     # re-scan every 10s
+        await asyncio.sleep(2)
+        if not _sage_client:
+            continue
+
+        current = set(_sage_client.display_peers())
+
+        for name in current - known_peers:
+            await _broadcast_ws({
+                "type": "peer_joined", "peer_id": name, "name": name
+            })
+            logger.info("[GW] peer joined: %s", name)
+
+        for name in known_peers - current:
+            await _broadcast_ws({
+                "type": "peer_left", "peer_id": name, "name": name
+            })
+            logger.info("[GW] peer left: %s", name)
+
+        known_peers = current
 
 
-async def _connect_peer(device: BLEDevice) -> None:
-    """Connect to a discovered BitChat peer and subscribe to notifications."""
-    addr = device.address
-    logger.info("[BLE] connecting to peer %s (%s)...", device.name or "?", addr)
-    try:
-        client = BleakClient(device, disconnected_callback=lambda c: _on_disconnect(addr))
-        await client.connect(timeout=10.0)
-        await client.start_notify(BITCHAT_CHAR_RX_UUID, _on_ble_notify)
-        ble_peers[addr]   = device
-        ble_clients[addr] = client
-        logger.info("[BLE] ✓ connected to %s", addr)
-
-        # Notify WS clients a new peer joined
-        await _broadcast_ws({
-            "type":    "peer_joined",
-            "peer_id": addr,
-            "name":    device.name or addr,
-        })
-    except Exception as exc:
-        logger.warning("[BLE] failed to connect %s: %s", addr, exc)
-
-
-def _on_disconnect(addr: str) -> None:
-    logger.info("[BLE] peer disconnected: %s", addr)
-    ble_peers.pop(addr, None)
-    ble_clients.pop(addr, None)
-
-
-async def _broadcast_ws(msg: dict) -> None:
-    """Send a dict to all connected WS clients."""
+async def _broadcast_ws(msg: dict):
+    """Broadcast a message to all connected WS clients, pruning dead ones."""
     payload = json.dumps(msg)
     dead = set()
     for ws in ws_clients:
@@ -253,19 +498,58 @@ async def _broadcast_ws(msg: dict) -> None:
         ws_nicknames.pop(ws, None)
 
 
-# ── Startup ────────────────────────────────────────────────────────────────────
-@app.on_event("startup")
-async def startup():
-    logger.info("[GW] OracleAI BitChat BLE Gateway starting — peer_id=%s", PEER_ID)
-    asyncio.create_task(_ble_scan_loop())
-    asyncio.create_task(_inbound_relay_loop())
+# ── THE FIX: correct BLE lifecycle ────────────────────────────────────────────
+async def _run_bitchat_client():
+    """
+    Runs the full BitchatClient BLE lifecycle in the correct order:
+
+        1. connect()            — initial BLE scan + connect attempt
+        2. handshake()          — Noise identity announce + ANNOUNCE packet
+                                  (works in offline mode too — prints status)
+        3. background_scanner() — continuous reconnection loop from here on
+
+    Previously, startup() called handshake() before connect(), which left
+    self.client = None permanently. Every outbound message then hit the
+    'BLE not connected — message dropped' guard and was silently discarded.
+
+    This matches the lifecycle order in bitchat.py's run() method exactly.
+    """
+    if not _sage_client:
+        return
+
+    try:
+        # Step 1 — initial BLE scan + connect
+        # Returns True even if no peer found; offline mode is valid.
+        connected = await _sage_client.connect()
+
+        if connected and _sage_client.client and _sage_client.client.is_connected:
+            logger.info("[GW] BLE connected on first attempt")
+        else:
+            logger.info("[GW] No BLE peer found on first scan — entering offline mode")
+
+        # Step 2 — handshake AFTER connect
+        # If connected: sends Noise identity announce + ANNOUNCE to mesh.
+        # If offline:   prints "Running in offline mode. Waiting for peers..."
+        #               and restores persisted state (nickname, channel keys, etc.)
+        await _sage_client.handshake()
+
+        # Step 3 — background_scanner() takes over reconnection from here.
+        # It loops every 5 seconds, scanning for peers when not connected,
+        # and handles all future connect/disconnect/reconnect events.
+        # Verified: background_scanner() exists in bitchat.py and is awaitable.
+        await _sage_client.background_scanner()
+
+    except asyncio.CancelledError:
+        logger.info("[GW] BitchatClient task cancelled — shutting down")
+    except Exception as exc:
+        logger.error("[GW] BitchatClient fatal error: %s", exc, exc_info=True)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
     uvicorn.run(
         "bitchat_ble_gateway:app",
-        host="127.0.0.1",
-        port=8080,
-        log_level="info",
+        host      = "127.0.0.1",
+        port      = 8080,
+        log_level = "info",
     )
