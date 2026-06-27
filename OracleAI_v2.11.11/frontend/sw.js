@@ -7,7 +7,7 @@
  *   2. When the backend/Ollama isn't running, show a friendly offline page
  *      instead of the browser's raw connection error.
  */
-const CACHE = 'oracleai-shell-v1';
+const CACHE = 'oracleai-shell-v2';
 const OFFLINE_URL = '/static/offline.html';
 
 self.addEventListener('install', (event) => {

@@ -1483,6 +1483,32 @@ pre:hover .copy-btn      { opacity: 1; }
   line-height: 1.35;
 }
 
+/* ── Accessible tooltip (a11y-tooltip.js) ------------------------ */
+/* Replaces native title= tooltips: keyboard-reachable, dismissible (Esc),
+   persistent while hovered. Hidden state is fully click-through. */
+.a11y-tip {
+  position: fixed;
+  z-index: 100000;
+  max-width: 280px;
+  padding: 6px 10px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-body);
+  font-size: 12px;
+  line-height: 1.35;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: auto;
+  opacity: 1;
+  transition: opacity 0.12s ease;
+}
+.a11y-tip[aria-hidden="true"] {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* ── Modal Overlay ----------------------------------------------- */
 .modal-overlay {
   position: fixed;

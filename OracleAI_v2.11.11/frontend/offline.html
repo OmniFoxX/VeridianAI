@@ -35,17 +35,17 @@
   </style>
 </head>
 <body>
-  <div class="card">
+  <main class="card" role="main" aria-labelledby="offline-title">
     <div class="ring" aria-hidden="true"></div>
-    <h1>O R A C L E&nbsp;&nbsp;A I</h1>
+    <h1 id="offline-title">O R A C L E&nbsp;&nbsp;A I</h1>
     <p>OracleAI isn't responding yet.</p>
     <p>This installed app is just the interface &mdash; the OracleAI engine (and
        <strong>Ollama</strong>) need to be running on this computer first.</p>
     <p class="hint">Start OracleAI (run <code>start.bat</code> or open the OracleAI
        desktop app), wait for the tiers to come online, then reload.</p>
-    <button id="reload-btn" onclick="tryReload()">Reload</button>
-    <p id="offline-status" class="hint" style="margin-top:14px" aria-live="polite"></p>
-  </div>
+    <button id="reload-btn" autofocus aria-label="Reload and check if the OracleAI engine is running" onclick="tryReload()">Reload</button>
+    <p id="offline-status" class="hint" style="margin-top:14px" role="status" aria-live="polite"></p>
+  </main>
   <script>
     // Why the old Reload "did nothing": the service worker is network-first for
     // navigations, so a plain location.reload() while the engine was still down

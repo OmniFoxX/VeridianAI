@@ -57,9 +57,9 @@ function renderHardwarePanel(hw) {
       const row = document.createElement('div');
       row.className = 'hw-toggle-row';
       row.innerHTML = `
-        <span class="hw-toggle-label">${t.label}</span>
+        <span class="hw-toggle-label"${t.tip ? ` data-tip="${t.tip}"` : ''}>${t.label}</span>
         <label class="toggle-switch">
-          <input type="checkbox" ${t.checked ? 'checked' : ''}
+          <input type="checkbox" aria-label="${t.label}" ${t.checked ? 'checked' : ''}
                  onchange="${t.onChange}">
           <span class="toggle-track"></span>
         </label>
@@ -103,20 +103,21 @@ function buildToggles(hw) {
     label: 'GPU Acceleration',
     checked: window._appConfig && window._appConfig.gpu_acceleration !== false,
     onChange: "updateSetting('gpu_acceleration', this.checked)",
+    tip: 'Use the GPU to accelerate model inference. Off = CPU-only (slower, but works everywhere).',
   });
   if (hw.nvidia && hw.nvidia.available) {
-    toggles.push({ label: 'CUDA (NVIDIA)', checked: true, onChange: "updateSetting('cuda_enabled', this.checked)" });
+    toggles.push({ label: 'CUDA (NVIDIA)', checked: true, onChange: "updateSetting('cuda_enabled', this.checked)", tip: 'Use NVIDIA CUDA to accelerate inference on your NVIDIA GPU.' });
   }
   if (hw.amd && hw.amd.available) {
-    toggles.push({ label: 'ROCm (AMD)', checked: true, onChange: "updateSetting('rocm_enabled', this.checked)" });
+    toggles.push({ label: 'ROCm (AMD)', checked: true, onChange: "updateSetting('rocm_enabled', this.checked)", tip: 'Use AMD ROCm to accelerate inference on your AMD GPU.' });
   }
   if (hw.intel && hw.intel.available) {
-    toggles.push({ label: 'Vulkan/XPU (Intel)', checked: true, onChange: "updateSetting('vulkan_enabled', this.checked)" });
+    toggles.push({ label: 'Vulkan/XPU (Intel)', checked: true, onChange: "updateSetting('vulkan_enabled', this.checked)", tip: 'Use Intel Vulkan/XPU acceleration on your Intel GPU.' });
     if (hw.intel.openvino) {
-      toggles.push({ label: 'OpenVINO', checked: true, onChange: "updateSetting('openvino_enabled', this.checked)" });
+      toggles.push({ label: 'OpenVINO', checked: true, onChange: "updateSetting('openvino_enabled', this.checked)", tip: "Use Intel's OpenVINO runtime for optimized inference." });
     }
     if (hw.intel.arc_detected) {
-      toggles.push({ label: 'Arc Xe Cores (AI)', checked: true, onChange: "updateSetting('xe_cores_enabled', this.checked)" });
+      toggles.push({ label: 'Arc Xe Cores (AI)', checked: true, onChange: "updateSetting('xe_cores_enabled', this.checked)", tip: "Use the Arc GPU's Xe-core AI acceleration." });
     }
   }
   return toggles;

@@ -35,6 +35,7 @@
     ov.id = "auth-overlay";
     ov.setAttribute("role", "dialog");
     ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-label", needsSetup ? "OracleAI account setup" : "OracleAI sign in");
     ov.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;" +
       "align-items:center;justify-content:center;background:" + V("--bg", "#060a14");
     ov.innerHTML =
@@ -47,11 +48,11 @@
       '<span style="color:' + V("--gold", "#f0a500") + '">AI</span></div>' +
       '<div style="text-align:center;font-size:13px;margin:6px 0 18px;color:' +
       V("--text-muted", "#7890b8") + '">' + subtitle + '</div>' +
-      '<input id="auth-username" placeholder="Username" autocomplete="username" style="' + inputStyle() + '">' +
-      '<input id="auth-password" type="password" placeholder="Password" autocomplete="' +
+      '<input id="auth-username" aria-label="Username" placeholder="Username" autocomplete="username" style="' + inputStyle() + '">' +
+      '<input id="auth-password" aria-label="Password" type="password" placeholder="Password" autocomplete="' +
       (needsSetup ? "new-password" : "current-password") + '" style="' + inputStyle() + '">' +
       (needsSetup
-        ? '<input id="auth-confirm" type="password" placeholder="Confirm password" autocomplete="new-password" style="' + inputStyle() + '">'
+        ? '<input id="auth-confirm" aria-label="Confirm password" type="password" placeholder="Confirm password" autocomplete="new-password" style="' + inputStyle() + '">'
         : "") +
       '<div id="auth-error" role="alert" style="min-height:16px;margin:4px 2px;font-size:12px;color:' +
       V("--error", "#ff6b6b") + '"></div>' +
@@ -111,7 +112,11 @@
       b.id = id;
       b.type = "button";
       b.textContent = label;
-      b.title = title;
+      // Use the a11y-tooltip system (data-tip), not a native title tooltip, so
+      // these match the rest of the UI. aria-label also gives the icon-only
+      // buttons (e.g. the key glyph) a proper accessible name.
+      b.setAttribute("aria-label", title);
+      b.setAttribute("data-tip", title);
       b.style.cssText = "padding:4px 9px;font-size:11px;line-height:1.4;border-radius:6px;" +
         "cursor:pointer;white-space:nowrap;background:" + V("--surface-3", "#142036") +
         ";color:" + V("--text-muted", "#7890b8") + ";border:1px solid " + V("--border", "#2a3a5a");

@@ -39,8 +39,8 @@
         var label = n + (c.experimental ? " (experimental)" : "");
         var note = c.note ? (' <span style="opacity:0.7">— ' + esc(c.note) + "</span>") : "";
         var btn = c.connected
-          ? '<button class="toolbar-btn" onclick="socialsConnect(\'' + n + '\',false)">Disconnect</button>'
-          : '<button class="toolbar-btn"' + (c.available ? "" : " disabled") + ' onclick="socialsConnect(\'' + n + '\',true)">Connect</button>';
+          ? '<button class="toolbar-btn" aria-label="Disconnect ' + esc(n) + '" data-tip="Disconnect from ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',false)">Disconnect</button>'
+          : '<button class="toolbar-btn"' + (c.available ? "" : " disabled") + ' aria-label="Connect ' + esc(n) + '" data-tip="Connect to ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',true)">Connect</button>';
         return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0">'
           + "<span>" + dot + " " + esc(label) + note + "</span>" + btn + "</div>";
       }).join("") : "<i>No channels.</i>";
@@ -232,7 +232,7 @@
         : ("Show only the " + id + " thread");
       return '<button class="socials-thread' + (on ? " active" : "") + '" role="tab"'
         + ' aria-selected="' + (on ? "true" : "false") + '"'
-        + ' title="' + esc(tip) + '"'
+        + ' data-tip="' + esc(tip) + '"'
         + ' onclick="socialsSelectThread(\'' + esc(id) + '\')">' + esc(label) + badge + "</button>";
     }
     var html = [tab("all", "All", _msgs.length)];
@@ -244,9 +244,9 @@
       var isAll = (_activeThread === "all");
       cb.disabled = isAll;
       cb.textContent = isAll ? "Clear this thread" : ("Clear " + _activeThread);
-      cb.title = isAll
+      cb.setAttribute("data-tip", isAll
         ? "Pick a channel thread to clear its messages (or use Delete all)"
-        : ("Remove the messages buffered for the " + _activeThread + " thread");
+        : ("Remove the messages buffered for the " + _activeThread + " thread"));
     }
   }
 

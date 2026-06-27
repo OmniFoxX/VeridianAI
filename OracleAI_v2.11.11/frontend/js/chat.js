@@ -1129,8 +1129,51 @@ function _clearMessagesNow() {
   const c = document.getElementById("messages");
   if (c) c.innerHTML = "";
 }
-function clearChat() {
-  if (confirm("Are you sure you want to clear the chat? This cannot be undone.")) {
+/* In-app confirm modal -- replaces window.confirm() in hot paths. A native
+   confirm()/alert() in Electron can leave the renderer without pointer focus
+   (the "UI won't accept clicks until you open Attach" bug); a DOM modal has no
+   such problem, so this kills that trigger at the source. Returns a
+   Promise<boolean>. Keyboard: Enter = OK, Escape / backdrop = Cancel. */
+function oracleConfirm(message, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var root = document.getElementById("modal-root");
+    if (!root) { resolve(window.confirm(message)); return; }   // graceful fallback
+    root.innerHTML =
+      '<div class="modal-overlay" id="oracle-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="oracle-confirm-title" aria-describedby="oracle-confirm-msg">' +
+        '<div class="modal-box" style="max-width:420px">' +
+          '<div class="modal-title" id="oracle-confirm-title">' + escapeHtml(opts.title || "Please confirm") + '</div>' +
+          '<div id="oracle-confirm-msg" style="font-size:13px;color:var(--text);line-height:1.5">' + escapeHtml(message) + '</div>' +
+          '<div class="modal-actions">' +
+            '<button class="modal-btn" id="oracle-confirm-cancel">' + escapeHtml(opts.cancelLabel || "Cancel") + '</button>' +
+            '<button class="modal-btn primary" id="oracle-confirm-ok">' + escapeHtml(opts.okLabel || "OK") + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    var onKey;
+    var finish = function (val) {
+      document.removeEventListener("keydown", onKey, true);
+      root.innerHTML = "";
+      resolve(val);
+    };
+    onKey = function (e) {
+      if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      else if (e.key === "Enter") { e.preventDefault(); finish(true); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    var ov = document.getElementById("oracle-confirm-overlay");
+    ov.addEventListener("click", function (e) { if (e.target === ov) finish(false); });
+    document.getElementById("oracle-confirm-ok").onclick = function () { finish(true); };
+    document.getElementById("oracle-confirm-cancel").onclick = function () { finish(false); };
+    var ok = document.getElementById("oracle-confirm-ok");
+    if (ok) ok.focus();
+  });
+}
+window.oracleConfirm = oracleConfirm;
+
+async function clearChat() {
+  if (await oracleConfirm("Are you sure you want to clear the chat? This cannot be undone.",
+      { title: "Clear chat", okLabel: "Clear", cancelLabel: "Cancel" })) {
     _clearMessagesNow();
     setStatus("Chat cleared");
   }
