@@ -18,7 +18,7 @@
 <link href="/static/icons/icon-192.png" rel="icon"/>
 <link href="/static/icons/icon-192.png" rel="apple-touch-icon"/>
 </head>
-<script src="/static/js/comfyui-wizard.js?v=2.9.10"></script>
+<script src="/static/js/comfyui-wizard.js?v=2.11.15"></script>
 <script>
   // PWA: register the service worker (installability + friendly offline page
   // when the backend/Ollama isn't running).
@@ -34,7 +34,7 @@
 <a class="skip-link" href="#main-content">Skip to main content</a>
 <header class="app-header">
 <div class="header-brand">
-<button aria-label="Oracle-Eye" class="oracle-eye" id="oracle-eye" onclick="openGamePanel(); GameManager.start(GameManager.currentGameName())" data-tip="Click to open/reset games" type="button">
+<button aria-label="Oracle-Eye" class="oracle-eye" id="oracle-eye" onclick="openGamePanel()" data-tip="Click to open/reset games" type="button">
 <div class="eye-outer"></div>
 <div class="eye-inner"></div>
 <div class="eye-pupil"></div>
@@ -480,7 +480,7 @@
 <span class="status-text" id="status-text" role="status">Connecting…</span>
 <span class="token-count" id="token-count"></span>
 </div>
-<div class="input-disclaimer">Sage is an AI and can make mistakes — especially on events after your selected model's training cutoff. Always double-check important answers.</div>
+<div class="input-disclaimer">Sage is an AI and can make mistakes — particularly on events after your selected model's training cutoff date. Always fact/cross-check responses.</div>
 </div>
 </main>
 <!-- ── Oracle panel (games) ---------------------------------- -->
@@ -568,20 +568,20 @@ Space  Shoot / Action</div>
 <!-- v2.1.6: ?v=... cache-bust query strings force Electron's Chromium
      cache to fetch fresh after edits. Bump these when shipping a UI
      change so users don't have to hunt down Electron's userData cache. -->
-<script src="/static/js/games.js?v=2.9.10"></script>
-<script src="/static/js/socials.js?v=2.11.14"></script>
+<script src="/static/js/games.js?v=2.11.16"></script>
+<script src="/static/js/socials.js?v=2.11.15"></script>
 <script src="/static/js/hardware.js?v=2.11.13"></script>
-<script src="/static/js/settings.js?v=2.9.10"></script>
-<script src="/static/js/chat.js?v=2.11.14"></script>
+<script src="/static/js/settings.js?v=2.11.15"></script>
+<script src="/static/js/chat.js?v=2.11.16"></script>
 <script src="/static/js/app.js?v=2.9.10"></script>
-<script src="/static/js/auth.js?v=2.11.14"></script>
-<script src="/static/js/skills.js?v=2.9.10"></script>
+<script src="/static/js/auth.js?v=2.11.15"></script>
+<script src="/static/js/skills.js?v=2.11.15"></script>
 <!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
      during the WCAG-pass edit. Without this line, the IIFE in
      command-palette.js never runs, the Ctrl+Shift+Space keydown listener
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
-<script src="/static/js/command-palette.js?v=2.9.10"></script>
+<script src="/static/js/command-palette.js?v=2.11.16"></script>
 <!-- WCAG 3.3.3 - Error announcement region -->
 <div aria-atomic="true" aria-live="assertive" class="sr-only" id="error-announce" role="alert"></div>
 <div aria-live="polite" class="sr-only" id="error-live-region"></div>

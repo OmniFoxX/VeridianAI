@@ -3284,7 +3284,80 @@ def _build_battle_roles():
     return builders[0], builders[1], judge
 
 
-async def _run_build_battle(spec, options, watchdog, rounds=1):
+# --- Build Battle execute-gate helpers (added) -----------------------------
+def _bb_extract_code(text):
+    """Pull the implementation out of a builder submission: prefer the largest
+    fenced ``` block; fall back to the whole text (which will fail to import --
+    a legitimate gate failure)."""
+    import re as _re
+    if not text:
+        return ""
+    blocks = _re.findall(r"```(?:[a-zA-Z0-9_+-]*)\n(.*?)```", text, _re.DOTALL)
+    if blocks:
+        return max(blocks, key=len).strip()
+    return text.strip()
+
+
+def _bb_final_buf(transcript, who):
+    """Latest 'Final Submission' buffer for a given builder label."""
+    for _h, _c in reversed(transcript):
+        if _h.startswith("Final Submission") and who in _h:
+            return _c
+    return ""
+
+
+def _bb_resolve_gate_path(p):
+    """Resolve a gate-test path: as-is, or relative to the backend dir."""
+    import os as _os
+    if not p:
+        return None
+    cands = [p]
+    _f = globals().get("__file__")
+    if _f:
+        cands.append(_os.path.join(_os.path.dirname(_os.path.abspath(_f)), p))
+    for cand in cands:
+        if _os.path.isfile(cand):
+            return cand
+    return None
+
+
+def _bb_gate_summary(raw):
+    """One-line human summary from the gate subprocess output."""
+    if "[TIMEOUT]" in raw:
+        return "timed out"
+    for line in raw.splitlines():
+        if "passed" in line and "failed" in line:
+            return line.strip()
+        if "ALL PASS" in line:
+            return "all checks passed"
+    return "passed" if "GATE_RC=0" in raw else "failed (did not run clean / tests failed)"
+
+
+async def _bb_run_gate(candidate_code, test_content, module_name, test_filename, timeout=60):
+    """Run a gate test against candidate code in OracleAI's sandbox. Writes
+    <module>.py + the test into a temp dir, runs the test as a subprocess, and
+    returns (passed, raw_output). Off-thread so the event loop is not blocked."""
+    import base64 as _b64
+    import asyncio as _aio
+    cb = _b64.b64encode((candidate_code or "").encode("utf-8")).decode("ascii")
+    tb = _b64.b64encode((test_content or "").encode("utf-8")).decode("ascii")
+    driver = (
+        "import base64,os,sys,subprocess,tempfile\n"
+        "cand=base64.b64decode('" + cb + "').decode('utf-8')\n"
+        "test=base64.b64decode('" + tb + "').decode('utf-8')\n"
+        "d=tempfile.mkdtemp(prefix='bbgate_')\n"
+        "open(os.path.join(d," + repr(module_name + '.py') + "),'w',encoding='utf-8').write(cand)\n"
+        "open(os.path.join(d," + repr(test_filename) + "),'w',encoding='utf-8').write(test)\n"
+        "r=subprocess.run([sys.executable,'-X','utf8',os.path.join(d," + repr(test_filename) + ")],cwd=d,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=" + str(int(timeout)) + ")\n"
+        "print('GATE_RC='+str(r.returncode))\n"
+        "print((r.stdout or '')[-3000:])\n"
+        "if r.stderr: print('[GATE_STDERR] '+r.stderr[-1500:])\n"
+    )
+    raw = await _aio.to_thread(sage_engine.execute_python, driver, int(timeout) + 30)
+    return ("GATE_RC=0" in raw), raw
+
+
+async def _run_build_battle(spec, options, watchdog, rounds=1, gate_test=None):
     """Async-generator: streams the full Build Battle as one markdown doc.
     `rounds` controls how many Critique & Refine passes run (1-3)."""
     roles = _build_battle_roles()
@@ -3306,6 +3379,14 @@ async def _run_build_battle(spec, options, watchdog, rounds=1):
     judge_opts = dict(base)
     judge_opts["temperature"] = min(_t, 0.4)  # judge stays cool-headed
     transcript = []
+    # When an execute-gate is active, require finalists to emit ONE fenced code
+    # block so _bb_extract_code reliably captures the whole implementation.
+    _gate_note = (
+        " IMPORTANT: an automated test gate will EXECUTE your code. Put your "
+        "COMPLETE final implementation in a SINGLE ```python fenced code block "
+        "(one block, nothing omitted), then put your one-paragraph summary AFTER "
+        "the closing fence. Any code outside that single block will NOT be tested."
+    ) if gate_test else ""
 
     async def _build(model_id, system, context, header, opts):
         u = ("SPECIFICATION (implement exactly this; do not change the "
@@ -3376,7 +3457,7 @@ async def _run_build_battle(spec, options, watchdog, rounds=1):
         "FULL CONTEXT SO FAR:\n\n" +
         "\n\n---\n\n".join(_h + ":\n" + _c for _h, _c in transcript)
     )
-    async for _x in _build(a, _BUILD_FINAL_A, _ctx_final_a,
+    async for _x in _build(a, _BUILD_FINAL_A + _gate_note, _ctx_final_a,
                             "Final Submission — Builder A (" + a + ")", base):
         yield _x
     if model_manager._abort:
@@ -3386,18 +3467,65 @@ async def _run_build_battle(spec, options, watchdog, rounds=1):
         "FULL CONTEXT SO FAR:\n\n" +
         "\n\n---\n\n".join(_h + ":\n" + _c for _h, _c in transcript)
     )
-    async for _x in _build(b, _BUILD_FINAL_B, _ctx_final_b,
+    async for _x in _build(b, _BUILD_FINAL_B + _gate_note, _ctx_final_b,
                             "Final Submission — Builder B (" + b + ")", base):
         yield _x
     if model_manager._abort:
         return
 
     # Phase 4 — Judge's Ruling
+    # --- Execute-gate (Phase 3.5): when a gate_test is configured, actually RUN
+    # each finalist's code against it in the sandbox so the Judge sees real
+    # pass/fail. No gate_test => this block is skipped (behaves exactly as before).
+    _gate_for_judge = ""
+    if gate_test:
+        _gpath = _bb_resolve_gate_path(gate_test)
+        if not _gpath:
+            yield "\n\n### Gate Test\n\n> _Gate test not found: " + str(gate_test) + " -- skipping the execution gate._\n"
+        else:
+            try:
+                _test_src = open(_gpath, encoding="utf-8").read()
+            except Exception as _ge:
+                _test_src = ""
+                yield "\n\n### Gate Test\n\n> _Could not read gate test: " + str(_ge) + " -- skipping._\n"
+            if _test_src:
+                import os as _os
+                _tbase = _os.path.basename(_gpath)
+                _module = _tbase[:-3] if _tbase.endswith(".py") else _tbase
+                if _module.startswith("test_"):
+                    _module = _module[5:]
+                yield "\n\n### Gate Test Results\n\n"
+                yield "_Running " + _tbase + " against each finalist in the sandbox (module " + _module + ")._\n\n"
+                _gate_lines = []
+                for _who, _label in ((a, "Builder A"), (b, "Builder B")):
+                    _code = _bb_extract_code(_bb_final_buf(transcript, _label))
+                    if not _code.strip():
+                        _passed, _summary = False, "no code block could be extracted"
+                    else:
+                        _passed, _raw = await _bb_run_gate(_code, _test_src, _module, _tbase)
+                        _summary = _bb_gate_summary(_raw)
+                    _verdict = "PASS" if _passed else "FAIL"
+                    yield "- **" + _label + " (" + _who + ")** -- **" + _verdict + "**: " + _summary + "\n"
+                    _gate_lines.append(_label + " (" + _who + "): " + _verdict + " -- " + _summary)
+                _gate_for_judge = ("\n\nGATE TEST RESULTS (real automated execution of "
+                                   + _tbase + "):\n" + "\n".join(_gate_lines))
+
+    # Phase 4 -- Judge's Ruling (gate results, when present, are decisive)
+    _judge_system = _BUILD_JUDGE
+    if _gate_for_judge:
+        _judge_system = _BUILD_JUDGE + (
+            " CRITICAL: the transcript ends with REAL automated gate-test results "
+            "from executing each submission. A submission that FAILS the gate does "
+            "not meet the specification and cannot win on style or readability. If "
+            "exactly one submission passes, it wins unless it has a separate, "
+            "clearly disqualifying flaw. Treat the gate results as decisive and "
+            "weigh them above prose impressions.")
     _tx = "\n\n".join(_h + ":\n" + _c for _h, _c in transcript)
-    async for _x in _build(judge, _BUILD_JUDGE,
-                            "FULL BUILD BATTLE TRANSCRIPT:\n" + _tx,
+    async for _x in _build(judge, _judge_system,
+                            "FULL BUILD BATTLE TRANSCRIPT:\n" + _tx + _gate_for_judge,
                             "Judge's Ruling (" + judge + ")", judge_opts):
         yield _x
+
 
 
 async def _handle_build_battle(websocket, data):
@@ -3413,6 +3541,20 @@ async def _handle_build_battle(websocket, data):
         if spec.lower().startswith(_prefix):
             spec = spec[len(_prefix):].strip()
             break
+
+    # Optional per-battle execute-gate: a line "GATE: <path-to-test>" anywhere in
+    # the spec names a test the finalists must pass. Strip it so the builders
+    # never see it as part of the coding challenge.
+    _gate_from_spec = None
+    _spec_lines = []
+    for _ln in spec.splitlines():
+        _sln = _ln.strip()
+        if _sln.lower().startswith("gate:") and _gate_from_spec is None:
+            _gate_from_spec = _sln.split(":", 1)[1].strip()
+        else:
+            _spec_lines.append(_ln)
+    if _gate_from_spec:
+        spec = "\n".join(_spec_lines).strip()
 
     options = data.get("options") or {}
     try:
@@ -3434,7 +3576,9 @@ async def _handle_build_battle(websocket, data):
     model_manager._abort = False
     full = ""
     try:
-        async for _chunk in _run_build_battle(spec, options, _NullWatchdog(), rounds=rounds):
+        _gate = (data.get("gate_test") or _gate_from_spec
+                 or config.get("build_battle_gate_test"))
+        async for _chunk in _run_build_battle(spec, options, _NullWatchdog(), rounds=rounds, gate_test=_gate):
             if model_manager._abort:
                 break
             full += _chunk
@@ -3452,6 +3596,59 @@ async def _handle_build_battle(websocket, data):
     await websocket.send_json({
         "type": "done", "content": full, "done": True,
         "model": "Build Battle", "ts": TimeManager.iso_z()})        
+
+
+# --- Prompt-cache live diagnostic helpers ---------------------------------
+# Per-session record of the prior turn's STABLE segment hashes, so analyze_prompt
+# can flag when a "stable" prefix actually changed turn-to-turn (a KV cache miss).
+_PROMPT_CACHE_HASHES = {}
+
+
+def _prompt_cache_segments(messages):
+    """Map a composed chat 'messages' list to prompt_cache_manager segments.
+    Only the FRONT system message (messages[0]) counts as the stable, cacheable
+    'system_prompt'; any later system messages (tail-injected procedural memory
+    or warm-handoff context) are treated as dynamic. Returns (segments, user)."""
+    front_system = ""
+    others = []
+    for m in messages:
+        if not isinstance(m, dict):
+            continue
+        role = m.get("role")
+        content = m.get("content")
+        if not isinstance(content, str):
+            content = "" if content is None else str(content)
+        if role == "system" and not front_system and not others:
+            front_system = content
+        else:
+            others.append((role, content))
+    segs = {}
+    if front_system:
+        segs["system_prompt"] = front_system
+    user_msg = ""
+    if others:
+        user_msg = others[-1][1]
+        body = others[:-1]
+        if body:
+            segs["history"] = "\n".join(f"{r}: {c}" for r, c in body)
+        segs["user_message"] = user_msg
+    return segs, user_msg
+
+
+def _log_prompt_cache(entry):
+    """Append one Fernet-encrypted JSON line to sage_data/logs/prompt_cache.log
+    using the same at-rest protocol as the rest of sage_data. Silent-fail so a
+    diagnostic can never break a chat turn."""
+    try:
+        import json as _json
+        import atrest as _atr
+        from config import LOG_DIR
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        line = _atr.encrypt_bytes(_json.dumps(entry, default=str).encode("utf-8"))
+        with open(LOG_DIR / "prompt_cache.log", "ab") as _f:
+            _f.write(line + b"\n")
+    except Exception as _e:
+        print(f"[PROMPT-CACHE] log write failed: {_e}")
 
 
 @app.websocket("/ws/chat")
@@ -3749,6 +3946,7 @@ async def ws_chat(websocket: WebSocket):
             # section is prefixed with an internal header the model knows
             # not to echo (see SAGE_SYSTEM_PROMPT rule about never
             # displaying procedural context).
+            _proc_block = ""
             try:
                 kb = procedural.get_all()
                 succ = kb.get("successful", {})
@@ -3792,7 +3990,7 @@ async def ws_chat(websocket: WebSocket):
                             val = str(v.get("value", ""))[:200]
                             lines.append(f"  - {k}: {val}")
                     lines.append("=== END PROCEDURAL MEMORY ===")
-                    sys_prompt = sys_prompt + "\n".join(lines) + "\n"
+                    _proc_block = "\n".join(lines)
             except Exception as _pm_e:
                 print(f"[PROCEDURAL] system-prompt injection failed: "
                       f"{_pm_e}")
@@ -3807,12 +4005,11 @@ async def ws_chat(websocket: WebSocket):
             # (the daemon clears it after handing over); already HMAC-verified
             # and framed as data-not-instructions, so a hostile payload cannot
             # issue directives here. Best-effort - never blocks a real turn.
+            _warm = ""
             try:
                 _warm = sage_engine.consume_warm_handoff()
                 if _warm:
-                    _ins = 1 if (messages and messages[0].get("role") == "system") else 0
-                    messages.insert(_ins, {"role": "system", "content": _warm})
-                    print(f"[CRAIID] warm-context resumed ({len(_warm)} chars) - injected once.")
+                    print(f"[CRAIID] warm-context available ({len(_warm)} chars) - injecting at tail.")
                     try:
                         await websocket.send_json(
                             {"type": "warm_context_restored",
@@ -3823,7 +4020,60 @@ async def ws_chat(websocket: WebSocket):
             except Exception as _wc_e:
                 print(f"[CRAIID] warm-context resume check failed: {_wc_e}")
 
+            # Inject volatile context (procedural memory + warm handoff) at the
+            # TAIL -- just before the final user message -- so it never sits in
+            # the cacheable front prefix. A change here then only re-processes
+            # the tail, never the system+history prefix (KV-cache friendly).
+            _late_ctx = []
+            if _proc_block:
+                _late_ctx.append({"role": "system", "content": _proc_block})
+            if _warm:
+                _late_ctx.append({"role": "system", "content": _warm})
+            if _late_ctx:
+                _tail_at = len(messages) - 1 if (messages and messages[-1].get("role") == "user") else len(messages)
+                messages[_tail_at:_tail_at] = _late_ctx
+
             messages = plugin_manager.preprocess(messages)
+            # --- Prompt-cache live diagnostic (KV-cache efficiency) ----------
+            # Read-only analysis of the final composed prompt; appends one
+            # at-rest-encrypted line to sage_data/logs/prompt_cache.log per turn.
+            # Toggle via config["prompt_cache_diagnostics"] (default ON).
+            # Silent-fail: a diagnostic must never break a turn.
+            if config.get("prompt_cache_diagnostics", True):
+                try:
+                    import prompt_cache_manager as _pcm
+                    _pc_segs, _pc_user = _prompt_cache_segments(messages)
+                    if _pc_segs:
+                        _pc_prev = _PROMPT_CACHE_HASHES.get(_ws_ns)
+                        _pc_res = _pcm.analyze_prompt(_pc_segs, previous_hashes=_pc_prev)
+                        _pc_changed = any("Hash mismatch" in _cb for _cb in _pc_res.cache_busters)
+                        _PROMPT_CACHE_HASHES[_ws_ns] = {
+                            _s.name: _s.hash for _s in _pc_res.segments if _s.stable
+                        }
+                        print(
+                            f"[PROMPT-CACHE] eff={_pc_res.cache_efficiency:.0%} "
+                            f"stable={_pc_res.stable_tokens} dyn={_pc_res.dynamic_tokens} "
+                            f"optimal={_pc_res.is_optimal} "
+                            f"busters={len(_pc_res.cache_busters)} "
+                            f"prefix_changed={_pc_changed}"
+                        )
+                        _log_prompt_cache({
+                            "ts": TimeManager.iso_z(),
+                            "ns": str(_ws_ns),
+                            "model": model_id,
+                            "cache_efficiency": round(_pc_res.cache_efficiency, 4),
+                            "stable_tokens": _pc_res.stable_tokens,
+                            "dynamic_tokens": _pc_res.dynamic_tokens,
+                            "total_tokens": _pc_res.total_tokens,
+                            "is_optimal": _pc_res.is_optimal,
+                            "recommended_order": _pc_res.recommended_order,
+                            "stable_prefix_changed": _pc_changed,
+                            "cache_busters": _pc_res.cache_busters,
+                            "warnings": _pc_res.warnings,
+                        })
+                except Exception as _pc_e:
+                    print(f"[PROMPT-CACHE] diagnostic skipped: {_pc_e}")
+
 
             full_response = ""
             aborted = False
@@ -4433,6 +4683,61 @@ async def ws_chat(websocket: WebSocket):
                                     "type": "tool_result",
                                     "tool": "verify_file",
                                     "output": result,
+                                })
+
+                            elif action_type == "lint_expr":
+                                # [LINT_EXPR: expr] -> static validation via
+                                # expression_engine (no evaluation). Imported
+                                # directly so it works even with sage plugins off.
+                                executed_any = True
+                                _xexpr = str(content).strip()
+                                await websocket.send_json({
+                                    "type": "tool_call",
+                                    "tool": "lint_expr",
+                                    "input": _xexpr,
+                                    "message": f"Linting expression: {_xexpr[:80]}",
+                                })
+                                try:
+                                    import json as _xjson
+                                    import expression_engine as _xee
+                                    result = _xjson.dumps(_xee.lint(_xexpr))
+                                except Exception as e:
+                                    result = f"[LINT ERROR] {e}"
+                                tool_results_acc[
+                                    f"lint_expr:{_xexpr[:60]}"] = result
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "lint_expr",
+                                    "output": result[:500],
+                                })
+
+                            elif action_type == "parse_expr":
+                                # [PARSE_EXPR: expr] -> safe parse + evaluate via
+                                # expression_engine (no Python eval).
+                                executed_any = True
+                                _xexpr = str(content).strip()
+                                await websocket.send_json({
+                                    "type": "tool_call",
+                                    "tool": "parse_expr",
+                                    "input": _xexpr,
+                                    "message": f"Evaluating expression: {_xexpr[:80]}",
+                                })
+                                try:
+                                    import expression_engine as _xee
+                                    _xpr = _xee.parse(_xexpr)
+                                    result = f"result={_xpr['result']} (type={_xpr['type']})"
+                                    if _xpr.get("warnings"):
+                                        result += f" | warnings: {_xpr['warnings']}"
+                                except ZeroDivisionError as e:
+                                    result = f"[ZeroDivisionError] {e}"
+                                except Exception as e:
+                                    result = f"[PARSE ERROR] {e}"
+                                tool_results_acc[
+                                    f"parse_expr:{_xexpr[:60]}"] = result
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "parse_expr",
+                                    "output": result[:500],
                                 })
 
                             # ── v2.1.4 procedural memory tags ──────────

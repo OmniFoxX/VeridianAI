@@ -14,6 +14,17 @@ if (typeof Haptic === 'undefined') {
   };
 }
 
+// Theme-aware palette so the canvas games follow light/dark mode. Reads the
+// active theme ([data-theme="light"] on html/body) and returns bg/text/grid/
+// muted; per-game brand accent colors (ship, food, X/O, etc.) stay as-is.
+function gameTheme() {
+  var light = document.documentElement.getAttribute('data-theme') === 'light'
+           || (document.body && document.body.getAttribute('data-theme') === 'light');
+  return light
+    ? { bg: '#98918a', text: '#241c14', grid: 'rgba(80,60,30,0.35)', muted: '#5c4f3c' }
+    : { bg: '#000a1a', text: '#dde4f5', grid: 'rgba(30,48,80,0.4)', muted: '#6b80a8' };
+}
+
 const GameManager = (() => {
   let canvas, ctx;
   let currentGame = null;
@@ -21,6 +32,7 @@ const GameManager = (() => {
   let animFrame = null;
   let score = 0;
   let lastTime = 0;
+  let idle = false;   // ready screen shown, no game loop running
 
   function getScores(game) {
     try { return JSON.parse(localStorage.getItem(`oracle_scores_${game}`)) || []; }
@@ -42,6 +54,7 @@ const GameManager = (() => {
 
   function start(name) {
     stop();
+    idle = false;
     score = 0;
     currentGameName = name;
     updateScore(0);
@@ -58,6 +71,28 @@ const GameManager = (() => {
 
     const controlsEl = document.getElementById('game-controls');
     if (controlsEl) controlsEl.textContent = currentGame.controls || '↑↓←→  Move\nSpace  Action';
+  }
+
+  // Show a game's idle "ready" screen WITHOUT starting the loop. The user
+  // starts it explicitly (click the canvas, or press Space / an arrow key).
+  function showReady(name) {
+    stop();
+    if (name) currentGameName = name;
+    idle = true;
+    updateScore(0);
+    renderScoreboard(currentGameName);
+    if (canvas && ctx) {
+      var tc = gameTheme();
+      var titles = { asteroids: 'Asteroids', snake: 'Snake', tictactoe: 'Tic-Tac-Toe' };
+      ctx.fillStyle = tc.bg; ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f0a500'; ctx.font = 'bold 22px Cinzel, serif';
+      ctx.fillText(titles[currentGameName] || 'Ready', canvas.width / 2, canvas.height / 2 - 10);
+      ctx.fillStyle = tc.text; ctx.font = '13px Rajdhani, sans-serif';
+      ctx.fillText('Click or press Space to play', canvas.width / 2, canvas.height / 2 + 18);
+    }
+    var controlsEl = document.getElementById('game-controls');
+    if (controlsEl) controlsEl.textContent = 'Click the board or press Space / an arrow to start';
   }
 
   function stop() {
@@ -93,7 +128,8 @@ const GameManager = (() => {
    * This guarantees typing in the chat field is never disrupted.
    */
   function onKeyDown(e) {
-    if (!currentGame || !isPanelVisible()) return;
+    if (!isPanelVisible()) return;
+    if (!currentGame && !idle) return;
 
     // Check BOTH the event target AND the currently focused element
     const targetTag = (e.target.tagName || '').toUpperCase();
@@ -111,6 +147,7 @@ const GameManager = (() => {
 
     if (isArrow || isSpace) {
       e.preventDefault();
+      if (idle) { start(currentGameName); return; }   // start from the ready screen
       const mappedKey = isSpace ? 'Space' : e.key;
       if (currentGame.keydown) currentGame.keydown(mappedKey);
     }
@@ -131,6 +168,7 @@ const GameManager = (() => {
   }
 
   function onCanvasClick(e) {
+    if (idle) { start(currentGameName); return; }   // start from the ready screen
     if (!currentGame || !currentGame.click) return;
     const rect = canvas.getBoundingClientRect();
     currentGame.click(e.clientX - rect.left, e.clientY - rect.top);
@@ -188,7 +226,7 @@ const GameManager = (() => {
     ).join('');
   }
 
-  return { init, start, stop, getScores, saveScores, checkHighScore, renderScoreboard, currentGameName: () => currentGameName };
+  return { init, start, stop, showReady, getScores, saveScores, checkHighScore, renderScoreboard, currentGameName: () => currentGameName };
 })();
 
 function switchGame(name, btn) {
@@ -202,7 +240,7 @@ function switchGame(name, btn) {
     return;
   }
   if (window.socialsOnTab) window.socialsOnTab(false);
-  GameManager.start(name);
+  GameManager.showReady(name);
   Haptic.vibrate(Haptic.PATTERNS.toggle);
 }
 
@@ -239,7 +277,7 @@ const Asteroids = (() => {
   const COLORS = { ship:'#38c9c4', bullet:'#f0a500', asteroid:'#4a7ab8', particle:'#f0a500', text:'#dde4f5', bg:'#000a1a' };
   const SPEED = 60;
 
-  function init(canvas) { W = canvas.width; H = canvas.height; reset(); }
+  function init(canvas) { W = canvas.width; H = canvas.height; var tc = gameTheme(); COLORS.bg = tc.bg; COLORS.text = tc.text; reset(); }
 
   function reset() {
     keys = {}; score = 0; lives = 3; gameOver = false; restartTimer = 0;
@@ -381,6 +419,7 @@ const Snake = (() => {
 
   function init(canvas) {
     W = canvas.width; H = canvas.height;
+    var tc = gameTheme(); COLORS.bg = tc.bg; COLORS.text = tc.text; COLORS.grid = tc.grid;
     cols = Math.floor(W/CELL); rows = Math.floor(H/CELL); reset();
   }
 
@@ -467,7 +506,7 @@ const TicTacToe = (() => {
   const COLORS = { bg:'#000a1a', grid:'#1e3050', x:'#38c9c4', o:'#f0a500', win:'#5bcf77', text:'#dde4f5', muted:'#6b80a8' };
   const WIN_LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
-  function init(canvas) { W=canvas.width; H=canvas.height; CELL=Math.min(W,H)*0.26; score=0; reset(); }
+  function init(canvas) { W=canvas.width; H=canvas.height; CELL=Math.min(W,H)*0.26; var tc=gameTheme(); COLORS.bg=tc.bg; COLORS.text=tc.text; COLORS.grid=tc.grid; COLORS.muted=tc.muted; score=0; reset(); }
 
   function reset() {
     board=Array(9).fill(null); playerTurn=true; gameOver=false; result=null;

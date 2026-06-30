@@ -158,7 +158,7 @@ LLAMA_SERVER_EXE   = BACKEND_DIR / "llama-server.exe"
 # is guaranteed. The launcher passes the values through environment variables;
 # if not set, these defaults take effect.
 
-SAGE_CTX_MAX       = 256000   # nemotron-3-super:120b max trained context window 256k (1M-Max)
+SAGE_CTX_MAX       = 10000000   # nemotron-3-super:120b max trained context window 256k (1M-Max)
 SAGE_CTX_DEFAULT   = int(os.environ.get("SAGE_CTX_SIZE",   32768))
 DAEMON_CTX_MAX     = 8192   # gemma4:31b max trained context window 128k
 DAEMON_CTX_DEFAULT = int(os.environ.get("DAEMON_CTX_SIZE", 4096))

@@ -167,11 +167,12 @@ async function setDevMode(enabled) {
 
 async function setBrowserCookies(enabled) {
   if (enabled) {
-    const ok = confirm(
+    const ok = await window.oracleConfirm(
       "Let Sage's browser keep cookies between sessions?\n\n" +
       "Bookmarks and history already persist. Cookies can also hold personal " +
       "or session data (logins). They're stored only in this machine's " +
-      "per-user browser profile, and are not encrypted at rest. Enable?"
+      "per-user browser profile, and are not encrypted at rest. Enable?",
+      { title: "Browser cookies", okLabel: "Enable" }
     );
     if (!ok) {
       setChecked("toggle-browser-cookies", false);
@@ -446,7 +447,7 @@ async function snSetToken() {
 }
 
 async function snResetToken() {
-  if (!confirm("Reset to a brand-new token? This BREAKS any existing pairing - every node will then need this new token.")) return;
+  if (!(await window.oracleConfirm("Reset to a brand-new token? This BREAKS any existing pairing - every node will then need this new token.", { title: "Reset token", okLabel: "Reset" }))) return;
   try {
     const r = await fetch("/api/sage-network/token/reset", { method: "POST" });
     const res = await r.json();
@@ -601,7 +602,7 @@ async function saveTavilyKey() {
 }
 
 async function deleteTavilyKey() {
-  if (!confirm("Are you sure you want to delete your Tavily API key? This cannot be undone.")) return;
+  if (!(await window.oracleConfirm("Are you sure you want to delete your Tavily API key? This cannot be undone.", { title: "Delete Tavily key", okLabel: "Delete" }))) return;
   try {
     await fetch("/api/tavily", { method: "DELETE" });
     loadTavilyStatus();

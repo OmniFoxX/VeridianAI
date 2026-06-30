@@ -197,7 +197,7 @@
   }
 
   async function skKillSwitch() {
-    if (!window.confirm("Go dark? This disables skill sharing, relay hosting/serving, and node serving. Restart to fully sever any running services.")) return;
+    if (!(await window.oracleConfirm("Go dark? This disables skill sharing, relay hosting/serving, and node serving. Restart to fully sever any running services.", { title: "Kill switch", okLabel: "Go dark" }))) return;
     var flags = ["skill_share_enabled", "relay_server_enabled", "relay_source_enabled", "node_server_enabled", "offload_enabled"];
     for (var i = 0; i < flags.length; i++) {
       try { if (window.updateSetting) await window.updateSetting(flags[i], false); } catch (e) {}

@@ -338,9 +338,9 @@
   }
 
   async function uaDelete(username) {
-    if (!window.confirm('Delete user "' + username + '"? Their login is removed immediately.')) return;
-    var wipe = window.confirm('Also ERASE ' + username + "'s stored conversations & archives?\n\n" +
-      "OK = erase their data too (cannot be undone).\nCancel = keep their data, remove only the login.");
+    if (!(await window.oracleConfirm('Delete user "' + username + '"? Their login is removed immediately.', { title: "Delete user", okLabel: "Delete" }))) return;
+    var wipe = await window.oracleConfirm('Also ERASE ' + username + "'s stored conversations & archives?\n\n" +
+      "OK = erase their data too (cannot be undone).\nCancel = keep their data, remove only the login.", { title: "Erase user data?", okLabel: "Erase data", cancelLabel: "Keep data" });
     try {
       var r = await fetch("/api/auth/users/delete", {
         method: "POST", headers: { "Content-Type": "application/json" }, credentials: "same-origin",

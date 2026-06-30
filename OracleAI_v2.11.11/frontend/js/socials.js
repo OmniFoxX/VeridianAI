@@ -161,7 +161,7 @@
   async function socialsClearToken(channel, key) {
     key = key || "token";
     var label = key.replace("_", " ");
-    if (!window.confirm("Remove the saved " + channel + " " + label + "?")) return;
+    if (!(await window.oracleConfirm("Remove the saved " + channel + " " + label + "?", { title: "Remove credential", okLabel: "Remove" }))) return;
     var d = await jpost("/api/socials/config", { channel: channel, clear: true, keys: [key] });
     if (d && d.ok) { toast(channel + " " + label + " removed"); socialsRefresh(); }
   }
@@ -198,9 +198,9 @@
   }
 
   async function socialsAutoReply(on) {
-    if (on && !window.confirm(
+    if (on && !(await window.oracleConfirm(
         "Let Sage auto-reply on connected channels?\n\n" +
-        "When ON, Sage generates and POSTS a reply to any message that mentions the wake word on a CONNECTED channel. Off by default.")) {
+        "When ON, Sage generates and POSTS a reply to any message that mentions the wake word on a CONNECTED channel. Off by default.", { title: "Sage auto-reply", okLabel: "Enable" }))) {
       var t = $("toggle-socials-autoreply"); if (t) t.checked = false; return;
     }
     var d = await jpost("/api/socials/auto-reply", { enabled: !!on });
@@ -301,9 +301,9 @@
   async function socialsDeleteAll() {
     var arm = $("socials-deleteall-arm");
     if (!arm || !arm.checked) { toast("Tick the box first to delete every channel"); return; }
-    if (!window.confirm("Delete recent messages from ALL Social channels?\n\n"
+    if (!(await window.oracleConfirm("Delete recent messages from ALL Social channels?\n\n"
         + "This clears every thread, not just the one you are viewing. It cannot be undone.\n"
-        + "(Nothing is saved to disk or shared across user profiles.)")) return;
+        + "(Nothing is saved to disk or shared across user profiles.)", { title: "Delete all channels", okLabel: "Delete all" }))) return;
     var d = await jpost("/api/socials/clear", { all: true });
     if (d && d.ok) {
       _msgs = [];

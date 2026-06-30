@@ -66,6 +66,15 @@
         else        safeCall('openGamePanel');
     }
 
+    function openSocials() {
+        // Open the Oracle panel, then select the Socials tab within it.
+        safeCall('openGamePanel');
+        setTimeout(function () {
+            const tab = document.querySelector('.game-tab[onclick*="switchGame(\'socials\'"]');
+            if (tab) tab.click();
+        }, 60);
+    }
+
     function focusElement(id) {
         // setTimeout defers focus until after the palette finishes
         // hiding — otherwise hidePalette's CSS display:none would
@@ -146,6 +155,7 @@
         { label: 'Cycle Settings Tabs',     action: cycleSettingsTabs },
         { label: 'Hardware',                action: () => switchToPanel('hardware') },
         { label: 'Plugins',                 action: () => switchToPanel('plugins') },
+        { label: 'Settings',                action: () => switchToPanel('settings') },
         { label: 'Privacy',                 action: () => safeCall('togglePrivacy') },
         { label: 'Archive',                 action: () => safeCall('archiveChat') },
         { label: 'Load',                    action: () => safeCall('showLoadArchive') },
@@ -153,11 +163,16 @@
         { label: 'Clear Chat',              action: () => safeCall('clearChat') },
         { label: 'Select Primary Model',    action: () => focusElement('model-select') },
         { label: 'Select Secondary Model',  action: () => focusElement('setting-secondary-model') },
+        { label: 'Select Tertiary Model',   action: () => focusElement('setting-tertiary-model') },
         { label: 'Refresh Models',          action: () => safeCall('reloadModels') },
         { label: 'Toggle Sidebar',          action: () => safeCall('toggleSidebar') },
         { label: 'Toggle Themes',           action: () => safeCall('toggleTheme') },
         { label: 'Open/Close Games',        action: toggleGamesPanel },
+        { label: 'Open Socials',            action: openSocials },
         { label: 'Vibe Prompts',            action: () => safeCall('toggleVibeBar') },
+        { label: 'Voice Input (push to talk)', action: () => safeCall('voicePushToTalk') },
+        { label: 'Generate Image',          action: () => safeCall('generateImageManual') },
+        { label: 'Send Nudge to Sage',      action: () => safeCall('handleNudgeClick') },
         { label: 'Attach',                  action: attachFileViaPicker },
         { label: 'Cancel',                  action: cancelOrStop },
         { label: 'Copy',                    action: copyViaExecCommand },

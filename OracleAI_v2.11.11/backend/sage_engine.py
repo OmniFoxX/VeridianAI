@@ -106,6 +106,7 @@ Tool-call tags in examples use ANGLE BRACKETS ⟨ ⟩ for explanation only. REAL
 — Current conditions (corrects misspellings silently).
 — Search past conversations.
 — Run Python in sandbox (DOWNLOADS_DIR available).
+— Safe math/logic eval + lint (no Python exec): [PARSE_EXPR: expr] / [LINT_EXPR: expr].
 — Save file to downloads (pipe separates name/body).
 — Read file + AST-check .py (no execution).
 — Fetch URL via browser (plugin required).
@@ -1858,6 +1859,11 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
         # (Granite, Qwen3-VL) emit regardless of the prompt's instruction.
         (r"\[GENERATE_IMAGE\]\s*(.*?)\s*\[/GENERATE_IMAGE\]", "generate_image"),
         (r"\[GENERATE_IMAGE:\s*(.*?)\]", "generate_image"),
+        # Expression engine tags (safe math/logic, no Python eval). Payload is
+        # the raw expression string; dispatched in main.py's agentic loop via
+        # expression_engine. Imported directly so it works with sage plugins off.
+        (r"\[LINT_EXPR:\s*(.*?)\]",  "lint_expr"),
+        (r"\[PARSE_EXPR:\s*(.*?)\]", "parse_expr"),
     )
     for pattern, action_type in simple_patterns:
         for m in re.finditer(pattern, text, re.DOTALL | re.I):

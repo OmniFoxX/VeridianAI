@@ -1021,11 +1021,11 @@ async function voicePushToTalk() {
 
 async function voiceToggleWake(on) {
   const t = document.getElementById("toggle-voice-wake");
-  if (on && !window.confirm(
+  if (on && !(await oracleConfirm(
       "Enable always-listening wake word?\n\n" +
       "• Fully OFFLINE — audio is transcribed on this machine and immediately discarded.\n" +
       "• Nothing is recorded or uploaded; recognized text enters only your normal encrypted chat.\n" +
-      "• Your microphone stays open until you turn this back off.")) {
+      "• Your microphone stays open until you turn this back off.", { title: "Wake word", okLabel: "Enable" }))) {
     if (t) t.checked = false;
     return;
   }
@@ -1140,10 +1140,10 @@ function oracleConfirm(message, opts) {
     var root = document.getElementById("modal-root");
     if (!root) { resolve(window.confirm(message)); return; }   // graceful fallback
     root.innerHTML =
-      '<div class="modal-overlay" id="oracle-confirm-overlay" role="dialog" aria-modal="true" aria-labelledby="oracle-confirm-title" aria-describedby="oracle-confirm-msg">' +
+      '<div class="modal-overlay" id="oracle-confirm-overlay" style="z-index:100001" role="dialog" aria-modal="true" aria-labelledby="oracle-confirm-title" aria-describedby="oracle-confirm-msg">' +
         '<div class="modal-box" style="max-width:420px">' +
           '<div class="modal-title" id="oracle-confirm-title">' + escapeHtml(opts.title || "Please confirm") + '</div>' +
-          '<div id="oracle-confirm-msg" style="font-size:13px;color:var(--text);line-height:1.5">' + escapeHtml(message) + '</div>' +
+          '<div id="oracle-confirm-msg" style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap">' + escapeHtml(message) + '</div>' +
           '<div class="modal-actions">' +
             '<button class="modal-btn" id="oracle-confirm-cancel">' + escapeHtml(opts.cancelLabel || "Cancel") + '</button>' +
             '<button class="modal-btn primary" id="oracle-confirm-ok">' + escapeHtml(opts.okLabel || "OK") + '</button>' +
@@ -1295,6 +1295,8 @@ function printChat() {
 function openGamePanel() {
   const panel = document.getElementById("oracle-panel");
   if (panel) panel.classList.add("visible");
+  // Show the current game's "ready" screen WITHOUT auto-starting it.
+  try { if (window.GameManager && GameManager.showReady) GameManager.showReady(GameManager.currentGameName()); } catch (e) {}
 }
 
 /* --- Archive Chat --------------------------------------------- */
@@ -1303,6 +1305,9 @@ async function archiveChat() {
     setStatus("No messages to archive");
     return;
   }
+  if (!(await oracleConfirm(
+      "Archive this chat and clear the window?\n\nIt's saved to your archives (reopen it any time from Load) and the chat is cleared so you can start fresh.",
+      { title: "Archive chat", okLabel: "Archive & clear" }))) return;
   try {
     await fetch("/api/chat-memory", {
       method: "POST",

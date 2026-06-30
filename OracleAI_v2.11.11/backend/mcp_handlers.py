@@ -329,6 +329,85 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
             "required": ["key", "reason"],
         },
     },
+    {
+        "name": "parse_expression",
+        "description": (
+            "Parse and evaluate a math/logic expression with a safe, "
+            "non-Python engine (no eval). Supports + - * / % **, "
+            "comparisons, and/or/not, constants PI/E/TAU, and functions "
+            "like sqrt, sin, cos, log, min, max, clamp, pow, factorial. "
+            "Set mode=both to also return the AST for later replay via "
+            "evaluate_ast. Returns result, type, ast, variables, warnings."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "expr": {"type": "string", "description": "The expression, e.g. 2 + 2 * sqrt(9)"},
+                "variables": {"type": "object", "description": "Optional variable bindings, e.g. x set to 5"},
+                "mode": {"type": "string", "enum": ["eval", "ast", "both"], "default": "eval", "description": "eval=value only; ast=AST only; both=value and AST"},
+                "trace": {"type": "boolean", "default": False, "description": "Include step-by-step evaluation trace"},
+                "precision": {"type": "integer", "description": "Optional decimal rounding for float results"},
+            },
+            "required": ["expr"],
+        },
+    },
+    {
+        "name": "lint_expression",
+        "description": (
+            "Validate a math/logic expression WITHOUT evaluating it. "
+            "Returns valid plus errors and warnings: catches syntax errors, "
+            "unbalanced parentheses, undefined variables, and unknown "
+            "functions. Call this before parse_expression on any "
+            "user-supplied expression."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "expr": {"type": "string", "description": "The expression to validate"},
+                "variables": {"type": "object", "description": "Optional known variable names to validate identifier references"},
+            },
+            "required": ["expr"],
+        },
+    },
+    {
+        "name": "evaluate_ast",
+        "description": (
+            "Evaluate an AST previously produced by parse_expression "
+            "(mode=ast or mode=both) without re-tokenizing or re-parsing. "
+            "Replay a cached AST, optionally with different variable "
+            "bindings. Returns result, type, variables, warnings."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ast_node": {"type": "object", "description": "The AST dict returned by parse_expression (its ast field)"},
+                "variables": {"type": "object", "description": "Optional variable bindings to inject"},
+                "trace": {"type": "boolean", "default": False, "description": "Include step-by-step evaluation trace"},
+            },
+            "required": ["ast_node"],
+        },
+    },
+    {
+        "name": "analyze_prompt_cache",
+        "description": (
+            "Analyze prompt segments for KV-cache efficiency. Scores stable vs "
+            "dynamic tokens, flags cache-busters (timestamps, UUIDs, epochs, "
+            "session/nonce tokens) that silently invalidate the cache, detects "
+            "changed stable segments via prior-turn hashes, and recommends a "
+            "stable-first ordering. Input is a map of segment name -> text; "
+            "canonical names: system_prompt, tool_definitions, addendum, history, "
+            "user_message."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "segments": {"type": "object", "description": "Map of segment name -> segment text"},
+                "stable_keys": {"type": "array", "items": {"type": "string"}, "description": "Which segments are stable/cacheable (default: system_prompt, tool_definitions, addendum)"},
+                "previous_hashes": {"type": "object", "description": "Optional map of segment name -> sha256 from a prior turn, to detect changes in stable segments"},
+            },
+            "required": ["segments"],
+        },
+    },
 ]
 
 
@@ -511,6 +590,104 @@ def _tool_remember_fail(args: Dict[str, Any]) -> Dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Expression engine tools (parse / lint / evaluate_ast)
+# Self-contained: import expression_engine DIRECTLY (not via _sage()), so these
+# stay available even when sage_engine is toggled off as a plugin.
+# ---------------------------------------------------------------------------
+
+def _tool_parse_expression(args: Dict[str, Any]) -> Dict[str, Any]:
+    """parse_expression -- safe expression parse/eval via expression_engine."""
+    import expression_engine as _ee
+    expr = str(args.get("expr", ""))
+    if not expr.strip():
+        return _result_text("[error] empty expr", is_error=True)
+    kwargs = {
+        "variables": args.get("variables") or {},
+        "trace": bool(args.get("trace", False)),
+        "mode": str(args.get("mode", "eval")),
+    }
+    if args.get("precision") is not None:
+        try:
+            kwargs["precision"] = int(args["precision"])
+        except (TypeError, ValueError):
+            return _result_text("[error] precision must be an integer", is_error=True)
+    try:
+        result = _ee.parse(expr, **kwargs)
+    except ZeroDivisionError as e:
+        return _result_text(f"[ZeroDivisionError] {e}", is_error=True)
+    except _ee.ParseError as e:
+        return _result_text(f"[ParseError] {e}", is_error=True)
+    except Exception as e:
+        return _result_text(f"[parse_expression error] {type(e).__name__}: {e}", is_error=True)
+    return _result_text(json.dumps(result, default=str, indent=2))
+
+
+def _tool_lint_expression(args: Dict[str, Any]) -> Dict[str, Any]:
+    """lint_expression -- static validation, never evaluates."""
+    import expression_engine as _ee
+    expr = str(args.get("expr", ""))
+    if not expr.strip():
+        return _result_text("[error] empty expr", is_error=True)
+    try:
+        result = _ee.lint(expr, variables=args.get("variables") or {})
+    except Exception as e:
+        return _result_text(f"[lint_expression error] {type(e).__name__}: {e}", is_error=True)
+    return _result_text(json.dumps(result, default=str, indent=2))
+
+
+def _tool_evaluate_ast(args: Dict[str, Any]) -> Dict[str, Any]:
+    """evaluate_ast -- replay a parse_expression AST without re-parsing."""
+    import expression_engine as _ee
+    ast_node = args.get("ast_node")
+    if not isinstance(ast_node, dict) or not ast_node:
+        return _result_text(
+            "[error] ast_node must be a non-empty AST dict "
+            "(from parse_expression with mode=ast or mode=both)",
+            is_error=True,
+        )
+    try:
+        result = _ee.eval_ast(
+            ast_node,
+            variables=args.get("variables") or {},
+            trace=bool(args.get("trace", False)),
+        )
+    except ZeroDivisionError as e:
+        return _result_text(f"[ZeroDivisionError] {e}", is_error=True)
+    except _ee.ParseError as e:
+        return _result_text(f"[ParseError] {e}", is_error=True)
+    except Exception as e:
+        return _result_text(f"[evaluate_ast error] {type(e).__name__}: {e}", is_error=True)
+    return _result_text(json.dumps(result, default=str, indent=2))
+
+
+def _tool_analyze_prompt_cache(args: Dict[str, Any]) -> Dict[str, Any]:
+    """analyze_prompt_cache -- KV-cache efficiency analysis of prompt segments.
+    Self-contained: imports prompt_cache_manager directly (not via _sage())."""
+    import dataclasses as _dc
+    import prompt_cache_manager as _pcm
+    segments = args.get("segments")
+    if not isinstance(segments, dict) or not segments:
+        return _result_text(
+            "[error] 'segments' must be a non-empty object mapping segment name "
+            "-> text (e.g. system_prompt, tool_definitions, addendum, history, "
+            "user_message)",
+            is_error=True,
+        )
+    seg = {str(k): ("" if v is None else str(v)) for k, v in segments.items()}
+    stable_keys = args.get("stable_keys")
+    if stable_keys is not None and not isinstance(stable_keys, list):
+        stable_keys = None
+    previous_hashes = args.get("previous_hashes")
+    if not isinstance(previous_hashes, dict):
+        previous_hashes = None
+    try:
+        result = _pcm.analyze_prompt(seg, stable_keys=stable_keys, previous_hashes=previous_hashes)
+    except Exception as e:
+        return _result_text(f"[analyze_prompt_cache error] {type(e).__name__}: {e}", is_error=True)
+    return _result_text(json.dumps(_dc.asdict(result), default=str, indent=2))
+
+
+# ---------------------------------------------------------------------------
 # Dispatch table
 # ---------------------------------------------------------------------------
 
@@ -527,6 +704,10 @@ _DISPATCH: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "recall":          _tool_recall,
     "remember":        _tool_remember,
     "remember_fail":   _tool_remember_fail,
+    "parse_expression": _tool_parse_expression,
+    "lint_expression":  _tool_lint_expression,
+    "evaluate_ast":     _tool_evaluate_ast,
+    "analyze_prompt_cache": _tool_analyze_prompt_cache,
 }
 
 

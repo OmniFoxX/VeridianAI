@@ -537,7 +537,7 @@ const ComfyUIWizard = (() => {
 
   // Delete an installed checkpoint to reclaim disk; re-renders the picker.
   async function _deleteModel(checkpoint) {
-    if (!window.confirm(`Delete ${checkpoint}? This frees disk space; you'd need to re-download to use it again.`)) return;
+    if (!(await window.oracleConfirm(`Delete ${checkpoint}? This frees disk space; you'd need to re-download to use it again.`, { title: "Delete model", okLabel: "Delete" }))) return;
     try {
       const r = await fetch('/api/comfyui/delete-model', {
         method:  'POST',
@@ -557,10 +557,10 @@ const ComfyUIWizard = (() => {
   // Opt-in DirectML installer for AMD/Intel GPUs (server refuses on NVIDIA).
   async function _enableDirectml() {
     if (_installing) return;
-    if (!window.confirm('Set up the DirectML image engine for AMD/Intel GPUs?\n\n'
+    if (!(await window.oracleConfirm('Set up the DirectML image engine for AMD/Intel GPUs?\n\n'
         + 'This creates a SEPARATE Python 3.12 + PyTorch-DirectML environment (~1–1.5 GB) '
         + 'that runs ComfyUI on your GPU. It best supports SD 1.5 / SDXL (not Flux), and '
-        + 'never touches an NVIDIA/CUDA setup. First-time setup can take several minutes.')) return;
+        + 'never touches an NVIDIA/CUDA setup. First-time setup can take several minutes.', { title: "DirectML setup", okLabel: "Set up" }))) return;
     _installing = true;
     const wrap = document.getElementById('wiz-progress-wrap');
     if (wrap) wrap.style.display = 'flex';
@@ -657,9 +657,9 @@ const ComfyUIWizard = (() => {
       if (announce) announce.textContent = 'Image generation setup wizard opened.';
   }
 
-  function dismiss() {
+  async function dismiss() {
       if (_installing && _overlay) {
-          if (!confirm('Setup is in progress. Close anyway?')) return;
+          if (!(await window.oracleConfirm('Setup is in progress. Close anyway?', { title: "Close setup?", okLabel: "Close" }))) return;
           _installing = false;
       }
       if (_overlay) {
