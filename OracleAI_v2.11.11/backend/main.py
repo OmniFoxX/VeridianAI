@@ -2966,7 +2966,8 @@ async def _session_gate(request: Request, call_next):
             or _p.startswith("/api/node/")
             or _p == "/api/skills/catalog"
             or _p.startswith("/api/skills/object/")
-            or _p.startswith("/api/relay/")):
+            or _p.startswith("/api/relay/")
+            or _p.startswith("/mcp/")):
         return await call_next(request)
     try:
         import session as _session

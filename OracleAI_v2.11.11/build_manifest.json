@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "ccaf095f324946eba5402ddda016ce27",
-    "built_utc": "2026-06-30T01:50:55.650346+00:00",
+    "build_id": "5873b3f18a56403dab863a00320c085f",
+    "built_utc": "2026-07-01T05:35:45.475106+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1240,7 +1240,7 @@
       "backend/ipc_bridge.py": "2a82afbe8098ca13749724ca6ff6aa7b2e08cd5b18b2928a4f0647ed1b8cde31",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
-      "backend/main.py": "8baa575b5ff6ef87d1071bb145c17574e6578909fb3beef6e05871b7ff535979",
+      "backend/main.py": "9f8da045c9496c038abc5dafe398bf1aa290ff27c83bddf3b9e0f7afcb74262c",
       "backend/mcp_handlers.py": "1b603812ca31530b72fcc50a6fa361d44c6340b2ea027241d79cac92e2bef177",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "409a06caf40066052c8295e11d1d4a9a637be4530f860e7c4940652454a71761",
@@ -1344,5 +1344,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "e/e7Kk1yyyDLC2Ge8NF/QGotNxUrKFqsFN94OIrv0dwaJ+g3RILDrNBdYhMFImOvlSRwQgBBkU5ZE9FBP+GWAg=="
+  "signature_b64": "Pb7Pn0yb+16e/EWVI1l0/xna5uJAa7dOhtlTPXqMv6nLlTuYddLM13Ve5XPWJTGBxJaR1YDvVEF4pOrslbJDAw=="
 }
