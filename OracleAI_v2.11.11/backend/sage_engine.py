@@ -461,36 +461,19 @@ def keyword_search(query: str, archives: list) -> list:
 
 
 def semantic_search(query: str, archives: list, ollama_url: str = "http://localhost:11434") -> list:
-    """AI-powered semantic search through archives using Ollama embeddings."""
-    if not is_feature_enabled("semantic_search"):
-        return []
+    """Semantic search via sage_rag vector pipeline. Delegates entirely to sage_rag.py."""
     try:
-        import requests
-        results = []
-        # NOTE: previously read `archives[25]` which iterated the KEYS of the
-        # 26th archive dict (or IndexError for shorter lists), not the first
-        # 25 archives. Corrected to `archives[:25]` so we actually scan a
-        # reasonable recent window. The underlying similarity-rating prompt
-        # is still the Phase 4 placeholder (not real embeddings); that
-        # rewrite will land with the nomic-embed sidecar work.
-        for archive in archives[:25]:
-            try:
-                archive_text = ""
-                data = atrest.load_json_auto((ARCHIVE_FOLDER / archive["filename"]).read_bytes())
-                for msg in data:
-                    archive_text += msg.get("content", "") + " "
-                resp = requests.post(f"{ollama_url}/api/generate", json={
-                    "model": "nomic-embed-text:latest",
-                    "prompt": f"Rate similarity (0-10) between these topics:\nTopic 1: {query}\nTopic 2: {archive_text[:500]}\nRespond with just the number.",
-                    "stream": False
-                }, timeout=56000)
-                score_text = resp.json().get("response", "0")
-                score = int(''.join(c for c in score_text if c.isdigit()) or "0")
-                if score > 0:
-                    results.append({**archive, "score": score, "search_type": "semantic"})
-            except Exception:
-                continue
-        return sorted(results, key=lambda x: x["score"], reverse=True)[:3]
+        import sage_rag
+        from config import DATA_DIR
+        index_path = str(DATA_DIR / "vector_index.json")
+        # archives from get_archives() are dicts — extract full paths
+        fnames = []
+        for a in archives:
+            if isinstance(a, dict):
+                fnames.append(str(ARCHIVE_FOLDER / a["filename"]))
+            else:
+                fnames.append(str(a))
+        return sage_rag.semantic_search(query, fnames, index_path, ollama_url)
     except Exception:
         return []
 
