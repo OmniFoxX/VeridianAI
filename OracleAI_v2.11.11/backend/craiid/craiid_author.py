@@ -284,9 +284,13 @@ def _load_archives(
 
     for af in archive_files:
         try:
-            raw  = af.read_text(encoding="utf-8")
-            data = json.loads(raw)
-        except (json.JSONDecodeError, OSError) as exc:
+            # v2.11.12 fix (2026-07-02): archives are Fernet-encrypted at
+            # rest — the plain json.loads skipped every file. _atrest is
+            # the module-level handle imported at boot (None -> plaintext).
+            blob = af.read_bytes()
+            data = (_atrest.load_json_auto(blob) if _atrest
+                    else json.loads(blob.decode("utf-8")))
+        except (json.JSONDecodeError, OSError, ValueError) as exc:
             log.warning("Skipping archive file %s: %s", af.name, exc)
             continue
 

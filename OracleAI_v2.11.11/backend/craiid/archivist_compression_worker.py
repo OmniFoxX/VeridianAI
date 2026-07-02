@@ -245,9 +245,17 @@ class ArchivistCompressionWorker:
             result["key_path"] = str(key_path)
             batch = []
             chunk_idx = 0
+            # v2.11.12 fix (2026-07-02): archives are Fernet-encrypted at
+            # rest; the plain json.loads here silently `continue`d past
+            # every file, so VLTS builds always reported "0 chunks, 0
+            # entries, 0 symbols". load_json_auto handles encrypted and
+            # legacy plaintext alike.
+            _atr_read = _worker_atrest()
             for af in sorted(self.archive_root.glob("archive*.json")):
                 try:
-                    data = json.loads(af.read_text(encoding="utf-8"))
+                    _blob = af.read_bytes()
+                    data = (_atr_read.load_json_auto(_blob) if _atr_read
+                            else json.loads(_blob.decode("utf-8")))
                 except Exception:
                     continue
                 if isinstance(data, list):
@@ -357,9 +365,12 @@ class ArchivistCompressionWorker:
                 break
                 
             try:
-                with open(json_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    
+                # v2.11.12: decrypt-aware read (see the archive loop above).
+                _atr_read = _worker_atrest()
+                _blob = json_file.read_bytes()
+                data = (_atr_read.load_json_auto(_blob) if _atr_read
+                        else json.loads(_blob.decode("utf-8")))
+
                 text_content = self._extract_text_from_archive(data)
                 remaining = max_chars - current_length
                 

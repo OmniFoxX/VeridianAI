@@ -8,21 +8,50 @@ import math
 from collections import Counter
 from pathlib import Path  
 
+def _import_atrest():
+    """Locate atrest.py whether this module runs from backend\\ or backend\\craiid\\."""
+    try:
+        import atrest
+        return atrest
+    except ImportError:
+        here = Path(__file__).resolve().parent
+        for cand in (here, here.parent):
+            if (cand / "atrest.py").exists() and str(cand) not in sys.path:
+                sys.path.insert(0, str(cand))
+        import atrest
+        return atrest
+
+
 def load_archives(archives_dir: Path):
-    """Load all archive JSON files from the given directory."""
+    """Load all archive JSON files from the given directory.
+
+    v2.11.12 fix (2026-07-02): archives are Fernet-encrypted at rest
+    (atrest.py) and this loader was doing a plain json.load, so EVERY
+    archive failed with 'Expecting value: line 1 column 1' and the
+    fatigue detector + CRAIID ops snapshot ran on zero archives.
+    atrest.load_json_auto handles encrypted AND legacy plaintext files,
+    so nothing is lost either way. If atrest itself is unavailable
+    (standalone use outside the project), fall back to plaintext parse."""
+    try:
+        _atrest = _import_atrest()
+    except Exception:
+        _atrest = None
     archives = []
     for file_path in sorted(archives_dir.glob("archive_*.json")):
         try:
-            with file_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-                # Expect each archive to have a "messages" list or similar; adapt as needed.
-                if isinstance(data, dict) and "messages" in data:
-                    archives.append(data["messages"])
-                elif isinstance(data, list):
-                    archives.append(data)
-                else:
-                    # Fallback: treat the whole file as a single message container
-                    archives.append([data])
+            blob = file_path.read_bytes()
+            if _atrest is not None:
+                data = _atrest.load_json_auto(blob)
+            else:
+                data = json.loads(blob.decode("utf-8"))
+            # Expect each archive to have a "messages" list or similar; adapt as needed.
+            if isinstance(data, dict) and "messages" in data:
+                archives.append(data["messages"])
+            elif isinstance(data, list):
+                archives.append(data)
+            else:
+                # Fallback: treat the whole file as a single message container
+                archives.append([data])
         except Exception as e:
             print(f"Warning: Could not load {file_path}: {e}", file=sys.stderr)
     return archives
