@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "5873b3f18a56403dab863a00320c085f",
-    "built_utc": "2026-07-01T05:35:45.475106+00:00",
+    "build_id": "f7ccfbf0ee2647fa95308595b1c99f18",
+    "built_utc": "2026-07-02T05:11:11.156898+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1261,8 +1261,9 @@
       "backend/relay_core.py": "4ac0baee0236cacb3a078a708329d92a6aed4cee47d4484f1cc9a9d77d1b1e0e",
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
       "backend/sage_daemon_client.py": "2ec56533c7e00a0022c046b3936626e5a63532931b5d6f6076275f6d1005be6b",
-      "backend/sage_engine.py": "2c2342dd64817baee2f81c15e98c5aa99483006b9522b2a12b7b850ceea8a2f2",
+      "backend/sage_engine.py": "b716de09bad829f27aea4d028ef95254dbd601d52b11f7031aba866c09152821",
       "backend/sage_messaging_adapter.py": "bebd756911bbf43b4fec3c859f63acf50eee901ceecba5d01ace324055bc16b5",
+      "backend/sage_rag.py": "4efc9895ebc8d54c89fa8ed354eefff3298b5d93121db5bfab5e72e2d26c3758",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
       "backend/session.py": "10c430b1e469c0a4190bc87d2d113580e9c675b1f5f72d906bbfc3b9c1d51d5b",
       "backend/skill_api.py": "29fde4ab4ee820302f7388df8796e40f9980e472a625cd1c83f3a978a1039daf",
@@ -1344,5 +1345,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "Pb7Pn0yb+16e/EWVI1l0/xna5uJAa7dOhtlTPXqMv6nLlTuYddLM13Ve5XPWJTGBxJaR1YDvVEF4pOrslbJDAw=="
+  "signature_b64": "Kz1oQs5vpO9Mir/R9sDegdz/S2aFzW25VFAneQphwHCrXabpAaU+9ExhB11lfF8ZZxECstH4KWz235zilrw1Dw=="
 }
