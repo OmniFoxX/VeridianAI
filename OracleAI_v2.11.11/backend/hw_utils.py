@@ -16,6 +16,7 @@ def detect_hardware() -> Dict[str, Any]:
     nvidia = _detect_nvidia()
     amd    = _detect_amd()
     intel  = _detect_intel()
+    npu    = _detect_npu()
 
     if nvidia["available"]:
         rec_backend, rec_layers = "cuda", -1
@@ -29,7 +30,7 @@ def detect_hardware() -> Dict[str, Any]:
 
     return {
         "os": _detect_os(), "cpu": _detect_cpu(),
-        "nvidia": nvidia, "amd": amd, "intel": intel,
+        "nvidia": nvidia, "amd": amd, "intel": intel, "npu": npu,
         "recommended_backend": rec_backend, "recommended_layers": rec_layers,
     }
 
@@ -406,6 +407,144 @@ def _detect_intel() -> Dict[str, Any]:
                     info["vulkan_supported"] = True
             except Exception:
                 pass
+
+    return info
+
+
+def _detect_npu() -> Dict[str, Any]:
+    """v2.11.12 — NPU detection (AMD XDNA / Ryzen AI, Intel AI Boost).
+
+    Why the old code missed it: detection only looked for GPUs —
+    Win32_VideoController, nvidia-smi, rocm-smi. An NPU is not a video
+    controller; on Windows it enumerates under the ComputeAccelerator
+    PnP class (or as a System device on older drivers) with names like
+    'AMD IPU Device' / 'NPU Compute Accelerator Device' / 'AMD XDNA'
+    (Ryzen AI) or 'Intel(R) AI Boost' (Core Ultra). So the hardware was
+    visible in Device Manager but invisible to hw_utils.
+
+    Also reports whether an LLM runtime for the NPU is actually present:
+      - lemonade:  AMD Lemonade Server (official Ryzen AI OpenAI-compatible
+                   LLM server) — this is what the NPU tier launches.
+      - vitis_ai:  onnxruntime with the VitisAI execution provider
+                   (Ryzen AI SDK) — used by ONNX-based pipelines.
+    """
+    info: Dict[str, Any] = {
+        "available": False, "name": None, "vendor": None,
+        "xdna": False, "driver_version": None,
+        "lemonade": False, "lemonade_path": None,
+        "vitis_ai": False, "error": None,
+    }
+
+    def _classify(name: str):
+        nl = name.lower()
+        if any(k in nl for k in ["amd", "ryzen", "xdna", "ipu"]):
+            info["vendor"] = "amd"
+            info["xdna"] = True
+        elif any(k in nl for k in ["intel", "ai boost"]):
+            info["vendor"] = "intel"
+
+    # --- Windows: PnP enumeration --------------------------------------
+    if sys.platform == "win32":
+        # -cmatch (case-SENSITIVE) + word boundaries is deliberate: the
+        # default -match is case-insensitive, so 'NPU' matched the npu
+        # inside 'USB I-npu-t Device' and every input device on the
+        # system became an "NPU". Found the hard way on Todd's desktop.
+        ps_filter = (
+            "$_.Class -eq 'ComputeAccelerator' -or "
+            "$_.FriendlyName -cmatch '\\bNPU\\b|\\bIPU\\b|XDNA' -or "
+            "$_.FriendlyName -match 'AI Boost|Ryzen AI'"
+        )
+        ps_cmd = (
+            "Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
+            "Where-Object { " + ps_filter + " } | "
+            "Select-Object -ExpandProperty FriendlyName"
+        )
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", ps_cmd],
+                capture_output=True, text=True, timeout=15,
+                creationflags=0x08000000)
+            for line in r.stdout.strip().splitlines():
+                n = line.strip()
+                if not n:
+                    continue
+                info["available"] = True
+                info["name"] = n
+                _classify(n)
+                break
+        except Exception as e:
+            info["error"] = str(e)
+
+        # CPU-name fallback: every 'Ryzen AI' SKU has an XDNA NPU even if
+        # the driver hasn't populated the ComputeAccelerator class yet.
+        if not info["available"]:
+            try:
+                cpu_name = _detect_cpu().get("name", "")
+                if "ryzen ai" in cpu_name.lower():
+                    info["available"] = True
+                    info["name"] = f"AMD XDNA NPU (per CPU: {cpu_name})"
+                    info["vendor"] = "amd"
+                    info["xdna"] = True
+                    info["driver_version"] = "unknown (PnP class not found)"
+            except Exception:
+                pass
+
+        # Driver version for the PnP device (best-effort).
+        if info["available"] and not info["driver_version"]:
+            try:
+                ps_drv = (
+                    "Get-PnpDevice -PresentOnly -ErrorAction SilentlyContinue | "
+                    "Where-Object { " + ps_filter + " } | "
+                    "Select-Object -First 1 -ExpandProperty InstanceId | "
+                    "ForEach-Object { (Get-PnpDeviceProperty -InstanceId $_ "
+                    "-KeyName 'DEVPKEY_Device_DriverVersion' "
+                    "-ErrorAction SilentlyContinue).Data }"
+                )
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command", ps_drv],
+                    capture_output=True, text=True, timeout=15,
+                    creationflags=0x08000000)
+                dv = r.stdout.strip().splitlines()
+                if dv and dv[0].strip():
+                    info["driver_version"] = dv[0].strip()
+            except Exception:
+                pass
+
+    # --- Linux: amdxdna driver exposes /dev/accel/* ---------------------
+    elif sys.platform.startswith("linux"):
+        try:
+            if os.path.isdir("/dev/accel") and os.listdir("/dev/accel"):
+                r = subprocess.run(["lsmod"], capture_output=True, text=True, timeout=5)
+                if "amdxdna" in r.stdout:
+                    info["available"] = True
+                    info["name"] = "AMD XDNA NPU (amdxdna)"
+                    info["vendor"] = "amd"
+                    info["xdna"] = True
+        except Exception:
+            pass
+
+    # --- Runtime: AMD Lemonade Server (NPU LLM serving) ------------------
+    lemonade = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
+    if not lemonade and sys.platform == "win32":
+        local = os.environ.get("LOCALAPPDATA", "")
+        for cand in [
+            os.path.join(local, "lemonade_server", "bin", "lemonade-server.exe"),
+            os.path.join(local, "Programs", "lemonade_server", "bin", "lemonade-server.exe"),
+        ]:
+            if local and os.path.exists(cand):
+                lemonade = cand
+                break
+    if lemonade:
+        info["lemonade"] = True
+        info["lemonade_path"] = lemonade
+
+    # --- Runtime: onnxruntime VitisAI EP (Ryzen AI SDK) -------------------
+    try:
+        import onnxruntime
+        if "VitisAIExecutionProvider" in onnxruntime.get_available_providers():
+            info["vitis_ai"] = True
+    except Exception:
+        pass
 
     return info
 

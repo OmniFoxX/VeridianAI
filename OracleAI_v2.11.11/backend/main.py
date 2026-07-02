@@ -519,6 +519,11 @@ DEFAULT_CONFIG = {
     # None for users who don't explicitly set it, and adaptive engages.
     # Users who DO want an explicit ctx put `"n_ctx": <N>` in config.json.
     "gpu_acceleration": True, "n_gpu_layers": -1,
+    # v2.11.12 hardware-acceleration toggles — persisted via config_store
+    # (InferenceSection), consumed by model_manager (GPU offload gating +
+    # NPU tier routing) and tier_launcher (NPU tier spawn at boot).
+    "cuda_enabled": True, "rocm_enabled": True, "vulkan_enabled": True,
+    "openvino_enabled": True, "xe_cores_enabled": True, "npu_enabled": True,
     "temperature": 0.5, "max_tokens": -1,
     # v2.1.8 ctx-sizing knobs surfaced as defaults so they're discoverable
     # via /api/config without forcing a config.json edit.
@@ -723,14 +728,34 @@ async def _start_comfyui():
     """Optionally spawn ComfyUI as an OracleAI-OWNED process (OFF by default), so
     prompt-driven image generation works without launching ComfyUI by hand, and so
     closing OracleAI reaps it -- destroying the ComfyUI job-queue box (privacy).
-    Health-gated (won't double-launch) and non-blocking (ComfyUI warms in parallel)."""
+    Health-gated (won't double-launch) and non-blocking (ComfyUI warms in parallel).
+
+    v2.11.12 CRITICAL FIX (2026-07-02, the "backend won't start" morning):
+    this previously did `res = await asyncio.to_thread(comfyui_launcher.start,...)`.
+    The await meant the startup event did NOT finish until the launcher
+    returned — and uvicorn does not bind its port until ALL startup events
+    complete. On a cold boot, the launcher's DirectML probe (importing
+    torch inside ComfyUI's embedded Python, up to 40s) plus install
+    detection + readiness waiting can run past Electron's 90s health
+    timeout, so port 8000 never opened while every tier terminal sat
+    there looking healthy. The docstring above always SAID non-blocking;
+    now it's true: fire-and-forget task, uvicorn binds immediately,
+    ComfyUI warms in the background and logs when done."""
     try:
         if not bool(config.get("comfyui_autostart_enabled", False)):
             return
         import asyncio
         import comfyui_launcher
-        res = await asyncio.to_thread(comfyui_launcher.start, config)
-        print("[comfyui] autostart:", res)
+
+        async def _bg():
+            try:
+                res = await asyncio.to_thread(comfyui_launcher.start, config)
+                print("[comfyui] autostart (background):", res)
+            except Exception as _e:
+                print("[comfyui] autostart skipped:", _e)
+
+        asyncio.create_task(_bg())
+        print("[comfyui] autostart: launching in background (boot not blocked)")
     except Exception as _e:
         print("[comfyui] autostart skipped:", _e)
 

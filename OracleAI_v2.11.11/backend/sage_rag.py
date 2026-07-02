@@ -154,14 +154,23 @@ def semantic_search(query: str,
     missing = set(archives) - set(index_dict.keys())
     for fname in missing:
         try:
-            with open(fname, "r", encoding="utf-8") as f:
-                text = f.read()
+            raw = Path(fname).read_bytes()
+            # Decrypt via atrest — same pattern as keyword_search
+            import atrest
+            messages = atrest.load_json_auto(raw)
+            if not isinstance(messages, list):
+                continue
+            # Concatenate message content for embedding
+            text = " ".join(
+                m.get("content", "") for m in messages
+                if isinstance(m, dict) and m.get("content")
+            )
+            if not text.strip():
+                continue
         except Exception:
-            # File unreadable → skip entirely, don't use filename as placeholder.
-            # A filename-as-text embedding would produce a meaningless vector.
             continue
         vec = get_embedding(text, ollama_url)
-        if vec:                     # store only when we have a non-empty vector
+        if vec:
             index_dict[fname] = vec
             store_vector(index_path, fname, vec)
 

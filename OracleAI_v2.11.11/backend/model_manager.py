@@ -58,12 +58,14 @@ from config import (
     OLLAMA_ORACLE_URL,
     LLAMA_SAGE_URL,
     LLAMA_DAEMON_URL,
+    NPU_LLM_URL,
 )
 
 # --- Backend tag constants (single source of truth) --------------------------
 BACKEND_OLLAMA_ORACLE = "ollama_oracle"
 BACKEND_LLAMA_SAGE    = "llama_sage"
 BACKEND_LLAMA_DAEMON  = "llama_daemon"
+BACKEND_NPU           = "npu_lemonade"   # v2.11.12: Ryzen AI NPU tier
 
 # Tier descriptors: (backend_tag, tier_label, base_url, protocol)
 #   protocol = "ollama" -> /api/chat (Ollama native streaming)
@@ -73,6 +75,15 @@ TIERS: Tuple[Tuple[str, str, str, str], ...] = (
     (BACKEND_LLAMA_SAGE,    "Sage",   LLAMA_SAGE_URL,    "openai"),
     (BACKEND_LLAMA_DAEMON,  "Daemon", LLAMA_DAEMON_URL,  "openai"),
 )
+
+# v2.11.12: NPU tier (AMD Lemonade Server — OpenAI-compatible, serves models
+# on the Ryzen AI XDNA NPU). Kept out of the static TIERS tuple because its
+# inclusion is LIVE-toggleable: ModelManager._active_tiers() appends it only
+# while inference.npu_enabled is on. Toggle off in the Hardware panel ->
+# the tier's models vanish from the picker and nothing routes to it;
+# toggle on -> next list/generate sees it again. (Whether the Lemonade
+# server process itself runs is decided at boot by tier_launcher.py.)
+NPU_TIER: Tuple[str, str, str, str] = (BACKEND_NPU, "NPU", NPU_LLM_URL, "openai")
 
 # Per-tier listing timeout. Intentionally short so a dead tier does not
 # stall the UI's model picker.
@@ -371,12 +382,22 @@ class ModelManager:
     # =======================================================================
     #  LISTING — parallel across all tiers
     # =======================================================================
+    def _active_tiers(self) -> Tuple[Tuple[str, str, str, str], ...]:
+        """v2.11.12: the static tiers plus the NPU tier when its toggle is
+        on. Reads self.config LIVE (main.py refreshes it on every
+        /api/config POST), so flipping the Hardware-panel switch takes
+        effect on the very next list/generate — no restart."""
+        if self.config.get("npu_enabled", True):
+            return TIERS + (NPU_TIER,)
+        return TIERS
+
     async def list_models(self) -> List[Dict]:
-        """Query all three tiers concurrently, merge results, tag each model
+        """Query all active tiers concurrently, merge results, tag each model
         with its backend/tier, and populate the routing table. A dead tier
         is silently skipped (not a fatal error for the whole call)."""
+        active = self._active_tiers()
         results = await asyncio.gather(
-            *(self._list_tier(*t) for t in TIERS),
+            *(self._list_tier(*t) for t in active),
             return_exceptions=True,
         )
 
@@ -384,7 +405,7 @@ class ModelManager:
         seen_ids: set = set()
         new_routing: Dict[str, Tuple[str, str, str, str]] = {}
 
-        for tier, res in zip(TIERS, results):
+        for tier, res in zip(active, results):
             tier_label = tier
             if isinstance(res, Exception):
                 print(f"[ModelManager] Tier {tier_label} unreachable: {res}")
@@ -504,6 +525,52 @@ class ModelManager:
             result += token
         return result
 
+    # -------------------------------------------------------------------
+    # v2.11.12: GPU-offload gating. Before this, gpu_acceleration and the
+    # brand toggles (cuda/rocm/vulkan_enabled) were never consulted by the
+    # inference path — the switches did nothing. Now: if global GPU
+    # acceleration is off, OR every detected GPU vendor's brand toggle is
+    # off, Ollama requests get options.num_gpu = 0 (all layers on CPU).
+    # Hardware vendor detection is expensive (PowerShell probes), so it
+    # runs once off the event loop and is cached for the process lifetime.
+    # -------------------------------------------------------------------
+    _gpu_vendors_cache: Optional[Tuple[str, ...]] = None
+
+    async def _detected_gpu_vendors(self) -> Tuple[str, ...]:
+        if ModelManager._gpu_vendors_cache is not None:
+            return ModelManager._gpu_vendors_cache
+        def _probe():
+            try:
+                from hw_utils import detect_hardware
+                hw = detect_hardware()
+                vendors = tuple(v for v in ("nvidia", "amd", "intel")
+                                if hw.get(v, {}).get("available"))
+            except Exception:
+                vendors = ()
+            return vendors
+        try:
+            vendors = await asyncio.to_thread(_probe)
+        except Exception:
+            vendors = ()
+        ModelManager._gpu_vendors_cache = vendors
+        return vendors
+
+    _VENDOR_TOGGLE = {"nvidia": "cuda_enabled",
+                      "amd":    "rocm_enabled",
+                      "intel":  "vulkan_enabled"}
+
+    async def _gpu_offload_disabled(self) -> bool:
+        """True -> force num_gpu=0 (CPU-only) on Ollama calls."""
+        if not self.config.get("gpu_acceleration", True):
+            return True
+        vendors = await self._detected_gpu_vendors()
+        if not vendors:
+            return False   # no GPU to gate; Ollama is CPU-bound anyway
+        return all(
+            not self.config.get(self._VENDOR_TOGGLE[v], True)
+            for v in vendors
+        )
+
     def _gen_lock_for(self, base_url):
         """Per-Ollama-instance (base_url) async lock so concurrent requests to
         the SAME server queue instead of evicting each other's loaded model.
@@ -539,6 +606,20 @@ class ModelManager:
             return
 
         backend_tag, tier_label, base_url, protocol = tier
+
+        # v2.11.12: NPU toggle enforcement at the routing boundary. The
+        # routing table may hold a stale NPU entry from before the switch
+        # was flipped off; honor the CURRENT toggle, not the cached route.
+        if backend_tag == BACKEND_NPU and not self.config.get("npu_enabled", True):
+            await self.list_models()          # rebuild without the NPU tier
+            tier = self._routing.get(model_id)
+            if tier is None or tier[0] == BACKEND_NPU:
+                yield ("[Error: NPU acceleration is toggled OFF and "
+                       f"'{model_id}' is only served by the NPU tier. "
+                       "Re-enable the NPU toggle in Settings → Hardware, "
+                       "or pick a model from another tier.]")
+                return
+            backend_tag, tier_label, base_url, protocol = tier
 
         if protocol == "ollama":
             gen = self._gen_ollama(messages, model_id, options, base_url, tier_label)
@@ -610,6 +691,14 @@ class ModelManager:
             )
             _max_int = -1
 
+        # v2.11.12: honor the Hardware-panel toggles. num_gpu=0 tells
+        # Ollama to keep every layer on CPU; omitting the key leaves
+        # Ollama's own GPU auto-detection in charge (previous behavior).
+        _cpu_only = await self._gpu_offload_disabled()
+        if _cpu_only:
+            print(f"[GPU GATE] GPU acceleration toggled OFF — "
+                  f"{model_id} running CPU-only (num_gpu=0)")
+
         payload = {
             "model":    model_id,
             "messages": messages,
@@ -619,6 +708,7 @@ class ModelManager:
                                             self.config.get("temperature", 0.5)),
                 "num_predict": _max_int,
                 "num_ctx":     effective_ctx,
+                **({"num_gpu": 0} if _cpu_only else {}),
                 **({"top_p": float(options["top_p"])}
                    if options.get("top_p") is not None else {}),
                 **({"top_k": int(options["top_k"])}

@@ -41,6 +41,7 @@ function renderHardwarePanel(hw) {
     ${renderGpuCard('NVIDIA', hw.nvidia)}
     ${renderGpuCard('AMD',    hw.amd)}
     ${renderGpuCard('Intel',  hw.intel)}
+    ${renderNpuCard(hw.npu)}
     <div class="hw-card" style="border-left:3px solid var(--gold)">
       <div class="hw-card-title">Recommended</div>
       <div class="hw-card-value" style="color:var(--gold)">${(hw.recommended_backend || 'cpu').toUpperCase()}</div>
@@ -97,28 +98,87 @@ function renderGpuCard(brand, info) {
   `;
 }
 
+// v2.11.12: NPU card (AMD XDNA / Ryzen AI, Intel AI Boost). Previously the
+// hardware panel only knew GPUs — an NPU is a ComputeAccelerator PnP device,
+// not a video controller, so it was never detected or displayed. Shows the
+// runtime status too: Lemonade Server is what actually serves LLMs on the
+// NPU, so "detected but no runtime" gets an actionable install hint instead
+// of a silent nothing.
+function renderNpuCard(info) {
+  if (!info) return '';
+  const avail = info.available;
+  const badge = `<span class="hw-badge ${avail ? 'available' : 'unavailable'}">${avail ? '✓ Detected' : '✗ Not found'}</span>`;
+  let details = '';
+  if (avail) {
+    if (info.name)
+      details += `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">${info.name}</div>`;
+    if (info.driver_version)
+      details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Driver: ${info.driver_version}</div>`;
+    if (info.xdna)
+      details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✦ Ryzen AI · XDNA · AI Accelerated</div>`;
+    if (info.lemonade)
+      details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ Lemonade Server (NPU LLM runtime)</div>`;
+    else if (info.xdna)
+      details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Runtime missing — install AMD Lemonade Server to run models on the NPU</div>`;
+    if (info.vitis_ai)
+      details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ VitisAI (ONNX Runtime EP)</div>`;
+  }
+  return `
+    <div class="hw-card">
+      <div class="hw-card-title" style="display:flex;justify-content:space-between;align-items:center">
+        NPU ${badge}
+      </div>
+      ${details}
+    </div>
+  `;
+}
+
+// v2.11.12: toggles now read their REAL persisted state from /api/config
+// (window._appConfig) instead of a hardcoded checked:true. The keys are
+// allowlisted server-side now, so flipping a switch persists and is
+// consumed by the inference path (see config_store.InferenceSection).
+function _cfgOn(key) {
+  return !(window._appConfig && window._appConfig[key] === false);
+}
+
 function buildToggles(hw) {
   const toggles = [];
   toggles.push({
     label: 'GPU Acceleration',
-    checked: window._appConfig && window._appConfig.gpu_acceleration !== false,
+    checked: _cfgOn('gpu_acceleration'),
     onChange: "updateSetting('gpu_acceleration', this.checked)",
     tip: 'Use the GPU to accelerate model inference. Off = CPU-only (slower, but works everywhere).',
   });
   if (hw.nvidia && hw.nvidia.available) {
-    toggles.push({ label: 'CUDA (NVIDIA)', checked: true, onChange: "updateSetting('cuda_enabled', this.checked)", tip: 'Use NVIDIA CUDA to accelerate inference on your NVIDIA GPU.' });
+    toggles.push({ label: 'CUDA (NVIDIA)', checked: _cfgOn('cuda_enabled'), onChange: "updateSetting('cuda_enabled', this.checked)", tip: 'Use NVIDIA CUDA to accelerate inference on your NVIDIA GPU.' });
   }
   if (hw.amd && hw.amd.available) {
-    toggles.push({ label: 'ROCm (AMD)', checked: true, onChange: "updateSetting('rocm_enabled', this.checked)", tip: 'Use AMD ROCm to accelerate inference on your AMD GPU.' });
+    toggles.push({ label: 'ROCm (AMD)', checked: _cfgOn('rocm_enabled'), onChange: "updateSetting('rocm_enabled', this.checked)", tip: 'Use AMD ROCm to accelerate inference on your AMD GPU.' });
   }
   if (hw.intel && hw.intel.available) {
-    toggles.push({ label: 'Vulkan/XPU (Intel)', checked: true, onChange: "updateSetting('vulkan_enabled', this.checked)", tip: 'Use Intel Vulkan/XPU acceleration on your Intel GPU.' });
+    toggles.push({ label: 'Vulkan/XPU (Intel)', checked: _cfgOn('vulkan_enabled'), onChange: "updateSetting('vulkan_enabled', this.checked)", tip: 'Use Intel Vulkan/XPU acceleration on your Intel GPU.' });
     if (hw.intel.openvino) {
-      toggles.push({ label: 'OpenVINO', checked: true, onChange: "updateSetting('openvino_enabled', this.checked)", tip: "Use Intel's OpenVINO runtime for optimized inference." });
+      toggles.push({ label: 'OpenVINO', checked: _cfgOn('openvino_enabled'), onChange: "updateSetting('openvino_enabled', this.checked)", tip: "Use Intel's OpenVINO runtime for optimized inference." });
     }
     if (hw.intel.arc_detected) {
-      toggles.push({ label: 'Arc Xe Cores (AI)', checked: true, onChange: "updateSetting('xe_cores_enabled', this.checked)", tip: "Use the Arc GPU's Xe-core AI acceleration." });
+      toggles.push({ label: 'Arc Xe Cores (AI)', checked: _cfgOn('xe_cores_enabled'), onChange: "updateSetting('xe_cores_enabled', this.checked)", tip: "Use the Arc GPU's Xe-core AI acceleration." });
     }
+  }
+  // v2.11.12: NPU toggle — AMD's brand feature gets its own switch, same as
+  // CUDA for NVIDIA and Arc for Intel. Wired end-to-end: the flag persists
+  // via /api/config, model_manager includes/excludes the NPU tier from
+  // model listing + routing LIVE, and tier_launcher decides at next boot
+  // whether the Lemonade NPU server process runs at all.
+  if (hw.npu && hw.npu.available) {
+    const label = hw.npu.vendor === 'amd' ? 'Ryzen AI (NPU)' : 'NPU (AI Boost)';
+    toggles.push({
+      label,
+      checked: _cfgOn('npu_enabled'),
+      onChange: "updateSetting('npu_enabled', this.checked)",
+      tip: hw.npu.lemonade
+        ? 'Serve models on the NPU via Lemonade Server. Off = NPU tier hidden and never routed to.'
+        : 'NPU detected, but no LLM runtime found. Install AMD Lemonade Server, then this switch controls the NPU tier.',
+    });
   }
   return toggles;
 }

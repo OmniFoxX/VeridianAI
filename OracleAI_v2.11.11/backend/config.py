@@ -129,6 +129,7 @@ PORT_OLLAMA_ORACLE = _resolve_port("OLLAMA_ORACLE_PORT", getattr(_ports, "ollama
 PORT_LLAMA_SAGE    = _resolve_port("LLAMA_SAGE_PORT",    getattr(_ports, "llama_sage",    None) if _ports else None, 11435)  # Sage llama-server
 PORT_LLAMA_DAEMON  = _resolve_port("LLAMA_DAEMON_PORT",  getattr(_ports, "llama_daemon",  None) if _ports else None, 11436)  # Daemon llama-server
 PORT_LLAMA_EMBED   = _resolve_port("LLAMA_EMBED_PORT",   getattr(_ports, "llama_embed",   None) if _ports else None, 11437)  # nomic-embed llama-server (reserved)
+PORT_NPU_LLM       = _resolve_port("NPU_LLM_PORT",       getattr(_ports, "npu_llm",       None) if _ports else None, 11438)  # v2.11.12: Ryzen AI NPU tier (Lemonade)
 
 # --- Handoff hardening knobs (#69) -- config.json single source of truth -----
 HANDOFF_CADENCE_MAX         = getattr(_handoff_cfg, "cadence_max",         5)     if _handoff_cfg else 5
@@ -142,6 +143,7 @@ OLLAMA_ORACLE_URL  = f"http://127.0.0.1:{PORT_OLLAMA_ORACLE}"
 LLAMA_SAGE_URL    = f"http://127.0.0.1:{PORT_LLAMA_SAGE}"
 LLAMA_DAEMON_URL  = f"http://127.0.0.1:{PORT_LLAMA_DAEMON}"
 LLAMA_EMBED_URL   = f"http://127.0.0.1:{PORT_LLAMA_EMBED}"
+NPU_LLM_URL       = f"http://127.0.0.1:{PORT_NPU_LLM}"
 
 # --- llama-server executable (ships with OracleAI backend) ---------------
 LLAMA_SERVER_EXE   = BACKEND_DIR / "llama-server.exe"

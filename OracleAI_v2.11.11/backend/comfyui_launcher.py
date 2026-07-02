@@ -314,6 +314,20 @@ def resolve_command(config=None):
 # --------------------------------------------------------------------------- #
 #  spawn / reap
 # --------------------------------------------------------------------------- #
+def _register_spawn(proc):
+    """v2.11.12 zombie fix: record ComfyUI in the shared PID ledger so
+    shutdown_cleanup.py can reap it on quit / next boot. ComfyUI is
+    installed OUTSIDE the project folder, so the path-based sweep can't
+    find it — the ledger is the only handle. Best-effort, never raises."""
+    try:
+        import pid_registry
+        if proc is not None and getattr(proc, "pid", None):
+            pid_registry.register(proc.pid, "ComfyUI", "comfyui")
+    except Exception:
+        pass
+    return proc
+
+
 def _spawn(command):
     """Spawn ComfyUI headless. Accepts a list (argv) or a string (path/shell cmd).
 
@@ -330,10 +344,10 @@ def _spawn(command):
         # Pre-resolved argv from _headless_python_server() -- most reliable path.
         # cwd = directory containing main.py so relative imports inside ComfyUI work.
         cwd = os.path.dirname(command[1]) if len(command) > 1 else None
-        return subprocess.Popen(
+        return _register_spawn(subprocess.Popen(
             command, stdout=dn, stderr=dn, stdin=dn,
             cwd=cwd, creationflags=flags,
-        )
+        ))
 
     if isinstance(command, str) and os.path.exists(command):
         cwd = os.path.dirname(command) or None
@@ -341,16 +355,16 @@ def _spawn(command):
             args = ["cmd", "/c", command]
         else:
             args = [command]
-        return subprocess.Popen(
+        return _register_spawn(subprocess.Popen(
             args, stdout=dn, stderr=dn, stdin=dn,
             cwd=cwd, creationflags=flags,
-        )
+        ))
 
     # Explicit shell command string from config (user-supplied).
-    return subprocess.Popen(
+    return _register_spawn(subprocess.Popen(
         command, shell=True, stdout=dn, stderr=dn, stdin=dn,
         creationflags=flags,
-    )
+    ))
 
 
 # --------------------------------------------------------------------------- #

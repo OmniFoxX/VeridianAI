@@ -20,7 +20,7 @@
  */
 
 const { app, BrowserWindow, Menu, shell, dialog, session, ipcMain } = require('electron');
-const { spawn }  = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path       = require('path');
 const fs         = require('fs');
 const http       = require('http');
@@ -171,8 +171,16 @@ console.log(`[Electron] backend URL: ${BACKEND_URL}`);
 // Happy-case wall-clock to detect a healthy backend is still ~1-2s.
 const HEALTH_POLL_MS    = 1500;
 const PROBE_TIMEOUT_MS  = 5000;
-const HEALTH_TIMEOUT_MS = 90_000;   // 90s — Ollama's first model load
-                                    // can be slow on cold cache
+const HEALTH_TIMEOUT_MS = 240_000;  // v2.11.12: was 90s. The 90s budget had
+                                    // to cover start.bat's per-tier probes
+                                    // (up to 90s EACH on cold Ollama) PLUS
+                                    // uvicorn boot — a cold morning start
+                                    // legitimately exceeds it, and the
+                                    // "backend slow" dialog was firing on
+                                    // healthy-but-cold boots. 240s covers
+                                    // the realistic worst case; a healthy
+                                    // warm boot still connects in seconds
+                                    // (polling, not waiting).
 const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 
 // start.bat lives at the project root, one level up from electron/
@@ -300,28 +308,92 @@ function startBackend() {
   });
 }
 
-function stopBackend() {
-  if (!backendProc || backendProc.killed) return;
-  // Windows: taskkill /T /F to terminate the entire process tree
-  // (start.bat itself, Ollama, llama-server.exe, FastAPI uvicorn,
-  // and sage_daemon.py — all of which are children of start.bat).
-  // Without /T, only start.bat dies; the children become orphan
-  // processes that survive the Electron quit.
-  if (process.platform === 'win32') {
+// v2.11.12 zombie-process fix: resolve a Python launcher once so we can run
+// backend\shutdown_cleanup.py. Mirrors start.bat's py -> python -> python3
+// detection. Cached after first call; null if no Python found (cleanup is
+// then skipped — taskkill /T still runs, same behavior as before this fix).
+let _pythonCmd;   // undefined = not probed yet, null = none found
+function findPython() {
+  if (_pythonCmd !== undefined) return _pythonCmd;
+  for (const cand of ['py', 'python', 'python3']) {
     try {
-      const tk = spawn('taskkill', [
-        '/PID', String(backendProc.pid),
-        '/T', '/F',
-      ]);
-      tk.on('exit', c =>
-        console.log(`[Electron] taskkill exit code ${c}`));
-    } catch (e) {
-      console.error('[Electron] taskkill failed:', e);
-    }
-  } else {
-    try { backendProc.kill('SIGTERM'); } catch { /* ignore */ }
+      const r = spawnSync(cand, ['--version'], { timeout: 5000, windowsHide: true });
+      if (r.status === 0) { _pythonCmd = cand; return cand; }
+    } catch (e) { /* keep trying */ }
   }
-  backendProc = null;
+  _pythonCmd = null;
+  return null;
+}
+
+// v2.11.12: run backend\shutdown_cleanup.py SYNCHRONOUSLY. This is the fix
+// for the zombie python/llama-server/ollama processes: tier_launcher.py
+// spawns the tiers and exits, orphaning them, so taskkill /T on the
+// start.bat tree can NEVER reach them. The cleanup script kills exactly
+// the PIDs recorded in .oracle_pids.json (identity-verified) plus any
+// stack process running from backend\ — and nothing else (a user-launched
+// Ollama survives). Synchronous on purpose: quit must not race the reaper.
+function runCleanupSync(reason) {
+  const py = findPython();
+  if (!py) {
+    console.warn('[Electron] no Python found — skipping process cleanup');
+    return;
+  }
+  const script = path.join(PROJECT_ROOT, 'backend', 'shutdown_cleanup.py');
+  if (!fs.existsSync(script)) return;
+  console.log(`[Electron] running process cleanup (${reason})…`);
+  try {
+    const r = spawnSync(py, [script, '--quiet'], {
+      cwd: PROJECT_ROOT,
+      timeout: 25000,
+      windowsHide: true,
+      env: { ...process.env, OAI_ROOT: PROJECT_ROOT },
+    });
+    console.log(`[Electron] cleanup exit code ${r.status}`);
+  } catch (e) {
+    console.error('[Electron] cleanup failed:', e.message);
+  }
+}
+
+let _shutdownDone = false;   // stopBackend runs from window-all-closed AND
+                             // before-quit; only do the work once.
+function stopBackend() {
+  if (_shutdownDone) return;
+  _shutdownDone = true;
+
+  // Step 1 — kill the spawned start.bat tree (start.bat's cmd, start.py,
+  // FastAPI uvicorn). taskkill /T /F, but SYNCHRONOUS now (v2.11.12): the
+  // old async spawn raced app exit, and on slow quits the kill never
+  // happened — one of the two sources of zombies.
+  if (backendProc && !backendProc.killed) {
+    if (process.platform === 'win32') {
+      try {
+        const r = spawnSync('taskkill',
+          ['/PID', String(backendProc.pid), '/T', '/F'],
+          { timeout: 15000, windowsHide: true });
+        console.log(`[Electron] taskkill exit code ${r.status}`);
+      } catch (e) {
+        console.error('[Electron] taskkill failed:', e);
+      }
+    } else {
+      try { backendProc.kill('SIGTERM'); } catch { /* ignore */ }
+    }
+    backendProc = null;
+  }
+
+  // Step 2 — reap the orphaned tier processes via the PID ledger. Runs
+  // even when backendProc is null: if Electron reused an already-running
+  // backend (the "already healthy — skipping spawn" path), quitting
+  // OracleAI should still take the whole stack down.
+  if (process.platform === 'win32') runCleanupSync('quit');
+
+  // Step 3 — failsafe against zombie OracleAI windows: if anything keeps
+  // the quit from completing (stuck renderer, pending dialog, hung IPC),
+  // hard-exit after a grace period. A live timer does not block Electron
+  // from exiting normally, so the happy path is unaffected.
+  setTimeout(() => {
+    console.warn('[Electron] quit did not complete in 8s — forcing exit');
+    try { process.exit(0); } catch { /* unreachable */ }
+  }, 8000);
 }
 
 // --- Health probe (single attempt) -----------------------------
@@ -434,6 +506,16 @@ async function ensureBackendAvailable() {
   // Case 2: port bound but not healthy. Likely an orphan process
   // from a prior incomplete shutdown (the old Electron used
   // kill('SIGTERM') which doesn't always reap children on Windows).
+  //
+  // v2.11.12: before bothering the user with a dialog, run the ledger
+  // cleanup — if the port-holder is one of OUR orphans (it almost always
+  // is), this reaps it and the whole stale tier family silently, and the
+  // launch proceeds first try. The dialog below now only appears when a
+  // FOREIGN process owns the port, where user confirmation is right.
+  if (await isPortBound(APP_PORT)) {
+    runCleanupSync('startup: stale processes detected');
+    await new Promise(r => setTimeout(r, 1000));
+  }
   if (await isPortBound(APP_PORT)) {
     const pid = await findPidOnPort(APP_PORT);
     const detail = pid
@@ -575,6 +657,24 @@ function buildMenu() {
 }
 
 // --- Lifecycle -------------------------------------------------
+// v2.11.12: single-instance lock. When a half-dead previous instance is
+// still around (the zombie-window failure mode), launching again used to
+// stack a second broken instance on top — part of why restarting took
+// 3-5 tries. Now the second launch either focuses the live window or, if
+// the first instance is truly hung, the user kills one process and the
+// next launch is clean (the startup cleanup reaps the rest).
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  console.log('[Electron] another OracleAI instance is running — exiting');
+  app.exit(0);
+}
+app.on('second-instance', () => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
+
 app.whenReady().then(async () => {
   // First-run setup (Python deps + Ollama consent) BEFORE the backend launches,
   // so a fresh machine installs what start.bat needs. Run-once via a marker in

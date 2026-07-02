@@ -90,6 +90,7 @@ class NetworkPorts:
     llama_sage: int = 11435
     llama_daemon: int = 11436
     llama_embed: int = 11437
+    npu_llm: int = 11438       # v2.11.12: Ryzen AI NPU tier (Lemonade Server)
 
 
 @dataclass
@@ -132,6 +133,21 @@ class InferenceSection:
     build_battle_rounds: int = 1       # Build Battle: Critique & Refine rounds (1-3)
     auto_route: bool = True
     gpu_acceleration: bool = True
+    # v2.11.12 hardware-acceleration toggles. These existed in the UI
+    # (hardware.js) for a while but the keys were never allowlisted, so
+    # every POST /api/config with them 400'd and nothing consumed them —
+    # the switches were cosmetic. Now they persist here and are consumed:
+    #   cuda/rocm/vulkan_enabled -> model_manager gates Ollama GPU offload
+    #     (num_gpu: 0 when the machine's GPU brand is toggled off);
+    #   npu_enabled -> gates the NPU tier (Lemonade Server on Ryzen AI):
+    #     tier_launcher decides whether to spawn it at boot, and
+    #     model_manager includes/excludes it from routing LIVE.
+    cuda_enabled: bool = True
+    rocm_enabled: bool = True
+    vulkan_enabled: bool = True
+    openvino_enabled: bool = True
+    xe_cores_enabled: bool = True
+    npu_enabled: bool = True
     n_gpu_layers: int = -1
     temperature: float = 0.5
     max_tokens: int = -1               # -1 = unlimited sentinel
@@ -360,6 +376,13 @@ class OracleConfig:
             "build_battle_rounds": self.inference.build_battle_rounds,
             "auto_route":         self.inference.auto_route,
             "gpu_acceleration":   self.inference.gpu_acceleration,
+            # v2.11.12 hardware-acceleration toggles (see InferenceSection)
+            "cuda_enabled":       self.inference.cuda_enabled,
+            "rocm_enabled":       self.inference.rocm_enabled,
+            "vulkan_enabled":     self.inference.vulkan_enabled,
+            "openvino_enabled":   self.inference.openvino_enabled,
+            "xe_cores_enabled":   self.inference.xe_cores_enabled,
+            "npu_enabled":        self.inference.npu_enabled,
             "n_gpu_layers":       self.inference.n_gpu_layers,
             "temperature":        self.inference.temperature,
             "max_tokens":         self.inference.max_tokens,
@@ -463,6 +486,13 @@ class OracleConfig:
         cfg.inference.build_battle_rounds = int(_g("build_battle_rounds", cfg.inference.build_battle_rounds))
         cfg.inference.auto_route       = bool(_g("auto_route", cfg.inference.auto_route))
         cfg.inference.gpu_acceleration = bool(_g("gpu_acceleration", cfg.inference.gpu_acceleration))
+        # v2.11.12 hardware-acceleration toggles
+        cfg.inference.cuda_enabled     = bool(_g("cuda_enabled", cfg.inference.cuda_enabled))
+        cfg.inference.rocm_enabled     = bool(_g("rocm_enabled", cfg.inference.rocm_enabled))
+        cfg.inference.vulkan_enabled   = bool(_g("vulkan_enabled", cfg.inference.vulkan_enabled))
+        cfg.inference.openvino_enabled = bool(_g("openvino_enabled", cfg.inference.openvino_enabled))
+        cfg.inference.xe_cores_enabled = bool(_g("xe_cores_enabled", cfg.inference.xe_cores_enabled))
+        cfg.inference.npu_enabled      = bool(_g("npu_enabled", cfg.inference.npu_enabled))
         cfg.inference.n_gpu_layers     = int(_g("n_gpu_layers", cfg.inference.n_gpu_layers))
         cfg.inference.temperature      = float(_g("temperature", cfg.inference.temperature))
         cfg.inference.max_tokens       = _sanitize_max_tokens(_g("max_tokens", -1))
