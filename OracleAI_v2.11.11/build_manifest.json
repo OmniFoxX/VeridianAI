@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "8e0dac0912914dac826655320b9e30b8",
-    "built_utc": "2026-07-02T16:37:43.732678+00:00",
+    "build_id": "d1b7033697e642bcb1888abc5cc36076",
+    "built_utc": "2026-07-02T19:22:23.587274+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1209,16 +1209,16 @@
       "backend/comfyui_setup.py": "929e0367579b9cf8abe76a0b23e94a7d335e9a861f7573d5ff4c57d3405f8140",
       "backend/config.py": "b8f539bcf839914783ced8deed65b9506ac7f96e51745757b62355708ace6a29",
       "backend/config_store.py": "093c99d086c7ca980326203cea0c7c68156c2957b289c189e007d0f0219cab76",
-      "backend/context_fatigue_detector.py": "58ec922c953235426c30bc00ed3b10895b02cb3c56f54e22cf8e521d2c44f2a7",
+      "backend/context_fatigue_detector.py": "0c283f18cd2e30f9780acc506e35a6b20db8781e545e36e54bdee9862b2c1866",
       "backend/coordinator_signal.py": "6054af6523045248ffc3179b02ef011bceae700ff77232e00e6032cfea93c319",
-      "backend/craiid/archivist_compression_worker.py": "0e6d5b962267d93462a9ec48ea75e82f5a178c20c36f777fba259c40203065a9",
+      "backend/craiid/archivist_compression_worker.py": "7f2e7554c48aeaccff69bdaa48151459e8b4501ee51368c114c8c3a80ac2287f",
       "backend/craiid/audit_archives_deep.py": "43165c72427f5d132dd4d30aa24b3372603429193635001e8983f48d2f844890",
       "backend/craiid/audit_archives_lite.py": "9b42dc94697601cf9fc0c6dfcbac859c41cfb989af1b695bbc28bd4bc5ff18ad",
       "backend/craiid/audit_archives_personal_v2.py": "4671956654eef4661772aacf00ce7b57f683c373520350090b63a5418e84eb14",
-      "backend/craiid/context_fatigue_detector.py": "58ec922c953235426c30bc00ed3b10895b02cb3c56f54e22cf8e521d2c44f2a7",
+      "backend/craiid/context_fatigue_detector.py": "0c283f18cd2e30f9780acc506e35a6b20db8781e545e36e54bdee9862b2c1866",
       "backend/craiid/coordinator_signal.py": "d6daa1f8df265464979d2a8272057b514ce828d5004a09da6f28effe7d157af7",
       "backend/craiid/craiid_archivist_compression_integration.py": "04b71ef77dceaf3d5ce2e50fc4d9616d50f22e4db96cf1dc0c9e7e4c624f146d",
-      "backend/craiid/craiid_author.py": "6fc9a797388afb51c7e236443b7195efbc02a39e3083ed799dfbc704f63bb643",
+      "backend/craiid/craiid_author.py": "b8b0ddb2a30e38a0edf2fa4368c24fc4217c17552302960558fd45760ccf104f",
       "backend/craiid/craiid_author_compression_integration.py": "f98ffaa5063155f7eec8d175e9689cc5764a3d9e9011685147d799a0cdcf1c70",
       "backend/craiid/craiid_compression_core_v3.py": "64e3f3abe1b8ea8a2b16e96d1775a51a2095f77104fed60ac3709145a3d6e533",
       "backend/craiid/craiid_compression_validation_v4.py": "509f09080878f10a1af9e2ee5e6b1f61b22815664a52fb30c1a9cced399d7105",
@@ -1348,5 +1348,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "aEhzCY0Dp7p3Gpc9ewMKQKp5Ut2Zp8nRe72dyGCpmHVzv/XfSWsdvWE4CF9w5thFQmMkbkWOerE3mSe1hUIZCA=="
+  "signature_b64": "uMtmp0GKL26Ob0qDHjKNHZtDl039s/CYvL7ugkBigR1M6QadSC+p7VvEuI/EL+P80/FirQ2U+2bUHtMef2gTBg=="
 }
