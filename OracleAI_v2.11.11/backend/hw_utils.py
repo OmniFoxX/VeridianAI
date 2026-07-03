@@ -426,10 +426,20 @@ def find_lemonade_server():
          (max depth 2) for lemonade-server*.exe. This is how Windows
          itself knows where the app lives, so it works no matter where
          the installer put it.
-    Returns the full exe path, or None."""
-    exe = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
-    if exe:
-        return exe
+    Returns the full exe path, or None.
+
+    v2.11.12d filename fix (Todd's laptop, 2026-07-02): current AMD
+    installers ship the server as bin\\LemonadeServer.exe — NO hyphen —
+    alongside lemonade-app.exe (GUI) and lemonade.exe (SDK CLI). The
+    original match only accepted 'lemonade-server.exe', so a perfectly
+    conventional install was invisible. Accepted names, in preference
+    order (server binaries first, SDK CLI last):"""
+    _EXE_NAMES = ["lemonade-server.exe", "LemonadeServer.exe", "lemonade.exe"]
+
+    for which_name in ("lemonade-server", "LemonadeServer"):
+        exe = shutil.which(which_name)
+        if exe:
+            return exe
     if sys.platform != "win32":
         return None
 
@@ -444,10 +454,11 @@ def find_lemonade_server():
     for root in roots:
         for sub in subdirs:
             base = os.path.join(root, sub)
-            for cand in (os.path.join(base, "bin", "lemonade-server.exe"),
-                         os.path.join(base, "lemonade-server.exe")):
-                if os.path.exists(cand):
-                    return cand
+            for name in _EXE_NAMES:
+                for cand in (os.path.join(base, "bin", name),
+                             os.path.join(base, name)):
+                    if os.path.exists(cand):
+                        return cand
 
     # Registry uninstall entries (HKCU + HKLM, 64- and 32-bit views)
     try:
@@ -479,17 +490,19 @@ def find_lemonade_server():
                                     continue
                                 if not loc:
                                     continue
+                                _names_l = [n.lower() for n in _EXE_NAMES]
                                 if loc.lower().endswith(".exe"):
-                                    if os.path.basename(loc).lower().startswith("lemonade-server") \
+                                    if os.path.basename(loc).lower() in _names_l \
                                             and os.path.exists(loc):
                                         return loc
                                     loc = os.path.dirname(loc)
                                 if not os.path.isdir(loc):
                                     continue
-                                for cand in (os.path.join(loc, "bin", "lemonade-server.exe"),
-                                             os.path.join(loc, "lemonade-server.exe")):
-                                    if os.path.exists(cand):
-                                        return cand
+                                for name in _EXE_NAMES:
+                                    for cand in (os.path.join(loc, "bin", name),
+                                                 os.path.join(loc, name)):
+                                        if os.path.exists(cand):
+                                            return cand
                                 # Shallow walk, max depth 2 below install dir
                                 base_depth = loc.rstrip("\\/").count(os.sep)
                                 for r2, dirs, files in os.walk(loc):
@@ -497,8 +510,7 @@ def find_lemonade_server():
                                         dirs[:] = []
                                         continue
                                     for f in files:
-                                        fl = f.lower()
-                                        if fl.startswith("lemonade-server") and fl.endswith(".exe"):
+                                        if f.lower() in _names_l:
                                             return os.path.join(r2, f)
                     except OSError:
                         continue
