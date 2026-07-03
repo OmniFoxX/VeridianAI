@@ -1,0 +1,44 @@
+[
+  {
+    "pid": 20088,
+    "label": "Ollama-Oracle",
+    "argv0": "ollama",
+    "create_time": 1783013948.9656675,
+    "registered_at": 1783013948.9895084
+  },
+  {
+    "pid": 3536,
+    "label": "Llama-Sage",
+    "argv0": "E:\\OracleAI_v2.11.11\\backend\\llama-server.exe",
+    "create_time": 1783013948.9906416,
+    "registered_at": 1783013948.999432
+  },
+  {
+    "pid": 15356,
+    "label": "Llama-Daemon",
+    "argv0": "E:\\OracleAI_v2.11.11\\backend\\llama-server.exe",
+    "create_time": 1783013949.000883,
+    "registered_at": 1783013949.0097759
+  },
+  {
+    "pid": 8720,
+    "label": "Sage-Daemon",
+    "argv0": "py",
+    "create_time": 1783013949.0800722,
+    "registered_at": 1783013949.0895262
+  },
+  {
+    "pid": 18396,
+    "label": "Overseer",
+    "argv0": "py",
+    "create_time": 1783013949.0911877,
+    "registered_at": 1783013949.0995357
+  },
+  {
+    "pid": 39940,
+    "label": "ComfyUI",
+    "argv0": "comfyui",
+    "create_time": 1783013963.3386285,
+    "registered_at": 1783013963.3524296
+  }
+]

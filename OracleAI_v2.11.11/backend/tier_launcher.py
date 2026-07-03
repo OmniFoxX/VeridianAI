@@ -106,18 +106,17 @@ def _npu_tier_config():
 
 def _find_lemonade():
     """Locate AMD's Lemonade Server CLI. Returns argv prefix or None.
-    Checked: PATH, then the default per-user install location."""
-    exe = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
-    if exe:
-        return [exe]
-    local = os.environ.get("LOCALAPPDATA", "")
-    for cand in (
-        Path(local) / "lemonade_server" / "bin" / "lemonade-server.exe",
-        Path(local) / "Programs" / "lemonade_server" / "bin" / "lemonade-server.exe",
-    ):
-        if local and cand.exists():
-            return [str(cand)]
-    return None
+    v2.11.12c: delegates to hw_utils.find_lemonade_server (PATH ->
+    conventional dirs -> uninstall registry) so the hardware panel's
+    'runtime present' and this launcher always agree. Keeps a minimal
+    PATH check as fallback if hw_utils can't import."""
+    try:
+        from hw_utils import find_lemonade_server
+        exe = find_lemonade_server()
+        return [exe] if exe else None
+    except Exception:
+        exe = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
+        return [exe] if exe else None
 
 
 def _spawn_npu_tier():

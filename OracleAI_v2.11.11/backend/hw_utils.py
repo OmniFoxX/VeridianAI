@@ -411,6 +411,102 @@ def _detect_intel() -> Dict[str, Any]:
     return info
 
 
+def find_lemonade_server():
+    """Locate AMD's Lemonade Server executable. Single source of truth —
+    used by hw_utils (detection/display) AND tier_launcher (spawning the
+    NPU tier), so 'detected' and 'launchable' can never disagree.
+
+    v2.11.12c: the original lookup only tried PATH + two hardcoded dirs
+    and missed Todd's laptop install entirely. Order now:
+      1. PATH (shutil.which)
+      2. Conventional install dirs (LOCALAPPDATA / Program Files, several
+         vendor naming variants)
+      3. Windows uninstall registry — any app whose DisplayName contains
+         'lemonade'; its InstallLocation/DisplayIcon dir is scanned
+         (max depth 2) for lemonade-server*.exe. This is how Windows
+         itself knows where the app lives, so it works no matter where
+         the installer put it.
+    Returns the full exe path, or None."""
+    exe = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
+    if exe:
+        return exe
+    if sys.platform != "win32":
+        return None
+
+    local = os.environ.get("LOCALAPPDATA", "")
+    pf    = os.environ.get("ProgramFiles", r"C:\Program Files")
+    pf86  = os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")
+    roots = [r for r in (local, os.path.join(local, "Programs") if local else "",
+                         pf, pf86) if r]
+    subdirs = ["lemonade_server", "Lemonade Server", "lemonade-server", "Lemonade",
+               os.path.join("AMD", "lemonade_server"),
+               os.path.join("AMD", "Lemonade Server")]
+    for root in roots:
+        for sub in subdirs:
+            base = os.path.join(root, sub)
+            for cand in (os.path.join(base, "bin", "lemonade-server.exe"),
+                         os.path.join(base, "lemonade-server.exe")):
+                if os.path.exists(cand):
+                    return cand
+
+    # Registry uninstall entries (HKCU + HKLM, 64- and 32-bit views)
+    try:
+        import winreg
+        hives = [
+            (winreg.HKEY_CURRENT_USER,  r"Software\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"),
+            (winreg.HKEY_LOCAL_MACHINE, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"),
+        ]
+        for hive, path in hives:
+            try:
+                key = winreg.OpenKey(hive, path)
+            except OSError:
+                continue
+            with key:
+                for i in range(winreg.QueryInfoKey(key)[0]):
+                    try:
+                        with winreg.OpenKey(key, winreg.EnumKey(key, i)) as sk:
+                            try:
+                                name = str(winreg.QueryValueEx(sk, "DisplayName")[0])
+                            except OSError:
+                                continue
+                            if "lemonade" not in name.lower():
+                                continue
+                            for val in ("InstallLocation", "DisplayIcon"):
+                                try:
+                                    loc = str(winreg.QueryValueEx(sk, val)[0]).strip().strip('"')
+                                except OSError:
+                                    continue
+                                if not loc:
+                                    continue
+                                if loc.lower().endswith(".exe"):
+                                    if os.path.basename(loc).lower().startswith("lemonade-server") \
+                                            and os.path.exists(loc):
+                                        return loc
+                                    loc = os.path.dirname(loc)
+                                if not os.path.isdir(loc):
+                                    continue
+                                for cand in (os.path.join(loc, "bin", "lemonade-server.exe"),
+                                             os.path.join(loc, "lemonade-server.exe")):
+                                    if os.path.exists(cand):
+                                        return cand
+                                # Shallow walk, max depth 2 below install dir
+                                base_depth = loc.rstrip("\\/").count(os.sep)
+                                for r2, dirs, files in os.walk(loc):
+                                    if r2.count(os.sep) - base_depth > 2:
+                                        dirs[:] = []
+                                        continue
+                                    for f in files:
+                                        fl = f.lower()
+                                        if fl.startswith("lemonade-server") and fl.endswith(".exe"):
+                                            return os.path.join(r2, f)
+                    except OSError:
+                        continue
+    except Exception:
+        pass
+    return None
+
+
 def _detect_npu() -> Dict[str, Any]:
     """v2.11.12 — NPU detection (AMD XDNA / Ryzen AI, Intel AI Boost).
 
@@ -523,20 +619,51 @@ def _detect_npu() -> Dict[str, Any]:
         except Exception:
             pass
 
+    # --- Vendor fallback (v2.11.12b) --------------------------------------
+    # Real-world finding (Todd's Ryzen AI 5 430 laptop, 2026-07-02): the
+    # XDNA NPU enumerates as the GENERIC "NPU Compute Accelerator Device"
+    # — no 'AMD' anywhere in the friendly name — so _classify() left
+    # vendor=None/xdna=False and the UI would mislabel the toggle. When
+    # the device name doesn't identify the vendor, classify by CPU brand:
+    # an NPU inside a Ryzen AI machine is XDNA by definition.
+    if info["available"] and not info["vendor"]:
+        try:
+            cpu_name = _detect_cpu().get("name", "").lower()
+            if "ryzen" in cpu_name or "amd" in cpu_name:
+                info["vendor"] = "amd"
+                if "ryzen ai" in cpu_name:
+                    info["xdna"] = True
+            elif "intel" in cpu_name or "core ultra" in cpu_name:
+                info["vendor"] = "intel"
+        except Exception:
+            pass
+
     # --- Runtime: AMD Lemonade Server (NPU LLM serving) ------------------
-    lemonade = shutil.which("lemonade-server") or shutil.which("lemonade-server.exe")
-    if not lemonade and sys.platform == "win32":
-        local = os.environ.get("LOCALAPPDATA", "")
-        for cand in [
-            os.path.join(local, "lemonade_server", "bin", "lemonade-server.exe"),
-            os.path.join(local, "Programs", "lemonade_server", "bin", "lemonade-server.exe"),
-        ]:
-            if local and os.path.exists(cand):
-                lemonade = cand
-                break
+    lemonade = find_lemonade_server()
     if lemonade:
         info["lemonade"] = True
         info["lemonade_path"] = lemonade
+
+    # v2.11.12b: even if the exe isn't in a known location, a Lemonade
+    # server LIVE on the configured NPU port counts as runtime-present
+    # (the user may have installed it anywhere, or run it by hand).
+    if not info["lemonade"]:
+        try:
+            import urllib.request
+            port = 11438
+            try:
+                from config import PORT_NPU_LLM
+                port = PORT_NPU_LLM
+            except Exception:
+                pass
+            req = urllib.request.Request(
+                f"http://127.0.0.1:{port}/v1/models", method="GET")
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.status == 200:
+                    info["lemonade"] = True
+                    info["lemonade_path"] = f"live on port {port}"
+        except Exception:
+            pass
 
     # --- Runtime: onnxruntime VitisAI EP (Ryzen AI SDK) -------------------
     try:

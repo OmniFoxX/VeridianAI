@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "d1b7033697e642bcb1888abc5cc36076",
-    "built_utc": "2026-07-02T19:22:23.587274+00:00",
+    "build_id": "90d4f24c6aee49debf89c569564d130b",
+    "built_utc": "2026-07-03T03:28:25.551786+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1218,7 +1218,7 @@
       "backend/craiid/context_fatigue_detector.py": "0c283f18cd2e30f9780acc506e35a6b20db8781e545e36e54bdee9862b2c1866",
       "backend/craiid/coordinator_signal.py": "d6daa1f8df265464979d2a8272057b514ce828d5004a09da6f28effe7d157af7",
       "backend/craiid/craiid_archivist_compression_integration.py": "04b71ef77dceaf3d5ce2e50fc4d9616d50f22e4db96cf1dc0c9e7e4c624f146d",
-      "backend/craiid/craiid_author.py": "b8b0ddb2a30e38a0edf2fa4368c24fc4217c17552302960558fd45760ccf104f",
+      "backend/craiid/craiid_author.py": "56802a56862e9a7566013b3dd7c885b0e1b2a0ebac45257c34d53e7b6e37bc46",
       "backend/craiid/craiid_author_compression_integration.py": "f98ffaa5063155f7eec8d175e9689cc5764a3d9e9011685147d799a0cdcf1c70",
       "backend/craiid/craiid_compression_core_v3.py": "64e3f3abe1b8ea8a2b16e96d1775a51a2095f77104fed60ac3709145a3d6e533",
       "backend/craiid/craiid_compression_validation_v4.py": "509f09080878f10a1af9e2ee5e6b1f61b22815664a52fb30c1a9cced399d7105",
@@ -1234,7 +1234,7 @@
       "backend/expression_engine.py": "33364b9d2d2c8cda432db5187769c5c83041d6c9c3d00198cd096e08714d3fc8",
       "backend/fatigue_injector.py": "daf279b189cf83927c139501b261448239a337dec9578ef0915d3ffd2244765c",
       "backend/handoff_guard.py": "d342c78cac7f28a4d10a6102e10b6932a5acce71ff62bc257ebd90011632fef3",
-      "backend/hw_utils.py": "b719ac9c7931342ed35e2ec3cd36bceb04f71df77aed0414715e840c989489ed",
+      "backend/hw_utils.py": "2fdc6a76c0d2f08f7d6445825f964fbb45dce8cc5870e80e9f1f2a2b1613e946",
       "backend/infer_plm_daemon_v2.py": "ee98e5af50ba14da3424ae2b565490b49cdf8534b3a3d82903138c8e35f9fa3d",
       "backend/ip_access.py": "12debb9f805a22594cf6374e7133e3e5b085255be6cb2451d44cf06812950120",
       "backend/ipc_bridge.py": "2a82afbe8098ca13749724ca6ff6aa7b2e08cd5b18b2928a4f0647ed1b8cde31",
@@ -1292,7 +1292,7 @@
       "backend/test_skill_store.py": "8a52ca7974d1ff438802874f9fe73b71ac41b9d1dd52fc93f5b2338ec715d426",
       "backend/test_skill_trust.py": "f3da7de5e2795bfd872a4cd1e14163c42c4fd631e5bbe723dce0e8af0409da82",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
-      "backend/tier_launcher.py": "9df6caf524fecd0dc8618149e97c9f1139814fc219a5f8fdb493b55490f6bce8",
+      "backend/tier_launcher.py": "90069b79c0506a2e4e09dae25ec56b45e0f170d7ac31ccf55fd977060154380e",
       "backend/tier_lifecycle.py": "45b7a774fff42b4913a58e7c376e0216fd44af978eaab0cb717893df9a4c84d1",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
       "backend/train_plm_daemon_v2.py": "31965e5a27009003787cc7de1a82efdcbd0814c24d251223fb714a5b90d9feda",
@@ -1342,11 +1342,11 @@
       "README/SageAetherNets_Win_FirewallSetup/setup_firewall.ps1": "48539e3d3d39e93d5318e21d1b8a6c1a36cc5817524423e08fa2f5edfbbac409",
       "rotate_api_key.bat": "93460b11635d3c7598f84343f4feea3f40ae5d2ba6e0709d2d4f5efb3e14fcfb",
       "rotate_api_key.py": "03a860a3cced31098722522c7f20210391e93b1232fb6f16df2c1eed12ac1131",
-      "start.bat": "5de8bdeb91c363229ccd10a9c197c7b486e2b2d0d1595f75166fc0376af0c857",
+      "start.bat": "89e039f859a4c457e8a9998e4cc59b26343b7b10578bfc5364d5cda87b368087",
       "start.py": "e842e1562750b40baae16ec6a2e09d3885f9bd65b4d777ee5a80dfb1ea6ed2b4",
       "tools/aiq_nudge_send.py": "45179b149e0860b5b76e2a436509fb1011b22cdd0c94dbd7707b8f9a0c288946"
     }
   },
   "algo": "ed25519",
-  "signature_b64": "uMtmp0GKL26Ob0qDHjKNHZtDl039s/CYvL7ugkBigR1M6QadSC+p7VvEuI/EL+P80/FirQ2U+2bUHtMef2gTBg=="
+  "signature_b64": "FXJNYwU2PZ+SkAaT3x3YIlZYTwW4XpBnoGymECLjuxHGskBqN6EvQWxXYTbfqwi4Fi2WDkribu8t+cCnbLeGAg=="
 }

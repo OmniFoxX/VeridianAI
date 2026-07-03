@@ -28,8 +28,8 @@ INVOCATION:
   Or directly for testing:
     python craiid_author.py --test
 
-VERSION: 2.3.1 (2026-06-06)
-PHASE:   1 of 2 (VLTS stub present, compression import ready, not wired)
+VERSION: 2.3.2 (2026-07-02)
+PHASE:   2 of 2 (VLTS decompression LIVE — see _load_vlts; header was stale)
 
 CHANGES FROM 2.3.0:
   - chat_memory split into tail (verbatim) + history (Journalist-scored)
@@ -323,17 +323,30 @@ def _load_archives(
 
 def _load_vlts() -> Tuple[Optional[List], str]:
     """
-    VLTS loader — Phase 1 stub, Phase 2 ready.
+    VLTS loader — Phase 2, FULLY WIRED (decompression is live).
 
-    Phase 1: detects directory and compression key presence,
-             logs status, returns None with descriptive status string.
+    v2.11.12 docstring fix (2026-07-02): this docstring previously still
+    said "Phase 1 stub ... uncomment the decompression block below",
+    which was stale — the #69 Phase 2 code below has been active for a
+    while. The stale text caused a Sage review to conclude decompression
+    was stubbed and to propose a "fix" (globbing for timestamped
+    craiid_compression_key_*.json) that would have broken the working
+    pairing. The REAL contract, verified against the Archivist worker:
 
-    Phase 2 wiring (when vlts_archives contain real data):
-      - Uncomment the decompression block below
-      - Remove the early return
-      - Ensure craiid_compression_core_v3.py is in the Python path
+      writer (archivist_compression_worker.compress_archives_to_vlts):
+        key    -> vlts_archives/compression_key.json      (fixed name)
+        chunks -> vlts_archives/chunk_NNNN.json           (encrypted at rest)
+      reader (this function):
+        key    -> compression_key.json                    (line below — matches)
+        chunks -> glob("chunk_*.json"), atrest-decrypted, then
+                  VLTSCompressor.decompress_text per row.
 
-    Never raises.
+    (The timestamped craiid_compression_key_<ts>.json files are a
+    DIFFERENT artifact: the worker's OAgentD key-storage task, not the
+    VLTS store key. Do not point this loader at them.)
+
+    Early returns below are graceful-degradation paths (no dir / no key /
+    no compression module), NOT stubs. Never raises.
     """
     if not _VLTS_DIR.exists():
         return None, "stub_not_present"
@@ -357,7 +370,7 @@ def _load_vlts() -> Tuple[Optional[List], str]:
     # Robust: a missing key/chunk, a bad chunk, or a failed decompress is
     # skipped, never raised; empty store -> (None, "empty").
     try:
-        max_vlts = 40
+        max_vlts = 120000
         compressor = VLTSCompressor(vlts_dir=str(_VLTS_DIR))
         if not compressor.load_key(str(key_path)):
             return None, "key_load_failed"

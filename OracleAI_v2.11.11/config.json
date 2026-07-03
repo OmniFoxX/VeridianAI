@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "ui": {
-    "theme": "dark",
+    "theme": "light",
     "haptic": false
   },
   "electron": {
@@ -26,21 +26,22 @@
       "ollama_oracle": 11434,
       "llama_sage": 11435,
       "llama_daemon": 11436,
-      "llama_embed": 11437
+      "llama_embed": 11437,
+      "npu_llm": 11438
     },
     "ollama_url": "http://localhost:11434",
-    "host": "0.0.0.0",
-    "node_server_enabled": false,
-    "node_name": "",
+    "host": "127.0.0.1",
+    "node_server_enabled": true,
+    "node_name": "RyzenFoxIX",
     "remote_node_url": "",
     "offload_enabled": false,
     "multiuser_enabled": true,
-    "skill_share_enabled": false,
+    "skill_share_enabled": true,
     "relay_server_enabled": false,
     "relay_source_enabled": false,
     "relay_url": "",
     "relay_peer_id": "",
-    "comfyui_autostart_enabled": false,
+    "comfyui_autostart_enabled": true,
     "comfyui_launch_cmd": ""
   },
   "paths": {
@@ -50,17 +51,23 @@
   },
   "inference": {
     "backend": "ollama",
-    "default_model": "",
+    "default_model": "nemotron-3-super:120b",
     "secondary_model": "",
     "tertiary_model": "",
     "max_images_per_turn": 5,
     "build_battle_rounds": 1,
     "auto_route": true,
     "gpu_acceleration": true,
+    "cuda_enabled": true,
+    "rocm_enabled": true,
+    "vulkan_enabled": true,
+    "openvino_enabled": true,
+    "xe_cores_enabled": true,
+    "npu_enabled": true,
     "n_gpu_layers": -1,
     "temperature": 0.5,
     "max_tokens": -1,
-    "n_ctx": 262144
+    "n_ctx": 131072
   },
   "context_sizing": {
     "hard_cap_ctx": false,

@@ -192,6 +192,17 @@ if "!PYTHON_CMD!"=="" (
 )
 echo [OracleAI] Python: !PYTHON_CMD!
 
+:: ============================================================================
+:: v2.11.12 zombie-process fix: reap anything a previous session left behind
+:: BEFORE launching tiers. Kills only processes recorded in .oracle_pids.json
+:: (identity-verified) plus stack processes running from backend\. A user's
+:: own Ollama is never touched. This is what makes restart work on try #1
+:: instead of try #3-5 — stale port-holders on 11434/11435/11436 die here.
+:: ============================================================================
+set "OAI_ROOT=%~dp0"
+echo [OracleAI] Cleaning up any processes left from a previous session ...
+!PYTHON_CMD! "%~dp0backend\shutdown_cleanup.py" --quiet
+
 :: Read n_ctx + ports + backend from config.json via _tier_config_reader.py.
 :: Output: SAGE_CTX,DAEMON_CTX,APP_PORT,OLLAMA_ORACLE_PORT,LLAMA_SAGE_PORT,LLAMA_DAEMON_PORT,INFERENCE_BACKEND
 :: If the helper fails for any reason, the for /f loop body simply does
