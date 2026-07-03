@@ -279,19 +279,49 @@ echo.
 echo [OracleAI] Waiting for tiers to come online (max %PROBE_TIMEOUT_SEC%s each)...
 echo.
 
+:: v2.11.12c: tier probe failures are FATAL only in interactive mode.
+:: In Electron mode (ELECTRON_MODE=1) a slow tier no longer aborts the
+:: whole launch. Rationale (Todd's Ryzen AI laptop, 2026-07-02): on a
+:: cold boot, reading the 6 GB Sage model off disk on a low-power chip
+:: can exceed the probe window; the old `goto fail_*` then aborted
+:: BEFORE FastAPI ever launched, so Electron waited forever on a backend
+:: that was never started ("first start fails, immediate second start
+:: works" — the second try hit a warm file cache). Now we log a warning
+:: and continue: the tier keeps loading in the background, llama-server/
+:: Ollama answer when ready, and model_manager routes to whatever tiers
+:: are up. Interactive (double-click) runs keep the loud fail+pause.
+
 :: Oracle uses Ollama's /api/tags endpoint
 call :probe_tier "Oracle" !OLLAMA_ORACLE_PORT! "http://127.0.0.1:!OLLAMA_ORACLE_PORT!/api/tags"
-if !errorlevel! neq 0 goto fail_oracle
+if !errorlevel! neq 0 (
+    if !ELECTRON_MODE!==1 (
+        echo [OracleAI] WARNING: Oracle tier not ready yet -- continuing. It may finish warming in the background.
+    ) else (
+        goto fail_oracle
+    )
+)
 
 :: Sage uses llama-server's OpenAI-compatible /v1/models endpoint.
 :: v2.2 corrected (2026-05-29): unconditional probe -- Sage tier always launches.
 call :probe_tier "Sage  " !LLAMA_SAGE_PORT! "http://127.0.0.1:!LLAMA_SAGE_PORT!/v1/models"
-if !errorlevel! neq 0 goto fail_sage
+if !errorlevel! neq 0 (
+    if !ELECTRON_MODE!==1 (
+        echo [OracleAI] WARNING: Sage tier not ready yet -- continuing. It may finish warming in the background.
+    ) else (
+        goto fail_sage
+    )
+)
 
 :: Daemon probe — only if daemon model was found and tier was launched.
 if !DAEMON_MODEL_PRESENT!==1 (
     call :probe_tier "Daemon" !LLAMA_DAEMON_PORT! "http://127.0.0.1:!LLAMA_DAEMON_PORT!/v1/models"
-    if !errorlevel! neq 0 goto fail_daemon
+    if !errorlevel! neq 0 (
+        if !ELECTRON_MODE!==1 (
+            echo [OracleAI] WARNING: Daemon tier not ready yet -- continuing. It may finish warming in the background.
+        ) else (
+            goto fail_daemon
+        )
+    )
 )
 
 echo.
