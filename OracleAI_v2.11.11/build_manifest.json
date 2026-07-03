@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "90d4f24c6aee49debf89c569564d130b",
-    "built_utc": "2026-07-03T03:28:25.551786+00:00",
+    "build_id": "02d6b20c060b4aa5b9460377b4914ecd",
+    "built_utc": "2026-07-03T04:51:41.080403+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1234,7 +1234,7 @@
       "backend/expression_engine.py": "33364b9d2d2c8cda432db5187769c5c83041d6c9c3d00198cd096e08714d3fc8",
       "backend/fatigue_injector.py": "daf279b189cf83927c139501b261448239a337dec9578ef0915d3ffd2244765c",
       "backend/handoff_guard.py": "d342c78cac7f28a4d10a6102e10b6932a5acce71ff62bc257ebd90011632fef3",
-      "backend/hw_utils.py": "2fdc6a76c0d2f08f7d6445825f964fbb45dce8cc5870e80e9f1f2a2b1613e946",
+      "backend/hw_utils.py": "bd78a1c37b2f29cd96bfb8edabcb180f7a7cef6e2ba2372c36bc3c401eb5d3fb",
       "backend/infer_plm_daemon_v2.py": "ee98e5af50ba14da3424ae2b565490b49cdf8534b3a3d82903138c8e35f9fa3d",
       "backend/ip_access.py": "12debb9f805a22594cf6374e7133e3e5b085255be6cb2451d44cf06812950120",
       "backend/ipc_bridge.py": "2a82afbe8098ca13749724ca6ff6aa7b2e08cd5b18b2928a4f0647ed1b8cde31",
@@ -1342,11 +1342,11 @@
       "README/SageAetherNets_Win_FirewallSetup/setup_firewall.ps1": "48539e3d3d39e93d5318e21d1b8a6c1a36cc5817524423e08fa2f5edfbbac409",
       "rotate_api_key.bat": "93460b11635d3c7598f84343f4feea3f40ae5d2ba6e0709d2d4f5efb3e14fcfb",
       "rotate_api_key.py": "03a860a3cced31098722522c7f20210391e93b1232fb6f16df2c1eed12ac1131",
-      "start.bat": "89e039f859a4c457e8a9998e4cc59b26343b7b10578bfc5364d5cda87b368087",
+      "start.bat": "e1dd31e0dae89781751ad37e0631abbc39cd6ce4aa57f912849081fdc3387609",
       "start.py": "e842e1562750b40baae16ec6a2e09d3885f9bd65b4d777ee5a80dfb1ea6ed2b4",
       "tools/aiq_nudge_send.py": "45179b149e0860b5b76e2a436509fb1011b22cdd0c94dbd7707b8f9a0c288946"
     }
   },
   "algo": "ed25519",
-  "signature_b64": "FXJNYwU2PZ+SkAaT3x3YIlZYTwW4XpBnoGymECLjuxHGskBqN6EvQWxXYTbfqwi4Fi2WDkribu8t+cCnbLeGAg=="
+  "signature_b64": "nNZlKlvKpmHtEIiW76jdVtKhuA4L6rCF0n81TEXuykqG/g4hdLT6z190UNrtMh+EtO+KWMMxQrLyJKm0deJBCg=="
 }
