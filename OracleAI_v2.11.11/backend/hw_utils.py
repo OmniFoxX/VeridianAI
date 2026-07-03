@@ -186,7 +186,16 @@ def _detect_nvidia() -> Dict[str, Any]:
 
 
 def _detect_amd() -> Dict[str, Any]:
-    info = {"available": False, "gpus": [], "rocm_version": None, "error": None}
+    """v2.11.12d: gained a Windows detection path. Previously this only
+    probed ROCm tools (Linux-centric) and `lsmod`, so an AMD GPU on
+    Windows — like the Radeon 840M iGPU in Todd's Ryzen AI laptop —
+    showed '✗ Not found' even though Windows saw it fine. Now mirrors
+    the Intel detector: Win32_VideoController by name. `rocm_available`
+    is reported SEPARATELY from `available` so the UI only offers a
+    ROCm toggle when the ROCm runtime actually exists (it never does on
+    Windows client machines; GPU presence alone shouldn't imply it)."""
+    info = {"available": False, "gpus": [], "rocm_version": None,
+            "rocm_available": False, "driver_info": None, "error": None}
     tool = shutil.which("rocm-smi") or shutil.which("rocminfo")
     if not tool:
         for p in ["/opt/rocm/bin/rocm-smi", "/opt/rocm/bin/rocminfo"]:
@@ -195,7 +204,9 @@ def _detect_amd() -> Dict[str, Any]:
         try:
             args = [tool] + (["--showproductname"] if "rocm-smi" in tool else [])
             r = subprocess.run(args, capture_output=True, text=True, timeout=10)
-            if r.returncode == 0: info["available"] = True
+            if r.returncode == 0:
+                info["available"] = True
+                info["rocm_available"] = True
         except Exception as e:
             info["error"] = str(e)
     if not info["available"] and sys.platform.startswith("linux"):
@@ -204,6 +215,39 @@ def _detect_amd() -> Dict[str, Any]:
             if "amdgpu" in r.stdout: info["available"] = True
         except Exception:
             pass
+
+    # Windows: enumerate AMD/Radeon video controllers (dGPU or iGPU).
+    if sys.platform == "win32" and not info["gpus"]:
+        names = []
+        try:
+            r = subprocess.run(
+                ["powershell", "-NoProfile", "-Command",
+                 "Get-CimInstance Win32_VideoController | "
+                 "Where-Object { $_.Name -match 'AMD|Radeon' } | "
+                 "Select-Object -ExpandProperty Name"],
+                capture_output=True, text=True, timeout=10,
+                creationflags=0x08000000)
+            for line in r.stdout.strip().splitlines():
+                n = line.strip()
+                if n: names.append(n)
+        except Exception:
+            pass
+        if names:
+            info["available"] = True
+            info["gpus"] = [{"name": n} for n in names]
+            try:
+                r = subprocess.run(
+                    ["powershell", "-NoProfile", "-Command",
+                     "Get-CimInstance Win32_VideoController | "
+                     "Where-Object { $_.Name -match 'AMD|Radeon' } | "
+                     "Select-Object -First 1 -ExpandProperty DriverVersion"],
+                    capture_output=True, text=True, timeout=10,
+                    creationflags=0x08000000)
+                dv = r.stdout.strip().splitlines()
+                if dv and dv[0].strip(): info["driver_info"] = dv[0].strip()
+            except Exception:
+                pass
+
     vf = "/opt/rocm/.info/version"
     if os.path.exists(vf):
         try:

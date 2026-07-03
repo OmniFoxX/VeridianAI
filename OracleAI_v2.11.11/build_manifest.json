@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "02d6b20c060b4aa5b9460377b4914ecd",
-    "built_utc": "2026-07-03T04:51:41.080403+00:00",
+    "build_id": "0b01257ddd654996acee613f86df19ad",
+    "built_utc": "2026-07-03T07:56:42.269705+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1234,7 +1234,7 @@
       "backend/expression_engine.py": "33364b9d2d2c8cda432db5187769c5c83041d6c9c3d00198cd096e08714d3fc8",
       "backend/fatigue_injector.py": "daf279b189cf83927c139501b261448239a337dec9578ef0915d3ffd2244765c",
       "backend/handoff_guard.py": "d342c78cac7f28a4d10a6102e10b6932a5acce71ff62bc257ebd90011632fef3",
-      "backend/hw_utils.py": "bd78a1c37b2f29cd96bfb8edabcb180f7a7cef6e2ba2372c36bc3c401eb5d3fb",
+      "backend/hw_utils.py": "afae624ed1a5d78ad050afff4f0d0cd2f95ed34730bee0f9cdc72dc72a2d80bc",
       "backend/infer_plm_daemon_v2.py": "ee98e5af50ba14da3424ae2b565490b49cdf8534b3a3d82903138c8e35f9fa3d",
       "backend/ip_access.py": "12debb9f805a22594cf6374e7133e3e5b085255be6cb2451d44cf06812950120",
       "backend/ipc_bridge.py": "2a82afbe8098ca13749724ca6ff6aa7b2e08cd5b18b2928a4f0647ed1b8cde31",
@@ -1247,7 +1247,7 @@
       "backend/migrate_at_rest.py": "a08e422bd1c583e9bed1f722e24bd86c8db49e3df76033cce05920f497124621",
       "backend/migrate_config.py": "af0ed9a8f78b34d61dcf9d5201742337e64b61dcaf2f298106b7fa83bcebd08c",
       "backend/migrate_v216_timestamps.py": "5c0aa7bd1da97c186581b92ca88db68c7002f53f5f20260a5bfeb0ee10307c51",
-      "backend/model_manager.py": "24e338a39070d26316327387e0707f51add4c6beec7eca8e285f211887cf3124",
+      "backend/model_manager.py": "5b745692d384c451c917aaf4f6791f0f0d829ba35d65a6fa68a896980a32a5e0",
       "backend/node_client.py": "8cce7b9eb9020f8dbb9600b2222d1755930aa19630023c8c044a6ec3c69d225c",
       "backend/node_server.py": "12bb177b0c2cea54334d3f4c2342534c4b4bdd549490157c1e779f336fa2fc55",
       "backend/node_trust.py": "53d74033401fa0a318d5e18faa2ae63818b75f453a7176c389f498e78dcb2731",
@@ -1348,5 +1348,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "nNZlKlvKpmHtEIiW76jdVtKhuA4L6rCF0n81TEXuykqG/g4hdLT6z190UNrtMh+EtO+KWMMxQrLyJKm0deJBCg=="
+  "signature_b64": "5+hNtY9TDPXtQsOUgS6ulZp2f5zCNzaK97qQIjWE38sMIjIf35QrUTQQO6BEdkvR0caQaSjr5yV1h8zw6YS8CQ=="
 }

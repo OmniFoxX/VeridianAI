@@ -143,6 +143,12 @@ class ModelManager:
         # Populated lazily by list_models(). generate() consults this to
         # route each request without re-querying every tier.
         self._routing: Dict[str, Tuple[str, str, str, str]] = {}
+        # v2.11.12d: display_id -> raw server id for OpenAI-protocol tiers.
+        # llama-server ids are file PATHS (we display the stem; the server
+        # ignores the model field, so the stem was harmless). Lemonade/NPU
+        # ids are often 'org/model' — the stem chops the org and the server
+        # 404s "model not found". Generation must send the RAW id.
+        self._openai_real_ids: Dict[str, str] = {}
         # v2.1.7: per-model trained-context cache. Populated on first
         # call to _get_trained_ctx for a model, so /api/show is queried
         # once and reused for the lifetime of the process.
@@ -469,6 +475,9 @@ class ModelManager:
                 continue
             stem = Path(raw_id).stem if raw_id else raw_id
             display_id = stem or raw_id
+            # v2.11.12d: remember the raw id so _gen_llama_server can send
+            # what the server actually calls the model (Lemonade needs it).
+            self._openai_real_ids[display_id] = raw_id
             out.append({
                 "id":      display_id,
                 "name":    display_id,
@@ -887,8 +896,12 @@ class ModelManager:
             if isinstance(m, dict) else m
             for m in messages
         ]
+        # v2.11.12d: send the server's REAL model id, not the display stem.
+        # Critical for the Lemonade/NPU tier ('org/model' ids); a no-op for
+        # llama-server, which ignores the model field.
+        _real_id = self._openai_real_ids.get(model_id, model_id)
         payload = {
-            "model":       model_id,
+            "model":       _real_id,
             "messages":    messages,
             "stream":      True,
             "temperature": options.get("temperature",
@@ -942,14 +955,23 @@ class ModelManager:
                         yield (f"[{tier_label} llama-server error "
                                f"{resp.status_code}: {body[:120]}]")
                         return
+                    # v2.11.12d: track whether the SSE stream produced any
+                    # tokens, and buffer non-SSE lines. Some OpenAI-compat
+                    # servers (observed with Lemonade/NPU) answer certain
+                    # requests with ONE plain JSON body instead of SSE —
+                    # the old parser skipped every non-"data:" line and the
+                    # turn ended instantly with an empty reply.
+                    _yielded = False
+                    _raw_lines = []
                     async for line in resp.aiter_lines():
                         if not line:
                             continue
                         if not line.startswith("data:"):
+                            _raw_lines.append(line)
                             continue
                         data_str = line[5:].lstrip()
                         if data_str == "[DONE]":
-                            return
+                            break
                         try:
                             chunk = json.loads(data_str)
                         except json.JSONDecodeError:
@@ -962,11 +984,37 @@ class ModelManager:
                             continue
                         choice = choices[0]
                         delta = choice.get("delta") or {}
-                        content = delta.get("content", "")
+                        # 'content' is standard; 'text' covers legacy /
+                        # completion-style deltas some servers emit.
+                        content = delta.get("content") or delta.get("text") \
+                            or choice.get("text") or ""
                         if content:
+                            _yielded = True
                             yield content
                         if choice.get("finish_reason") is not None:
-                            return
+                            break
+                    if _yielded:
+                        return
+                    # Fallback: non-streamed OpenAI JSON body.
+                    if _raw_lines:
+                        try:
+                            doc = json.loads("\n".join(_raw_lines))
+                            choices = doc.get("choices") or []
+                            if choices:
+                                msg = choices[0].get("message") or {}
+                                text = (msg.get("content")
+                                        or choices[0].get("text") or "")
+                                if text:
+                                    yield text
+                                    return
+                        except Exception:
+                            pass
+                        print(
+                            f"[LLAMA-SERVER WARN] tier={tier_label} "
+                            f"model={model_id} returned no stream tokens; "
+                            f"body head: {' '.join(_raw_lines)[:200]!r}"
+                        )
+                    return
 
         for attempt in range(max_attempts):
             try:

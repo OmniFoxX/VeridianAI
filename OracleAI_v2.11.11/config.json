@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
   "ui": {
-    "theme": "light",
+    "theme": "dark",
     "haptic": false
   },
   "electron": {
@@ -31,17 +31,17 @@
     },
     "ollama_url": "http://localhost:11434",
     "host": "127.0.0.1",
-    "node_server_enabled": true,
-    "node_name": "RyzenFoxIX",
+    "node_server_enabled": false,
+    "node_name": "",
     "remote_node_url": "",
     "offload_enabled": false,
     "multiuser_enabled": true,
-    "skill_share_enabled": true,
+    "skill_share_enabled": false,
     "relay_server_enabled": false,
     "relay_source_enabled": false,
     "relay_url": "",
     "relay_peer_id": "",
-    "comfyui_autostart_enabled": true,
+    "comfyui_autostart_enabled": false,
     "comfyui_launch_cmd": ""
   },
   "paths": {
@@ -51,7 +51,7 @@
   },
   "inference": {
     "backend": "ollama",
-    "default_model": "nemotron-3-super:120b",
+    "default_model": "",
     "secondary_model": "",
     "tertiary_model": "",
     "max_images_per_turn": 5,
