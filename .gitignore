@@ -18,6 +18,7 @@ sage_data/downloads/
 *.key
 *.fernet
 .env
+.pem
 
 # OracleAI specific
 sage_plm.pt
