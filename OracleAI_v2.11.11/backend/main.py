@@ -930,43 +930,65 @@ try:
 
     try:
         from socials_config import SocialsConfig
-        socials_config = SocialsConfig(DATA_DIR / "socials_config.json")
     except Exception as _scfg_err:
         print(f"[SOCIALS] config store unavailable: {_scfg_err}")
-        socials_config = None
+        SocialsConfig = None
 
-    socials_router = SageChannelRouter(
-        reply_fn=_socials_reply,
-        wake_word=config.get("voice_wake_word", "Sage"),
-        store=socials_config,
-    )
+    # --- v2.11.14: PER-PROFILE socials -------------------------------------
+    # Each profile gets its OWN router: own connector instances, own
+    # credential store (owner: sage_data/socials_config.json — unchanged;
+    # child: sage_data/users/<ns>/socials_config.json), and own in-memory
+    # message feed — so person A can never read person B's socials, and the
+    # per-channel threads stay separated per profile exactly as they already
+    # are per platform. Child routers are built lazily on first use.
+    #
+    # BitChat is the one exception: it drives THIS machine's BLE radio, and
+    # one radio = one bridge, so it registers on the OWNER router only.
+    def _socials_store_path(ns=None):
+        return (DATA_DIR / "users" / str(ns) / "socials_config.json") if ns \
+            else (DATA_DIR / "socials_config.json")
 
-    def _socials_seed(_name):
-        try:
-            return (socials_config.get(_name) if socials_config else {}) or {}
-        except Exception:
-            return {}
-    try:
-        from bitchat_bridge import BitChatBridge
-        socials_router.register(BitChatBridge(_socials_seed("bitchat")))
-    except Exception as _bc_err:
-        print(f"[SOCIALS] BitChat adapter not registered: {_bc_err}")
-    try:
-        socials_router.register(DiscordAdapter(_socials_seed("discord")))
-    except Exception as _dc_err:
-        print(f"[SOCIALS] Discord adapter not registered: {_dc_err}")
-    try:
-        socials_router.register(MastodonAdapter(_socials_seed("mastodon")))
-    except Exception as _ma_err:
-        print(f"[SOCIALS] Mastodon adapter not registered: {_ma_err}")
-    try:
-        socials_router.register(BlueSkyAdapter(_socials_seed("bluesky")))
-    except Exception as _bs_err:
-        print(f"[SOCIALS] BlueSky adapter not registered: {_bs_err}")
+    def _build_socials_router(ns=None):
+        store = None
+        if SocialsConfig is not None:
+            try:
+                store = SocialsConfig(_socials_store_path(ns))
+            except Exception as _e:
+                print(f"[SOCIALS] store unavailable (ns={ns}): {_e}")
+        router = SageChannelRouter(
+            reply_fn=_socials_reply,
+            wake_word=config.get("voice_wake_word", "Sage"),
+            store=store,
+        )
+
+        def _seed(_name):
+            try:
+                return (store.get(_name) if store else {}) or {}
+            except Exception:
+                return {}
+
+        if ns is None:
+            try:
+                from bitchat_bridge import BitChatBridge
+                router.register(BitChatBridge(_seed("bitchat")))
+            except Exception as _bc_err:
+                print(f"[SOCIALS] BitChat adapter not registered: {_bc_err}")
+        for _cls, _name in ((DiscordAdapter, "discord"),
+                            (MastodonAdapter, "mastodon"),
+                            (BlueSkyAdapter, "bluesky")):
+            try:
+                router.register(_cls(_seed(_name)))
+            except Exception as _a_err:
+                print(f"[SOCIALS] {_name} adapter not registered (ns={ns}): {_a_err}")
+        return router
+
+    socials_router = _build_socials_router(None)   # owner / single-user
+    _socials_routers = {}                          # ns -> child router (lazy)
     print(f"[SOCIALS] channels: {socials_router.names()}")
 except Exception as _soc_err:            # pragma: no cover
     print(f"[SOCIALS] disabled: {_soc_err}")
     socials_router = None
+    _socials_routers = {}
 
 
 @app.middleware("http")
@@ -1181,24 +1203,37 @@ async def api_voice_poll(request: Request):
 
 
 # --- Socials (messaging channels: BitChat + Discord) -- localhost-only ---------
-# v2.11.13: additionally OWNER-ONLY when multi-profile is on. The connectors
-# and their credentials (Discord bot token, Bluesky app password, ...) belong
-# to the owner; child profiles must not see, use, or reconfigure them.
-# (True per-user socials accounts would need per-user connector instances —
-# a future phase if wanted.)
-def _socials_owner_guard(request: Request):
-    if not _is_owner(request):
-        raise HTTPException(403, "Socials are managed by the owner profile")
+# v2.11.14: PER-PROFILE. v2.11.13's owner-only guard is gone — every profile
+# now gets its own router/connectors/credentials/feed via
+# _socials_router_for(request). Isolation is per profile: person A can never
+# read person B's socials. BitChat (this machine's BLE radio) stays with the
+# owner profile — one radio, one bridge.
+def _socials_router_for(request: Request):
+    """The caller's per-profile socials router. Owner / single-user -> the
+    boot router; signed-in child -> lazily built + cached per namespace.
+    None when socials are disabled entirely."""
+    if socials_router is None:
+        return None
+    ns = _session_ns(request)
+    if not ns:
+        return socials_router
+    router = _socials_routers.get(ns)
+    if router is None:
+        router = _build_socials_router(ns)
+        _socials_routers[ns] = router
+        print(f"[SOCIALS] per-profile router built for ns={ns} "
+              f"(channels: {router.names()})")
+    return router
 
 
 @app.get("/api/socials/status")
 async def api_socials_status(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         return {"available": False}
-    return {"available": True, **socials_router.status()}
+    return {"available": True, **router.status()}
 
 
 @app.post("/api/socials/connect")
@@ -1206,10 +1241,15 @@ async def api_socials_connect(request: Request, payload: dict):
     """Connect (default) or disconnect a channel; starts/stops its listen loop."""
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
+    # BitChat = this machine's BLE radio; owner profile only (child routers
+    # don't even register it, but fail loudly rather than silently).
+    if name == "bitchat" and _session_ns(request) is not None:
+        raise HTTPException(403, "BitChat uses this machine's radio and is "
+                                 "available on the owner profile only")
     if payload.get("connect", True):
         if name == "bitchat":
             # Make sure the BLE gateway process is actually running first.
@@ -1217,31 +1257,31 @@ async def api_socials_connect(request: Request, payload: dict):
                 await tier_lifecycle.ensure_bitchat_gateway()
             except Exception as exc:
                 print(f"[socials] bitchat gateway start failed: {exc}")
-        ok = await socials_router.connect(name)
+        ok = await router.connect(name)
     else:
-        ok = await socials_router.disconnect(name)
+        ok = await router.disconnect(name)
         if name == "bitchat":
             # 'Off' means off: stop the gateway so BLE scanning fully ceases.
             try:
                 await tier_lifecycle.stop_bitchat_gateway()
             except Exception as exc:
                 print(f"[socials] bitchat gateway stop failed: {exc}")
-    return {"ok": bool(ok), **socials_router.status()}
+    return {"ok": bool(ok), **router.status()}
 
 
 @app.post("/api/socials/send")
 async def api_socials_send(request: Request, payload: dict):
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
     text = (payload.get("text") or "").strip()
     room = (payload.get("room") or "general").strip()
     if not text:
         raise HTTPException(400, "empty message")
-    ok = await socials_router.send(name, text, channel=room)
+    ok = await router.send(name, text, channel=room)
     return {"ok": bool(ok)}
 
 
@@ -1249,10 +1289,10 @@ async def api_socials_send(request: Request, payload: dict):
 async def api_socials_recent(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         return {"messages": []}
-    return {"messages": socials_router.recent(limit=30)}
+    return {"messages": router.recent(limit=30)}
 
 
 @app.post("/api/socials/clear")
@@ -1262,16 +1302,16 @@ async def api_socials_clear(request: Request, payload: dict):
     only (nothing persisted, nothing shared across user profiles)."""
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         raise HTTPException(503, "socials unavailable")
     if payload.get("all"):
-        removed = socials_router.clear_recent(None)
+        removed = router.clear_recent(None)
         return {"ok": True, "removed": removed, "scope": "all"}
     name = (payload.get("channel") or "").strip().lower()
     if not name:
         raise HTTPException(400, "channel required (or pass all:true)")
-    removed = socials_router.clear_recent(name)
+    removed = router.clear_recent(name)
     return {"ok": True, "removed": removed, "scope": name}
 
 
@@ -1280,31 +1320,31 @@ async def api_socials_autoreply(request: Request, payload: dict):
     """Toggle opt-in wake-word auto-reply on connected channels (OFF by default)."""
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         raise HTTPException(503, "socials unavailable")
-    socials_router.set_auto_reply(bool(payload.get("enabled")))
-    return {"ok": True, "auto_reply": socials_router.auto_reply}
+    router.set_auto_reply(bool(payload.get("enabled")))
+    return {"ok": True, "auto_reply": router.auto_reply}
 
 
 @app.get("/api/socials/peers")
 async def api_socials_peers(request: Request, channel: str = ""):
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         return {"peers": []}
-    return {"peers": await socials_router.peers((channel or "").strip().lower())}
+    return {"peers": await router.peers((channel or "").strip().lower())}
 
 
 @app.get("/api/socials/config")
 async def api_socials_config_get(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         return {"config": {}}
-    return {"config": socials_router.config_snapshot()}
+    return {"config": router.config_snapshot()}
 
 
 @app.post("/api/socials/config")
@@ -1314,17 +1354,17 @@ async def api_socials_config_set(request: Request, payload: dict):
     Tokens are stored in sage_data and never returned (status shows only has_token)."""
     if not _is_local_client(request):
         raise HTTPException(404)
-    _socials_owner_guard(request)
-    if socials_router is None:
+    router = _socials_router_for(request)
+    if router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
     if not name:
         raise HTTPException(400, "channel required")
     if payload.get("clear"):
-        socials_router.clear_config(name, payload.get("keys"))
+        router.clear_config(name, payload.get("keys"))
     else:
-        socials_router.set_config(name, payload.get("settings") or {})
-    return {"ok": True, "config": socials_router.config_snapshot()}
+        router.set_config(name, payload.get("settings") or {})
+    return {"ok": True, "config": router.config_snapshot()}
     
     
 @app.get("/api/comfyui/setup-status")
