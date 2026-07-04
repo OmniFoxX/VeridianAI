@@ -99,7 +99,14 @@ set MODELS_DIR=%~dp0..\sage_data\models
 :: v2.2: model filenames are now env vars (still defaults, but no longer
 :: hidden in Python source). config.py reads SAGE_MODEL_FILE and
 :: DAEMON_MODEL_FILE to build its MODEL_SAGE / MODEL_DAEMON paths.
-set SAGE_MODEL_FILE=all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf
+:: v2.11.12e: SAGE_MODEL_FILE is now a DEFAULT CANDIDATE, not a requirement.
+:: Pre-set the env var to use a different gguf; if the file doesn't exist
+:: the Sage tier is simply skipped (see preflight below) — a fresh install
+:: needs NO specific model to start. The old behavior hard-aborted the
+:: entire launch when this exact file was missing, which (a) blocked fresh
+:: installs behind one arbitrary model and (b) name-dropped a third party
+:: (All Hands / OpenHands is their real project) as if it were required.
+if "%SAGE_MODEL_FILE%"=="" set SAGE_MODEL_FILE=all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf
 set DAEMON_MODEL_FILE=qwen2.5_coder_1.5b_base.gguf
 
 set SAGE_MODEL=%MODELS_DIR%\%SAGE_MODEL_FILE%
@@ -241,25 +248,25 @@ echo [OracleAI] Inference backend: !INFERENCE_BACKEND!
 :: intuitively create sage_data inside OracleAI_v2.7 (which would
 :: not be found AND would break Trinity separation -- see
 :: BEFORE_RUNNING.txt step 3 for the canonical layout).
+:: v2.11.12e: missing Sage model is NO LONGER FATAL. Mirror the daemon
+:: tier's graceful skip: warn, blank SAGE_MODEL so tier_launcher skips the
+:: tier, and continue the launch. Chat routes through the Oracle tier
+:: (Ollama) with whatever models the user actually has — no baked-in
+:: model requirement on a fresh install.
 if not exist "%SAGE_MODEL%" (
     echo.
-    echo [OracleAI] ERROR: Sage model not found.
+    echo [OracleAI] Sage model not found -- Sage tier will be SKIPPED.
+    echo    Looked for: %SAGE_MODEL_FILE%
+    echo    in:         %MODELS_DIR%
+    echo    OracleAI runs fine without it: chat routes through the
+    echo    Oracle tier ^(Ollama^). To enable the Sage tier later, put
+    echo    any .gguf in the models dir and set SAGE_MODEL_FILE to its
+    echo    filename ^(or use the default name above^), then restart.
     echo.
-    echo    Expected file: %SAGE_MODEL_FILE%
-    echo    Expected dir:  %MODELS_DIR%
-    echo.
-    echo    The sage_data folder lives ALONGSIDE the OracleAI_v2.7.2
-    echo    folder, NOT inside it. If your install is at:
-    echo        %~dp0
-    echo    then sage_data should be at:
-    echo        %~dp0..\sage_data\
-    echo    See BEFORE_RUNNING.txt step 3 for the canonical layout.
-    echo.
-    echo    To fix: pull a Sage model with Ollama, convert to .gguf
-    echo    if needed, and place it at the Expected dir above.
-    echo.
-    pause
-    exit /b 1
+    set SAGE_MODEL_PRESENT=0
+    set "SAGE_MODEL="
+) else (
+    set SAGE_MODEL_PRESENT=1
 )
 
 :: -- Tiers + daemons launch via tier_launcher.py so console VISIBILITY follows
@@ -302,14 +309,19 @@ if !errorlevel! neq 0 (
 )
 
 :: Sage uses llama-server's OpenAI-compatible /v1/models endpoint.
-:: v2.2 corrected (2026-05-29): unconditional probe -- Sage tier always launches.
-call :probe_tier "Sage  " !LLAMA_SAGE_PORT! "http://127.0.0.1:!LLAMA_SAGE_PORT!/v1/models"
-if !errorlevel! neq 0 (
-    if !ELECTRON_MODE!==1 (
-        echo [OracleAI] WARNING: Sage tier not ready yet -- continuing. It may finish warming in the background.
-    ) else (
-        goto fail_sage
+:: v2.11.12e: probe only when the tier was actually launched (model file
+:: present). A fresh install without a Sage gguf skips both launch+probe.
+if !SAGE_MODEL_PRESENT!==1 (
+    call :probe_tier "Sage  " !LLAMA_SAGE_PORT! "http://127.0.0.1:!LLAMA_SAGE_PORT!/v1/models"
+    if !errorlevel! neq 0 (
+        if !ELECTRON_MODE!==1 (
+            echo [OracleAI] WARNING: Sage tier not ready yet -- continuing. It may finish warming in the background.
+        ) else (
+            goto fail_sage
+        )
     )
+) else (
+    echo [OracleAI] Sage tier skipped ^(no model^) -- probe skipped.
 )
 
 :: Daemon probe — only if daemon model was found and tier was launched.

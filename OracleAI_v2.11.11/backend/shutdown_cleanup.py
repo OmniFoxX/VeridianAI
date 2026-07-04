@@ -130,15 +130,23 @@ def _pass1_registry() -> int:
             if argv0 and argv0 not in cmdline and str(ROOT).lower() not in cmdline:
                 _log(f"pid {pid} identity unverifiable — skipping")
                 continue
-        # Kill children first (llama-server workers, ollama runners).
+        # v2.11.12e ordering fix: snapshot the child list BEFORE killing
+        # the parent (once the parent dies, children are re-parented and
+        # proc.children() returns nothing), then kill PARENT FIRST. The
+        # old children-first order left a window where a supervisor
+        # (Overseer) could respawn a just-killed daemon before we got to
+        # it — the likely source of the invisible leftover python
+        # processes holding the CRAIID/sage log files after quit.
+        children = []
         try:
-            for child in proc.children(recursive=True):
-                if child.pid != MY_PID:
-                    _kill_proc(child, f"{label}:child")
+            children = proc.children(recursive=True)
         except Exception:
             pass
         if _kill_proc(proc, label):
             killed += 1
+        for child in children:
+            if child.pid != MY_PID:
+                _kill_proc(child, f"{label}:child")
     return killed
 
 
@@ -167,17 +175,22 @@ def _pass2_sweep() -> int:
             exe = (proc.info.get("exe") or "").lower()
             hit = (backend_l in cmdline or backend_l in exe
                    or start_py_l in cmdline)
-            # start.bat launches uvicorn as `py start.py ...` with a
-            # RELATIVE path, so the full-path check above misses it.
-            # Match it via cwd: start.py itself chdirs into backend\,
-            # so cwd == <root> or <root>\backend plus 'start.py' on the
-            # command line is unambiguously ours. (Deliberately NOT a
-            # blanket "cwd under project root" — an MCP server run from
-            # MCP\ or a user script must not match.)
-            if not hit and "start.py" in cmdline:
+            # v2.11.12e: cwd-based match. Catches every stack process whose
+            # command line does NOT carry the project path: uvicorn launched
+            # as relative `py start.py`, multiprocessing workers (cmdline is
+            # `... -c from multiprocessing...spawn_main`), and daemon
+            # generations respawned with mangled argv. They all INHERIT
+            # cwd from their spawner, and every OracleAI spawn site uses
+            # cwd=<root> (tier_launcher, overseer) or <root>\backend
+            # (start.py after chdir). Still deliberately narrow: only
+            # python/llama-server processes (name filter above) sitting
+            # EXACTLY in root or backend — an MCP server run from MCP\
+            # or any tool with its own cwd never matches.
+            if not hit:
                 try:
-                    cwd = os.path.normcase(proc.cwd())
-                    if cwd in (os.path.normcase(str(ROOT)), backend_l):
+                    cwd = os.path.normcase(proc.cwd().rstrip("\\/"))
+                    if cwd in (os.path.normcase(str(ROOT).rstrip("\\/")),
+                               os.path.normcase(backend_l)):
                         hit = True
                 except Exception:
                     pass

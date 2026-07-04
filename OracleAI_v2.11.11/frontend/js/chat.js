@@ -1174,8 +1174,24 @@ window.oracleConfirm = oracleConfirm;
 async function clearChat() {
   if (await oracleConfirm("Are you sure you want to clear the chat? This cannot be undone.",
       { title: "Clear chat", okLabel: "Clear", cancelLabel: "Cancel" })) {
+    // v2.11.12e fix: Clear previously wiped ONLY the visible window
+    // (the in-page `messages` array + DOM). The PERSISTENT history in
+    // chat_memory.json was untouched, so the next turn re-loaded the
+    // full old context server-side — Clear looked like it worked but
+    // the model still saw everything. Archive never had this bug
+    // because archive_conversation() ends with save_chat_memory([]).
+    // Now Clear empties the server-side memory the same way.
+    try {
+      await fetch("/api/chat-memory", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ history: [] }),
+      });
+      setStatus("Chat cleared");
+    } catch (e) {
+      setStatus("Chat window cleared — but the backend was unreachable, so saved context may remain");
+    }
     _clearMessagesNow();
-    setStatus("Chat cleared");
   }
 }
 

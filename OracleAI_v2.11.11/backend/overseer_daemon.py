@@ -689,6 +689,17 @@ class OverseerDaemon:
                 _popen_kw["stdout"] = subprocess.DEVNULL
                 _popen_kw["stderr"] = subprocess.DEVNULL
             proc = subprocess.Popen(config["start_cmd"], **_popen_kw)
+            # v2.11.12e zombie fix: register the respawned generation in
+            # the shared PID ledger. Without this, a daemon rotated after
+            # boot (handoff/fatigue restart) was unknown to shutdown
+            # cleanup — the invisible python processes that survived quit
+            # and held the CRAIID/sage log files open.
+            try:
+                import pid_registry
+                pid_registry.register(proc.pid, f"Overseer-respawn:{daemon_name}",
+                                      str(config["start_cmd"][0]))
+            except Exception:
+                pass
             self._daemon_procs[daemon_name]   = proc
             self._restart_counts[daemon_name] = count + 1
             self._escalated[daemon_name]      = False  # fresh attempt
