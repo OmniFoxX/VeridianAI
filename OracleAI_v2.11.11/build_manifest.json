@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "0b01257ddd654996acee613f86df19ad",
-    "built_utc": "2026-07-03T07:56:42.269705+00:00",
+    "build_id": "f0521165057f46e4986919e4528990d2",
+    "built_utc": "2026-07-04T04:21:25.931858+00:00",
     "fingerprint": "486f75266989ccdab2ed8d64eea29297",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -1251,7 +1251,7 @@
       "backend/node_client.py": "8cce7b9eb9020f8dbb9600b2222d1755930aa19630023c8c044a6ec3c69d225c",
       "backend/node_server.py": "12bb177b0c2cea54334d3f4c2342534c4b4bdd549490157c1e779f336fa2fc55",
       "backend/node_trust.py": "53d74033401fa0a318d5e18faa2ae63818b75f453a7176c389f498e78dcb2731",
-      "backend/overseer_daemon.py": "9564fcb0ecc8b8a9463fa281c69647bc7cc804fb76ca82b4771fd3a1daeb6292",
+      "backend/overseer_daemon.py": "564133cd649a6ce44fbcf5a1ad9bc37042788afaae9bbaf2e1aa61d7b8ff83f6",
       "backend/pid_registry.py": "62fe71083cb81edb7e53dde4cec2edb12222dee6bc2fcef317cbea0809b1b642",
       "backend/plugin_manager.py": "99d2b58909d9b98f427db58bbaf6f4b89a63a07db10c0235bccc396b63042638",
       "backend/probe_environment.py": "fbb8b52bfdd12b9bf87f266edf2ad00c752c6610120bc1ebffc856937592696e",
@@ -1267,7 +1267,7 @@
       "backend/sage_rag.py": "23cc633599b0b7ee63756c041ec038222c60f8679bc4458cf8d77ba4026535c5",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
       "backend/session.py": "10c430b1e469c0a4190bc87d2d113580e9c675b1f5f72d906bbfc3b9c1d51d5b",
-      "backend/shutdown_cleanup.py": "cc5fbe4df03f832f38b7c17f8525e5d26da9daba12b0f5a9aee02c266d77466b",
+      "backend/shutdown_cleanup.py": "0e012bc217d7bf7c3272af8fa788523144ebeda97fef42325b93bd76a4a4d49f",
       "backend/skill_api.py": "29fde4ab4ee820302f7388df8796e40f9980e472a625cd1c83f3a978a1039daf",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
@@ -1322,7 +1322,7 @@
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/app.js": "d14721ae5f6e4a2fc9015baf12f152eeeb9bff230f76b2f3828a14fad9c94fac",
       "frontend/js/auth.js": "b9a78ce783ac6a0af358f716fc62fa10765696f27c20bdc8d0f09db93e979e5f",
-      "frontend/js/chat.js": "e29a67c67af1dff927eaa5718bfe4aeb4ec02f9786ab797f06f43e9d1cc4cd4a",
+      "frontend/js/chat.js": "116881aa5034a77e68174dbe968a4a0ee0b65d063b8650f11af83180eb5fb12f",
       "frontend/js/comfyui-wizard.js": "8fa0e034580c4a669de4dde88c4f7dfe25590c9b68c68751890cdad73003a723",
       "frontend/js/command-palette.js": "c43e05d4fad851ddc9d3f00a247e6de9edd38f93e9ba726ac96c6f0116920e70",
       "frontend/js/games.js": "60e125e7aefffe40d0ed412cea0b6978699d9691e2ec80279933b0c50f7caa99",
@@ -1342,11 +1342,11 @@
       "README/SageAetherNets_Win_FirewallSetup/setup_firewall.ps1": "48539e3d3d39e93d5318e21d1b8a6c1a36cc5817524423e08fa2f5edfbbac409",
       "rotate_api_key.bat": "93460b11635d3c7598f84343f4feea3f40ae5d2ba6e0709d2d4f5efb3e14fcfb",
       "rotate_api_key.py": "03a860a3cced31098722522c7f20210391e93b1232fb6f16df2c1eed12ac1131",
-      "start.bat": "e1dd31e0dae89781751ad37e0631abbc39cd6ce4aa57f912849081fdc3387609",
+      "start.bat": "c5e6cffdcd4e66a06b58a341681804bf8854bf213b79c37c1f9ccd64534c4ade",
       "start.py": "e842e1562750b40baae16ec6a2e09d3885f9bd65b4d777ee5a80dfb1ea6ed2b4",
       "tools/aiq_nudge_send.py": "45179b149e0860b5b76e2a436509fb1011b22cdd0c94dbd7707b8f9a0c288946"
     }
   },
   "algo": "ed25519",
-  "signature_b64": "5+hNtY9TDPXtQsOUgS6ulZp2f5zCNzaK97qQIjWE38sMIjIf35QrUTQQO6BEdkvR0caQaSjr5yV1h8zw6YS8CQ=="
+  "signature_b64": "top/bfmwpuPH0cgpRysBg9fxMJF0dpOGibQnRuq+PlflQQFSNSKl6WkZd7vTevDXKJMABZsQ6IR5HDwDsosnCg=="
 }
