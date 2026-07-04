@@ -128,7 +128,32 @@ async function loadDevAndBrowserToggles() {
     const r = await fetch("/api/build/integrity");
     renderBuildStatus(await r.json());
   } catch (e) { /* leave default text */ }
+  loadMultiProfileToggle();
 }
+
+// --- Multi-Profile toggle (v2.11.13) ----------------------------------------
+// Owner-only: the Profiles section stays hidden for child profiles. Visible
+// when multi-user is OFF (single user = owner) or the session is the owner.
+// The backend enforces this too (POST /api/config rejects multiuser_enabled
+// from non-owners) — hiding it is UX, not the security boundary.
+async function loadMultiProfileToggle() {
+  try {
+    const r = await fetch("/api/auth/status");
+    const s = await r.json();
+    const isOwner = s.multiuser === false || s.is_owner === true;
+    const section = document.getElementById("multiprofile-section");
+    if (section) section.style.display = isOwner ? "" : "none";
+    if (isOwner) setChecked("toggle-multiprofile", !!s.multiuser);
+  } catch (e) { /* leave hidden */ }
+}
+
+async function setMultiProfile(enabled) {
+  await updateSetting("multiuser_enabled", !!enabled);
+  setStatus(enabled
+    ? "Multi-Profile enabled — each person now signs in to their own profile"
+    : "Multi-Profile disabled — back to single-user mode");
+}
+window.setMultiProfile = setMultiProfile;
 
 function renderBuildStatus(d) {
   const el = document.getElementById("build-integrity-status");

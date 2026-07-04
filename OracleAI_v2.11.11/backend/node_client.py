@@ -55,10 +55,14 @@ def node_info(base_url, token, user="owner", timeout=15):
 
 
 def node_infer(base_url, token, model_id, messages, options=None,
-               user="owner", timeout=300):
+               user="owner", timeout=300, urgent=False):
+    # v2.11.13: urgent rides at BODY level (options are sanitized/whitelisted
+    # server-side, so a flag inside options would be silently dropped). The
+    # serving node applies its per-peer quota before honoring it.
     return call_node(base_url, token, "infer",
                      {"model_id": model_id, "messages": messages,
-                      "options": options or {}}, user, timeout)
+                      "options": options or {}, "urgent": bool(urgent)},
+                     user, timeout)
 
 
 def node_generate_image(base_url, token, prompt, user="owner", timeout=600, **opts):

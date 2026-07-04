@@ -254,6 +254,14 @@ async function sendMessage() {
     autoRepromptCount = 0;
   }
 
+  // v2.11.13 urgency: one-shot ⚡ flag — rides in options, consumed by the
+  // backend's priority gate (local-urgent lane), then auto-resets.
+  if (window._urgentNext) {
+    options.urgent = true;
+    window._urgentNext = false;
+    _syncUrgentBtn();
+  }
+
   ws.send(
     JSON.stringify({
 	  action: document.getElementById("toggle-build-battle")?.checked
@@ -1208,6 +1216,24 @@ function handleInputKey(e) {
 function handleSendClick() {
   sendMessage();
 }
+
+/* --- Urgency (v2.11.13) — one-shot ⚡ flag for the next message --------- */
+function _syncUrgentBtn() {
+  const btn = document.getElementById("urgent-btn");
+  if (!btn) return;
+  btn.style.filter = window._urgentNext ? "" : "grayscale(1)";
+  btn.style.opacity = window._urgentNext ? "1" : "";
+}
+function toggleUrgent() {
+  window._urgentNext = !window._urgentNext;
+  _syncUrgentBtn();
+  setStatus(window._urgentNext
+    ? "⚡ Next message will be sent URGENT (jumps queued work; one-shot)"
+    : "Urgent flag cleared");
+}
+window.toggleUrgent = toggleUrgent;
+// Start visually 'off' (greyscale) once the DOM is ready.
+document.addEventListener("DOMContentLoaded", _syncUrgentBtn);
 
 /* --- AI QNudge: side-channel send (does NOT post a normal chat turn) ---
    Takes whatever is in the composer and signs+deposits it as a mid-run

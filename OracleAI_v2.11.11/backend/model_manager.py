@@ -45,6 +45,7 @@ from __future__ import annotations
 from time_manager import TimeManager
 
 import asyncio
+import heapq
 import json
 import sys
 from pathlib import Path
@@ -88,6 +89,49 @@ NPU_TIER: Tuple[str, str, str, str] = (BACKEND_NPU, "NPU", NPU_LLM_URL, "openai"
 # Per-tier listing timeout. Intentionally short so a dead tier does not
 # stall the UI's model picker.
 _LIST_TIMEOUT = 5.0
+
+# v2.11.13: priority levels for the per-server generation gate.
+PRIORITY_LOCAL_URGENT  = 0
+PRIORITY_LOCAL_NORMAL  = 1   # default for every request that doesn't say otherwise
+PRIORITY_REMOTE_URGENT = 2
+PRIORITY_REMOTE_NORMAL = 3
+
+
+class _PriorityGate:
+    """Async admission gate: one holder at a time, waiters admitted by
+    (priority, arrival-sequence). Drop-in successor to the plain
+    asyncio.Lock that serialized generations per server instance.
+    Cancelled waiters (client disconnected while queued) are skipped."""
+
+    def __init__(self):
+        self._active = False
+        self._waiters = []   # heap of (priority, seq, future)
+        self._seq = 0
+
+    async def acquire(self, priority: int = PRIORITY_LOCAL_NORMAL):
+        if not self._active and not self._waiters:
+            self._active = True
+            return
+        fut = asyncio.get_running_loop().create_future()
+        heapq.heappush(self._waiters, (int(priority), self._seq, fut))
+        self._seq += 1
+        try:
+            await fut
+        except asyncio.CancelledError:
+            # If we were already admitted between set_result and this await
+            # resuming, pass the slot on; otherwise just leave the heap entry
+            # (release() skips cancelled futures).
+            if fut.done() and not fut.cancelled():
+                self.release()
+            raise
+
+    def release(self):
+        while self._waiters:
+            _, _, fut = heapq.heappop(self._waiters)
+            if not fut.done():
+                fut.set_result(None)   # gate stays active, handed to waiter
+                return
+        self._active = False
 
 
 class ModelManager:
@@ -581,14 +625,26 @@ class ModelManager:
         )
 
     def _gen_lock_for(self, base_url):
-        """Per-Ollama-instance (base_url) async lock so concurrent requests to
-        the SAME server queue instead of evicting each other's loaded model.
-        Different tiers (different ports) keep their own lock -> still parallel."""
-        lock = self._gen_locks.get(base_url)
-        if lock is None:
-            lock = asyncio.Lock()
-            self._gen_locks[base_url] = lock
-        return lock
+        """Per-server (base_url) PRIORITY gate so concurrent requests to the
+        SAME server queue instead of evicting each other's loaded model.
+        Different tiers (different ports) keep their own gate -> still parallel.
+
+        v2.11.13 (Todd's Dad's question): the old asyncio.Lock was strict
+        FIFO — no way to say 'this one matters more'. Now a priority gate:
+
+            0 = LOCAL URGENT   (this machine's user, flagged urgent)
+            1 = LOCAL NORMAL   (this machine's user — the default)
+            2 = REMOTE URGENT  (Aether peer, urgent flag + quota granted)
+            3 = REMOTE NORMAL  (Aether peer)
+
+        FIFO within each level (arrival sequence breaks ties), local always
+        outranks remote, and a RUNNING generation is never preempted —
+        priority only reorders who goes NEXT."""
+        gate = self._gen_locks.get(base_url)
+        if gate is None or not isinstance(gate, _PriorityGate):
+            gate = _PriorityGate()
+            self._gen_locks[base_url] = gate
+        return gate
 
     async def generate(self, messages: List[Dict],
                        model_id: Optional[str],
@@ -637,13 +693,24 @@ class ModelManager:
 
         # v2.9: serialize generations per Ollama instance so a local query and
         # an OFFLOADED request from another node don't collide on the one GPU
-        # (Ollama would otherwise evict the in-flight model mid-stream). FIFO
-        # queue; different tiers (ports) still run in parallel.
-        async with self._gen_lock_for(base_url):
+        # (Ollama would otherwise evict the in-flight model mid-stream).
+        # v2.11.13: FIFO -> priority gate. options["_priority"] is set by the
+        # SERVER side only (ws chat: 0/1 local, node endpoints: 2/3 remote
+        # after the urgent-quota check) — it is never accepted off the wire.
+        try:
+            _prio = int(options.get("_priority", PRIORITY_LOCAL_NORMAL))
+        except (TypeError, ValueError):
+            _prio = PRIORITY_LOCAL_NORMAL
+        _prio = max(PRIORITY_LOCAL_URGENT, min(PRIORITY_REMOTE_NORMAL, _prio))
+        _gate = self._gen_lock_for(base_url)
+        await _gate.acquire(_prio)
+        try:
             async for token in gen:
                 if self._abort:
                     return
                 yield token
+        finally:
+            _gate.release()
 
     # --- Ollama streaming (/api/chat) ------------------------------------
     async def _gen_ollama(self, messages: List[Dict], model_id: str,

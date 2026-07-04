@@ -340,7 +340,11 @@ async def _node_stream_tokens(messages, options):
     token = node_trust.load_or_create_home_token(str(DATA_DIR))
     env = {"v": 1, "user": "owner", "session": uuid.uuid4().hex,
            "kind": "infer_stream",
-           "body": {"model_id": None, "messages": messages, "options": options or {}}}
+           "body": {"model_id": None, "messages": messages, "options": options or {},
+                    # v2.11.13: a local-urgent request stays urgent when
+                    # offloaded — the remote applies its quota + trust gate
+                    # before honoring it (see /api/node/infer-stream).
+                    "urgent": int((options or {}).get("_priority", 1)) == 0}}
     blob = node_trust.encrypt_payload(env, token)
     try:
         _to = httpx.Timeout(connect=15.0, read=600.0, write=15.0, pool=15.0)
@@ -392,7 +396,9 @@ async def _watched_generate(messages, model_id, options, watchdog):
                 _remote = config.get("remote_node_url").strip()
                 _token = node_trust.load_or_create_home_token(str(DATA_DIR))
                 _ok, _res = await asyncio.to_thread(
-                    node_client.node_infer, _remote, _token, None, messages, options)
+                    node_client.node_infer, _remote, _token, None, messages, options,
+                    "owner", 300,
+                    int((options or {}).get("_priority", 1)) == 0)  # urgent carries over
                 if (_ok and isinstance(_res, dict) and _res.get("success")
                         and _res.get("content") is not None):
                     watchdog.record_token()
@@ -1175,10 +1181,21 @@ async def api_voice_poll(request: Request):
 
 
 # --- Socials (messaging channels: BitChat + Discord) -- localhost-only ---------
+# v2.11.13: additionally OWNER-ONLY when multi-profile is on. The connectors
+# and their credentials (Discord bot token, Bluesky app password, ...) belong
+# to the owner; child profiles must not see, use, or reconfigure them.
+# (True per-user socials accounts would need per-user connector instances —
+# a future phase if wanted.)
+def _socials_owner_guard(request: Request):
+    if not _is_owner(request):
+        raise HTTPException(403, "Socials are managed by the owner profile")
+
+
 @app.get("/api/socials/status")
 async def api_socials_status(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         return {"available": False}
     return {"available": True, **socials_router.status()}
@@ -1189,6 +1206,7 @@ async def api_socials_connect(request: Request, payload: dict):
     """Connect (default) or disconnect a channel; starts/stops its listen loop."""
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
@@ -1215,6 +1233,7 @@ async def api_socials_connect(request: Request, payload: dict):
 async def api_socials_send(request: Request, payload: dict):
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
@@ -1230,6 +1249,7 @@ async def api_socials_send(request: Request, payload: dict):
 async def api_socials_recent(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         return {"messages": []}
     return {"messages": socials_router.recent(limit=30)}
@@ -1242,6 +1262,7 @@ async def api_socials_clear(request: Request, payload: dict):
     only (nothing persisted, nothing shared across user profiles)."""
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         raise HTTPException(503, "socials unavailable")
     if payload.get("all"):
@@ -1259,6 +1280,7 @@ async def api_socials_autoreply(request: Request, payload: dict):
     """Toggle opt-in wake-word auto-reply on connected channels (OFF by default)."""
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         raise HTTPException(503, "socials unavailable")
     socials_router.set_auto_reply(bool(payload.get("enabled")))
@@ -1269,6 +1291,7 @@ async def api_socials_autoreply(request: Request, payload: dict):
 async def api_socials_peers(request: Request, channel: str = ""):
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         return {"peers": []}
     return {"peers": await socials_router.peers((channel or "").strip().lower())}
@@ -1278,6 +1301,7 @@ async def api_socials_peers(request: Request, channel: str = ""):
 async def api_socials_config_get(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         return {"config": {}}
     return {"config": socials_router.config_snapshot()}
@@ -1290,6 +1314,7 @@ async def api_socials_config_set(request: Request, payload: dict):
     Tokens are stored in sage_data and never returned (status shows only has_token)."""
     if not _is_local_client(request):
         raise HTTPException(404)
+    _socials_owner_guard(request)
     if socials_router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
@@ -1710,12 +1735,15 @@ async def api_models_refresh():
 
 
 @app.get("/api/config")
-async def api_get_config():
-    return config
+async def api_get_config(request: Request):
+    # v2.11.13: non-owner users see the global config with their personal
+    # overlay merged on top — their theme/model/prefs, everyone else's
+    # system settings. Owner/single-user: unchanged.
+    return _effective_config(_session_ns(request))
 
 
 @app.post("/api/config")
-async def api_update_config(payload: dict):
+async def api_update_config(payload: dict, request: Request):
     global config
     # #68 Phase E Step 3: validate against the allowlist BEFORE any merge
     # or save. Unknown keys → 400 with the bad key name in the message.
@@ -1732,6 +1760,23 @@ async def api_update_config(payload: dict):
     # already sanitizes, but defense in depth.
     if "max_tokens" in payload:
         payload["max_tokens"] = _sanitize_max_tokens(payload["max_tokens"])
+
+    # v2.11.13 per-user settings: a signed-in NON-owner writes only their
+    # own overlay, and only PER_USER_KEYS. System keys from a non-owner →
+    # 403 naming the key, so the UI can say why. The owner (and single-
+    # user mode) keeps the existing global write path — including
+    # multiuser_enabled itself, which is therefore owner-only by
+    # construction.
+    ns = _session_ns(request)
+    if ns:
+        bad = [k for k in payload.keys() if k not in PER_USER_KEYS]
+        if bad:
+            raise HTTPException(
+                status_code=403,
+                detail=f"setting {bad[0]!r} is managed by the owner profile")
+        _save_user_overlay(ns, payload)
+        return _effective_config(ns)
+
     config.update(payload)
     save_config(config)
     model_manager.config = config
@@ -1748,23 +1793,32 @@ async def api_list_plugins():
 
 # --- Sage / Agent Config Routes ----------------------------------------------
 @app.get("/api/sage/config")
-async def api_sage_config():
+async def api_sage_config(request: Request):
+    # v2.11.13: per-user view — a non-owner sees their own Sage toggles.
+    eff = _effective_config(_session_ns(request))
     return {
-        "sage_mode": config.get("sage_mode", True),
-        "agentic_mode": config.get("agentic_mode", True),
-        "web_search_enabled": config.get("web_search_enabled", True),
-        "code_exec_enabled": config.get("code_exec_enabled", True),
+        "sage_mode": eff.get("sage_mode", True),
+        "agentic_mode": eff.get("agentic_mode", True),
+        "web_search_enabled": eff.get("web_search_enabled", True),
+        "code_exec_enabled": eff.get("code_exec_enabled", True),
     }
 
 
 @app.post("/api/sage/config")
-async def api_set_sage_config(payload: dict):
+async def api_set_sage_config(payload: dict, request: Request):
     global config
-    for k in ["sage_mode", "agentic_mode", "web_search_enabled", "code_exec_enabled"]:
+    keys = ["sage_mode", "agentic_mode", "web_search_enabled", "code_exec_enabled"]
+    ns = _session_ns(request)
+    if ns:
+        # Non-owner: write to the personal overlay only (all four keys are
+        # in PER_USER_KEYS), never to the shared config.json.
+        _save_user_overlay(ns, {k: bool(payload[k]) for k in keys if k in payload})
+        return await api_sage_config(request)
+    for k in keys:
         if k in payload:
             config[k] = bool(payload[k])
     save_config(config)
-    return await api_sage_config()
+    return await api_sage_config(request)
 
 
 # --- Developer Mode (hide/show log terminals) --------------------------------
@@ -1921,6 +1975,75 @@ def _session_ns(request: Request):
     except Exception:
         pass
     return None
+
+
+def _is_owner(request: Request) -> bool:
+    """True when the caller is the owner profile, or when multi-user is off
+    (single-user = owner by definition). Used to gate system-level settings
+    and the socials endpoints in multi-profile mode."""
+    try:
+        if not config.get("multiuser_enabled", False):
+            return True
+        import session as _session
+        s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
+        return bool(s and s.get("is_owner"))
+    except Exception:
+        return False
+
+
+# --- v2.11.13: per-user settings overlay -------------------------------------
+# Settings no longer bleed between profiles. Each non-owner user gets an
+# overlay file (sage_data/users/<ns>/settings.json) holding ONLY the keys in
+# PER_USER_KEYS — chat + appearance preferences. Everything else (network,
+# ports, tiers, hardware toggles, security, multiuser_enabled itself) stays
+# in the global config.json and is OWNER-ONLY to change. The overlay is
+# merged over the global config for reads, so a fresh user starts from the
+# owner's defaults and diverges only where they change something.
+PER_USER_KEYS = frozenset({
+    "theme", "haptic", "default_model", "temperature", "max_tokens",
+    "sage_mode", "agentic_mode", "web_search_enabled", "code_exec_enabled",
+    "privacy_mode",
+})
+
+
+def _user_settings_file(ns) -> Path:
+    return Path(DATA_DIR) / "users" / str(ns) / "settings.json"
+
+
+def _load_user_overlay(ns) -> dict:
+    """The user's saved preference overlay. Filtered to PER_USER_KEYS on read
+    as well as write, so a hand-edited file can't smuggle system keys."""
+    if not ns:
+        return {}
+    try:
+        f = _user_settings_file(ns)
+        if f.exists():
+            raw = json.loads(f.read_text(encoding="utf-8"))
+            if isinstance(raw, dict):
+                return {k: v for k, v in raw.items() if k in PER_USER_KEYS}
+    except Exception:
+        pass
+    return {}
+
+
+def _save_user_overlay(ns, patch: dict) -> dict:
+    """Merge `patch` (already validated) into the user's overlay and persist."""
+    overlay = _load_user_overlay(ns)
+    overlay.update({k: v for k, v in patch.items() if k in PER_USER_KEYS})
+    try:
+        f = _user_settings_file(ns)
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_text(json.dumps(overlay, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[USER SETTINGS] save failed for ns={ns}: {e}")
+    return overlay
+
+
+def _effective_config(ns) -> dict:
+    """Global config with the user's overlay applied. ns=None -> global as-is."""
+    if not ns:
+        return config
+    return {**config, **_load_user_overlay(ns)}
 
 
 def _downloads_dir_for_ns(ns):
@@ -2550,6 +2673,21 @@ async def api_node_infer(request: Request):
         else:
             _model = config.get("default_model")
     _opts = _sanitize_node_options(body.get("options") or {})
+    # v2.11.13 urgency: remote requests ride the remote lanes (2 urgent /
+    # 3 normal — local users always outrank both). Urgent is honored only
+    # within the peer's rolling budget (urgent_quota): over budget the
+    # request is DEMOTED to normal and logged — never rejected, so the
+    # urgent lane cannot be Bogarted.
+    _opts["_priority"] = 3
+    if bool(body.get("urgent")):
+        import urgent_quota
+        _peer = str(env.get("user", "owner"))
+        if urgent_quota.allow_urgent(_peer):
+            _opts["_priority"] = 2
+            print(f"[NODE URGENT] granted to {_peer!r} "
+                  f"({urgent_quota.remaining(_peer)} left this hour)")
+        else:
+            print(f"[NODE URGENT] budget exhausted for {_peer!r} — demoted to normal")
     # Graceful fallback: if a model will not load (unsupported arch, e.g. mllama),
     # try the next capable slot so distribution "just works".
     text = None
@@ -2599,6 +2737,17 @@ async def api_node_infer_stream(request: Request):
                       candidates=_slots, needs_vision=_nv)
                   if len(_slots) >= 2 else config.get("default_model"))
     _opts = _sanitize_node_options(body.get("options") or {})
+    # v2.11.13 urgency — same policy as /api/node/infer above.
+    _opts["_priority"] = 3
+    if bool(body.get("urgent")):
+        import urgent_quota
+        _peer = str(env.get("user", "owner"))
+        if urgent_quota.allow_urgent(_peer):
+            _opts["_priority"] = 2
+            print(f"[NODE URGENT] granted to {_peer!r} "
+                  f"({urgent_quota.remaining(_peer)} left this hour)")
+        else:
+            print(f"[NODE URGENT] budget exhausted for {_peer!r} — demoted to normal")
     _cands = _node_model_candidates(_msgs, _model, _nv)
 
     async def _stream():
@@ -3706,6 +3855,11 @@ async def ws_chat(websocket: WebSocket):
         sage_engine.set_browser_ns(_ws_ns)
     except Exception:
         pass
+    # v2.11.13: this connection's personal settings overlay (empty for the
+    # owner / single-user). Applied to generation options and Sage-mode
+    # flags below so each user's saved preferences actually drive THEIR
+    # inference, not just their settings screen.
+    _ws_overlay = _load_user_overlay(_ws_ns)
     try:
         while True:
             data = await websocket.receive_json()
@@ -3729,6 +3883,22 @@ async def ws_chat(websocket: WebSocket):
             messages = data.get("messages", [])
             model_id = data.get("model_id")
             options = data.get("options", {})
+
+            # v2.11.13 urgency: the composer's ⚡ flag. Local user -> local
+            # priority lane (0 urgent / 1 normal). The _priority key is
+            # server-assigned here; anything a client put there is replaced.
+            options["_priority"] = 0 if options.pop("urgent", False) else 1
+
+            # v2.11.13 per-user settings: fill generation options from this
+            # user's overlay where the request didn't set them explicitly.
+            # (model_manager falls back to the GLOBAL config for missing
+            # keys, which would leak the owner's prefs onto this user.)
+            if _ws_overlay:
+                for _puk in ("temperature", "max_tokens"):
+                    if options.get(_puk) is None and _puk in _ws_overlay:
+                        options[_puk] = _ws_overlay[_puk]
+                if not model_id and _ws_overlay.get("default_model"):
+                    model_id = _ws_overlay["default_model"]
 
             # ── Text→image deterministic intercept ─────────────────────────────
             # Local models don't reliably emit [GENERATE_IMAGE:]; for an obvious
@@ -3927,10 +4097,13 @@ async def ws_chat(websocket: WebSocket):
                 # whatever the UI sent (model_id may be empty,
                 # downstream handles that).
                 model_id = primary if primary else model_id
-            sage_mode = config.get("sage_mode", True)
-            agentic = config.get("agentic_mode", True) and sage_mode
-            web_ok = config.get("web_search_enabled", True)
-            code_ok = config.get("code_exec_enabled", True)
+            # v2.11.13: Sage-mode flags honor the connection's per-user
+            # overlay first, then the global config (owner/single-user).
+            _eff = {**config, **_ws_overlay}
+            sage_mode = _eff.get("sage_mode", True)
+            agentic = _eff.get("agentic_mode", True) and sage_mode
+            web_ok = _eff.get("web_search_enabled", True)
+            code_ok = _eff.get("code_exec_enabled", True)
 
             # ── Build system prompt -----------------------------------
             # #68 Phase E Step 6: prompt now lives in a file

@@ -209,6 +209,17 @@
 </label>
 </div>
 </div>
+<!-- Profiles (v2.11.13) — owner-only; settings.js reveals it for the owner -->
+<div class="settings-section" id="multiprofile-section" style="display:none">
+<div class="settings-section-title">Profiles</div>
+<div class="hw-toggle-row">
+<span class="hw-toggle-label" data-tip="Multi-Profile: everyone gets their own sign-in with separate chats, archives, settings, and system-prompt addendum. Socials (Discord, Bluesky, BitChat...) stay with the owner profile. Only the owner can change this switch. Users may need to sign in again after switching.">Enable Multi-Profile</span>
+<label class="toggle-switch">
+<input aria-label="Enable Multi-Profile" id="toggle-multiprofile" onchange="setMultiProfile(this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+</div>
 <!-- Developer Mode -->
 <div class="settings-section">
 <div class="settings-section-title">Developer Mode</div>
@@ -471,6 +482,7 @@
 <label class="sr-only" for="user-input">Ask the Oracle</label>
 <textarea class="user-input" id="user-input" aria-label="Message to the Oracle" data-tip="Type your message here. Enter to send, Shift+Enter for a new line." oninput="autoResize(this)" onkeydown="handleInputKey(event)" placeholder="Ask the Oracle…" rows="4"></textarea>
 <div style="display:flex;flex-direction:column;gap:4px">
+<button class="send-btn nudge-btn" id="urgent-btn" aria-label="Mark next message urgent" onclick="toggleUrgent()" data-tip="Urgent — your next message jumps ahead of queued work on this machine (and keeps its urgency if offloaded to a network node, within that node's budget). One-shot: resets after sending.">⚡</button>
 <button class="send-btn nudge-btn" id="nudge-btn" aria-label="Send nudge to Sage" onclick="handleNudgeClick()" data-tip="AI QNudge — send Sage a steering nudge mid-task (no interruption)">👋</button>
 <button class="send-btn" id="send-btn" aria-label="Send message" onclick="handleSendClick()" data-tip="Send  (Enter)">▶</button>
 <button class="vibe-toggle" id="vibe-toggle" aria-label="Vibe Coding prompts" onclick="toggleVibeBar()" data-tip="Vibe Coding prompts">✨</button>
