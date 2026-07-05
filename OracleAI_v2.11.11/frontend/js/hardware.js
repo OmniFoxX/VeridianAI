@@ -152,7 +152,12 @@ function buildToggles(hw) {
   if (hw.nvidia && hw.nvidia.available) {
     toggles.push({ label: 'CUDA (NVIDIA)', checked: _cfgOn('cuda_enabled'), onChange: "updateSetting('cuda_enabled', this.checked)", tip: 'Use NVIDIA CUDA to accelerate inference on your NVIDIA GPU.' });
   }
-  if (hw.amd && hw.amd.available) {
+  // v2.11.12d: ROCm toggle only when the ROCm RUNTIME exists (rocm_available),
+  // not merely when an AMD GPU is present — ROCm doesn't exist on Windows
+  // client machines, so a Radeon iGPU shouldn't summon a dead toggle.
+  // (Per Todd: the AMD card just needs to say Detected; the NPU has its own
+  // toggle and AMD GPU inference rides the global GPU Acceleration switch.)
+  if (hw.amd && hw.amd.rocm_available) {
     toggles.push({ label: 'ROCm (AMD)', checked: _cfgOn('rocm_enabled'), onChange: "updateSetting('rocm_enabled', this.checked)", tip: 'Use AMD ROCm to accelerate inference on your AMD GPU.' });
   }
   if (hw.intel && hw.intel.available) {

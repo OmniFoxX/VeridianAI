@@ -284,7 +284,18 @@ class SageChannelRouter:
             try:
                 for m in await adapter.receive(timeout=3.0):
                     self._recent.append(m)
-                    if (self.auto_reply and self._reply_fn
+                    # Never auto-reply to our OWN messages (echoes of what Sage
+                    # posted) or system notices — that feedback loop is Sage
+                    # "talking to herself". BitChat echoes carry echo=True /
+                    # peer_id='self', and the sender name equals our own nickname.
+                    _raw = getattr(m, "raw", None) or {}
+                    _is_self = (
+                        _raw.get("echo") is True
+                        or _raw.get("peer_id") in ("self", "system")
+                        or (m.sender or "").strip().lower()
+                            in ("system", (self.wake_word or "").strip().lower())
+                    )
+                    if (self.auto_reply and self._reply_fn and not _is_self
                             and self.wake_word in (m.content or "").lower()):
                         asyncio.create_task(adapter.sage_respond(m))
             except asyncio.CancelledError:

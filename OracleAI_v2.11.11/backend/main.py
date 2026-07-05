@@ -917,13 +917,34 @@ try:
     async def _socials_reply(_text: str) -> str:
         """One-shot Sage reply for channel auto-reply, via the real model_manager."""
         _msgs = [
-            {"role": "system", "content": "You are Sage replying on a short-text "
-             "social channel. Be concise, friendly, and plain-text."},
+            {"role": "system", "content": "You are Sage replying on a Bluetooth "
+             "mesh chat where each message is tiny. Reply in ONE or TWO short "
+             "sentences, UNDER 160 characters total. Friendly, plain-text. No "
+             "preamble, no sign-off, and do NOT prefix your reply with 'Sage:'."},
             {"role": "user", "content": (_text or "")[:2000]},
         ]
+        # Pick the active model from the configured slots (default -> secondary
+        # -> tertiary), routing by content — the same selection the rest of the
+        # app uses. Passing None here is what produced "[Error: No model
+        # selected]" even with the slots filled.
         try:
-            _out = await model_manager.generate_full(_msgs, None, {})
-            return (_out or "").strip()
+            _slots = [s for s in (config.get("default_model"),
+                                  config.get("secondary_model"),
+                                  config.get("tertiary_model")) if s]
+            if len(_slots) >= 2:
+                _model = sage_engine.route_query(_text or "", candidates=_slots,
+                                                 needs_vision=False)
+            else:
+                _model = _slots[0] if _slots else config.get("default_model")
+        except Exception:
+            _model = config.get("default_model")
+        try:
+            _out = (await model_manager.generate_full(_msgs, _model, {}) or "").strip()
+            # Strip any stray "Sage:" the model prepended (the channel adds its
+            # own prefix), and cap length so the reply fits one BLE notification.
+            if _out[:5].lower() == "sage:":
+                _out = _out[5:].strip()
+            return _out[:200]
         except Exception as _gen_err:
             print(f"[SOCIALS] reply generation error: {_gen_err}")
             return ""

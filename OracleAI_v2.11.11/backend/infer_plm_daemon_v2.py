@@ -165,7 +165,7 @@ def main():
             command, probs = result
             print(f"Prediction: {command}")
             print("Probabilities:")
-            for label, prob in sorted(probs.items(), key=lambda x: x, reverse=True):
+            for label, prob in sorted(probs.items(), key=lambda x: x[1], reverse=True):
                 print(f"  {label}: {prob:.4f}")
         else:
             print(result)

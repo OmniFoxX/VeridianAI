@@ -154,29 +154,36 @@ def debug_full_println(*args, **kwargs):
 # Message types
 # ---------------------------------------------------------------------------
 class MessageType(IntEnum):
+    # --- current BitChat protocol (permissionlesstech) canonical wire values --
     ANNOUNCE                  = 0x01
-    KEY_EXCHANGE              = 0x02
+    MESSAGE                   = 0x02   # public broadcast chat message
     LEAVE                     = 0x03
-    MESSAGE                   = 0x04
-    FRAGMENT_START            = 0x05
-    FRAGMENT_CONTINUE         = 0x06
-    FRAGMENT_END              = 0x07
+    NOISE_HANDSHAKE           = 0x10   # unified Noise XX handshake (all stages)
+    NOISE_ENCRYPTED           = 0x11   # transport-encrypted container
+    FRAGMENT                  = 0x20   # unified fragment
+    REQUEST_SYNC              = 0x21   # gossip state sync (ignored)
+    FILE_TRANSFER             = 0x22
+    # --- obsolete types, kept off the live wire but referenced by legacy code -
+    KEY_EXCHANGE              = 0x0E
     CHANNEL_ANNOUNCE          = 0x08
     CHANNEL_RETENTION         = 0x09
     DELIVERY_ACK              = 0x0A
     DELIVERY_STATUS_REQUEST   = 0x0B
     READ_RECEIPT              = 0x0C
-    NOISE_HANDSHAKE_INIT      = 0x10
-    NOISE_HANDSHAKE_RESP      = 0x11
-    NOISE_ENCRYPTED           = 0x12
     NOISE_IDENTITY_ANNOUNCE   = 0x13
     CHANNEL_KEY_VERIFY_REQUEST  = 0x14
     CHANNEL_KEY_VERIFY_RESPONSE = 0x15
     CHANNEL_PASSWORD_UPDATE   = 0x16
     CHANNEL_METADATA          = 0x17
-    VERSION_HELLO             = 0x20
-    VERSION_ACK               = 0x21
-    JOIN                      = 0x22   # channel join announcement
+    VERSION_HELLO             = 0x2A
+    VERSION_ACK               = 0x2B
+    JOIN                      = 0x2C
+    # --- back-compat aliases (resolve to the canonical members above) ---------
+    NOISE_HANDSHAKE_INIT      = 0x10   # -> NOISE_HANDSHAKE
+    NOISE_HANDSHAKE_RESP      = 0x10   # -> NOISE_HANDSHAKE
+    FRAGMENT_START            = 0x20   # -> FRAGMENT
+    FRAGMENT_CONTINUE         = 0x20   # -> FRAGMENT
+    FRAGMENT_END              = 0x20   # -> FRAGMENT
 
 
 # ---------------------------------------------------------------------------
@@ -317,6 +324,77 @@ def create_bitchat_packet_with_signature(
     )
 
 
+def _optimal_block_size(data_len: int) -> int:
+    """Match BitChat MessagePadding.optimalBlockSize: +16 AEAD overhead, then
+    the smallest of 256/512/1024/2048 that fits; otherwise the raw size."""
+    total = data_len + 16
+    for bs in (256, 512, 1024, 2048):
+        if total <= bs:
+            return bs
+    return data_len
+
+
+def _pkcs7_pad_to_block(data: bytes) -> bytes:
+    """PKCS#7 pad to the optimal block size, all pad bytes == pad length
+    (matches BitChat MessagePadding.pad). No-op if it cannot fit in <=255 pad."""
+    target = _optimal_block_size(len(data))
+    if len(data) >= target:
+        return data
+    need = target - len(data)
+    if need <= 0 or need > 255:
+        return data
+    return bytes(data) + bytes([need]) * need
+
+
+def create_signed_bitchat_packet(
+    sender_id: str,
+    msg_type: MessageType,
+    payload: bytes,
+    sign_func,
+    ttl: int = 7,
+    recipient_id: Optional[str] = None,
+) -> bytes:
+    """Build an Ed25519-signed BitChat packet matching current (permissionlesstech)
+    BitChat, which REQUIRES a valid signature to trust/display a peer.
+
+    The signature covers `toBinaryDataForSigning()`: the UNPADDED packet encoded
+    with ttl=0 and no signature (and no signature flag). The transmitted packet
+    then carries the real ttl, the HAS_SIGNATURE flag, and the 64-byte signature
+    appended after the payload. No block padding (current BitChat sends unpadded)."""
+    timestamp = int(time.time() * 1000)
+    sb = bytes.fromhex(sender_id)[:8]
+    sb = sb + bytes(8 - len(sb))
+    rb = None
+    if recipient_id is not None:
+        rb = bytes.fromhex(recipient_id)[:8]
+        rb = rb + bytes(8 - len(rb))
+
+    def _encode(ttl_val: int, flags_val: int, sig: Optional[bytes]) -> bytes:
+        pkt = bytearray()
+        pkt.append(1)                                   # version
+        pkt.append(int(msg_type))                       # type
+        pkt.append(ttl_val & 0xFF)                      # ttl
+        pkt.extend(struct.pack('>Q', timestamp))        # timestamp (ms)
+        pkt.append(flags_val)                           # flags
+        pkt.extend(struct.pack('>H', len(payload)))     # payload length
+        pkt.extend(sb)                                  # sender (8)
+        if flags_val & FLAG_HAS_RECIPIENT:
+            pkt.extend(rb if rb is not None else BROADCAST_RECIPIENT)
+        pkt.extend(payload)
+        if sig:
+            pkt.extend(sig[:SIGNATURE_SIZE])
+        return bytes(pkt)
+
+    flags_base = FLAG_HAS_RECIPIENT if recipient_id is not None else 0
+    # Current BitChat signs the PADDED, unsigned (ttl=0) representation and then
+    # transmits the PADDED signed packet. Padding is PKCS#7 to the optimal block
+    # size with every pad byte equal to the pad length.
+    signing_repr = _pkcs7_pad_to_block(_encode(0, flags_base, None))
+    signature = sign_func(signing_repr)
+    signed = _encode(ttl, flags_base | FLAG_HAS_SIGNATURE, signature)
+    return _pkcs7_pad_to_block(signed)
+
+
 # ---------------------------------------------------------------------------
 # Packet parser
 # ---------------------------------------------------------------------------
@@ -385,7 +463,7 @@ def parse_bitchat_packet(data: bytes) -> BitchatPacket:
     offset = 0
 
     version = data[offset]; offset += 1
-    if version != 1:
+    if version not in (1, 2):
         raise ValueError(f"Unsupported version: {version}")
 
     msg_type_b = data[offset]; offset += 1
@@ -396,8 +474,13 @@ def parse_bitchat_packet(data: bytes) -> BitchatPacket:
     has_recipient = (flags & FLAG_HAS_RECIPIENT) != 0
     has_signature = (flags & FLAG_HAS_SIGNATURE) != 0
     is_compressed = (flags & FLAG_IS_COMPRESSED) != 0
+    has_route     = (version == 2) and (flags & 0x08) != 0   # v2 source route
 
-    payload_len = struct.unpack('>H', data[offset:offset + 2])[0]; offset += 2
+    # v2 uses a 4-byte payload length; v1 uses 2 bytes.
+    if version == 2:
+        payload_len = struct.unpack('>I', data[offset:offset + 4])[0]; offset += 4
+    else:
+        payload_len = struct.unpack('>H', data[offset:offset + 2])[0]; offset += 2
 
     # Sender ID (trailing NULs trimmed so the hex id is stable)
     sender_id     = data[offset:offset + SENDER_ID_SIZE].rstrip(b'\x00')
@@ -410,6 +493,12 @@ def parse_bitchat_packet(data: bytes) -> BitchatPacket:
         recipient_id     = data[offset:offset + RECIPIENT_ID_SIZE].rstrip(b'\x00')
         recipient_id_str = recipient_id.hex()
         offset += RECIPIENT_ID_SIZE
+
+    # v2 source route: [hopCount:1][hopCount x 8-byte peer IDs]. Sage is the
+    # endpoint, so we skip it. Route bytes are NOT counted in payload_len.
+    if has_route and offset < len(data):
+        route_count = data[offset]; offset += 1
+        offset += route_count * SENDER_ID_SIZE
 
     payload_end = offset + payload_len
     if len(data) < payload_end:
@@ -424,8 +513,14 @@ def parse_bitchat_packet(data: bytes) -> BitchatPacket:
         signature = data[offset:offset + SIGNATURE_SIZE]
 
     if is_compressed:
+        # Compressed payload framing: [originalSize:(2 v1 / 4 v2) BE][raw-DEFLATE].
         try:
-            payload = decompress(payload)
+            _pfx = 4 if version == 2 else 2
+            if len(payload) >= _pfx:
+                _orig = int.from_bytes(bytes(payload[:_pfx]), 'big')
+                _dec  = decompress(bytes(payload[_pfx:]))
+                if (not _orig) or len(_dec) == _orig:
+                    payload = _dec
         except Exception:
             pass
 
@@ -712,7 +807,8 @@ class FragmentCollector:
 # ---------------------------------------------------------------------------
 class BitchatClient:
     def __init__(self):
-        self.my_peer_id   = os.urandom(8).hex()
+        self.my_peer_id   = os.urandom(8).hex()  # provisional; derived from the
+                                                 # Noise key below once it's loaded
         self.nickname     = "my-python-client"
         self.peers:        Dict[str, Peer]  = {}
         self.bloom         = BloomFilter(capacity=500, error_rate=0.01)
@@ -728,6 +824,18 @@ class BitchatClient:
         self.channel_key_commitments:     Dict[str, str]   = {}
         self.discovered_channels: Set[str] = set()
         self.encryption_service   = EncryptionService()
+        # BitChat derives the 8-byte peer ID from the Noise static public key:
+        #   peerID == SHA256(noiseStaticPublicKey)[:8]  (16 hex chars).
+        # iOS validates this binding (getCryptoIdentitiesByPeerIDPrefix) and will
+        # NOT surface a peer whose ID doesn't match its key; Android is lenient.
+        # Deriving it here also makes Sage's identity STABLE across launches,
+        # since her Noise key is persisted.
+        try:
+            _noise_pub = self.encryption_service.get_public_key()
+            if _noise_pub:
+                self.my_peer_id = hashlib.sha256(bytes(_noise_pub)).hexdigest()[:16]
+        except Exception as _e:
+            debug_println(f"[IDENTITY] peer_id derivation failed, using random: {_e}")
         self.client:     Optional[BleakClient]           = None
         self.characteristic: Optional[BleakGATTCharacteristic] = None
         self.running     = True
@@ -791,9 +899,18 @@ class BitchatClient:
                 out += bytes([0x03, len(sign_pub)]) + sign_pub
         except Exception as e:
             debug_println(f"[ANNOUNCE] key fetch failed, sending minimal announce: {e}")
+        # TLV 0x04 = directNeighbors: the 8-byte peer IDs of peers directly
+        # connected to us. Current BitChat only confirms a mesh edge (and shows
+        # the peer / accepts its traffic) when BOTH sides list each other, so we
+        # advertise the peers we're connected to here.
         try:
-            pid = bytes.fromhex(self.my_peer_id)[:8]
-            out += bytes([0x04, len(pid)]) + pid
+            neighbors = b""
+            for pid in list(self.peers.keys())[:10]:
+                pb = bytes.fromhex(pid)[:8]
+                if len(pb) == 8:
+                    neighbors += pb
+            if neighbors and len(neighbors) % 8 == 0:
+                out += bytes([0x04, len(neighbors)]) + neighbors
         except Exception:
             pass
         return bytes(out)
@@ -1065,16 +1182,12 @@ class BitchatClient:
                     signature,
                 )
 
-                identity_packet = create_bitchat_packet_with_signature(
-                    self.my_peer_id,
-                    MessageType.NOISE_IDENTITY_ANNOUNCE,
-                    identity_payload,
-                    signature,
-                )
-                await self.send_packet(identity_packet)
-                debug_println(
-                    " Sent Noise identity announcement (binary format)"
-                )
+                # Current BitChat has NO separate identity announce; a peer's
+                # identity (noise key + signing key) travels in the signed
+                # ANNOUNCE (0x01) TLV sent below. The obsolete
+                # NOISE_IDENTITY_ANNOUNCE (0x13) is ignored by current builds,
+                # so we no longer emit it.
+                _ = identity_payload  # (computed above; intentionally unused)
 
             except Exception as e:
                 debug_println(f" Failed to send identity announcement: {e}")
@@ -1092,10 +1205,12 @@ class BitchatClient:
 
             await asyncio.sleep(0.5)
 
-            announce_packet = create_bitchat_packet(
+            announce_packet = create_signed_bitchat_packet(
                 self.my_peer_id,
                 MessageType.ANNOUNCE,
                 self._build_announce_payload(),
+                self.encryption_service.sign_data,
+                ttl=7,
             )
             await self.send_packet(announce_packet)
 
@@ -1310,8 +1425,8 @@ class BitchatClient:
 
         except Exception as e:
             try:
-                debug_full_println(f"[ERROR] Failed to parse packet: {e}")
-            except BlockingIOError:
+                print(f"[RX-ERR] failed to parse inbound packet: {e}", flush=True)
+            except Exception:
                 pass
 
     # ------------------------------------------------------------------
@@ -1319,44 +1434,35 @@ class BitchatClient:
     # ------------------------------------------------------------------
     async def handle_packet(self, packet: BitchatPacket, raw_data: bytes):
         try:
-            if packet.msg_type != MessageType.ANNOUNCE:   # skip announce spam
+            if True:   # log ALL inbound while debugging registration
                 _hx = ""
                 if packet.msg_type in (MessageType.VERSION_HELLO,
                                        MessageType.VERSION_ACK,
                                        MessageType.NOISE_HANDSHAKE_INIT,
                                        MessageType.NOISE_HANDSHAKE_RESP):
                     _hx = f" hex={packet.payload.hex()[:200]}"
+                _for_sage = (" <<< FOR-SAGE"
+                             if packet.recipient_id_str == self.my_peer_id else "")
                 print(f"[RX] {packet.msg_type.name} from={packet.sender_id_str} "
                       f"to={packet.recipient_id_str or '-'} ttl={packet.ttl} "
-                      f"plen={len(packet.payload)}{_hx}", flush=True)
+                      f"plen={len(packet.payload)}{_for_sage}{_hx}", flush=True)
         except Exception:
             pass
         if packet.msg_type == MessageType.ANNOUNCE:
             await self.handle_announce(packet)
         elif packet.msg_type == MessageType.MESSAGE:
             await self.handle_message(packet, raw_data)
-        elif packet.msg_type in (
-            MessageType.FRAGMENT_START,
-            MessageType.FRAGMENT_CONTINUE,
-            MessageType.FRAGMENT_END,
-        ):
+        elif packet.msg_type == MessageType.FRAGMENT:
             await self.handle_fragment(packet, raw_data)
-        elif packet.msg_type == MessageType.KEY_EXCHANGE:
-            await self.handle_key_exchange(packet)
-        elif packet.msg_type == MessageType.NOISE_HANDSHAKE_INIT:
-            await self.handle_noise_handshake_init(packet)
-        elif packet.msg_type == MessageType.NOISE_HANDSHAKE_RESP:
-            await self.handle_noise_handshake_resp(packet)
+        elif packet.msg_type == MessageType.NOISE_HANDSHAKE:
+            await self.handle_noise_handshake(packet)
         elif packet.msg_type == MessageType.NOISE_ENCRYPTED:
             await self.handle_noise_encrypted(packet, raw_data)
         elif packet.msg_type == MessageType.LEAVE:
             await self.handle_leave(packet)
-        elif packet.msg_type == MessageType.CHANNEL_ANNOUNCE:
-            await self.handle_channel_announce(packet)
-        elif packet.msg_type == MessageType.NOISE_IDENTITY_ANNOUNCE:
-            await self.handle_noise_identity_announce(packet)
         elif packet.msg_type == MessageType.DELIVERY_ACK:
             await self.handle_delivery_ack(packet, raw_data)
+        # REQUEST_SYNC (0x21), FILE_TRANSFER (0x22) and other types are ignored.
 
     # ------------------------------------------------------------------
     # handle_announce
@@ -1512,7 +1618,25 @@ class BitchatClient:
                 unpadded = unpad_message(decrypted_payload)
                 message  = parse_bitchat_message_payload(unpadded)
             else:
-                message = parse_bitchat_message_payload(packet.payload)
+                # Current BitChat public messages carry the RAW UTF-8 content as
+                # payload (sender = packet senderID, ts = header) rather than the
+                # legacy BitchatMessage struct. Try the struct first (older
+                # peers), then fall back to raw content.
+                _pl = bytes(packet.payload)
+                message = None
+                try:
+                    _m = parse_bitchat_message_payload(_pl)
+                    if _m and _m.content:
+                        message = _m
+                except Exception:
+                    message = None
+                if message is None:
+                    _content = _pl.decode("utf-8", errors="ignore").rstrip("\x00").strip()
+                    _mid = hashlib.sha256(bytes(packet.sender_id) + _pl).hexdigest()[:16]
+                    message = BitchatMessage(
+                        id=_mid, content=_content, channel=None,
+                        is_encrypted=False, encrypted_content=None,
+                    )
 
             if message.id not in self.processed_messages:
                 self.bloom.add(message.id)
@@ -1623,12 +1747,17 @@ class BitchatClient:
     # handle_fragment
     # ------------------------------------------------------------------
     async def handle_fragment(self, packet: BitchatPacket, raw_data: bytes):
+        # Current BitChat fragment payload:
+        #   [fragmentID:8][index:2 BE][total:2 BE][originalType:1][data...]
+        # The reassembled bytes are the ORIGINAL PACKET'S PAYLOAD; we rebuild a
+        # logical packet of `originalType` (sender/recipient inherited from the
+        # fragment) and dispatch it.
         if len(packet.payload) >= 13:
-            fragment_id   = packet.payload[0:8]
+            fragment_id   = bytes(packet.payload[0:8])
             index         = struct.unpack('>H', packet.payload[8:10])[0]
-            total         = struct.unpack('>H', packet.payload[10:12])
+            total         = struct.unpack('>H', packet.payload[10:12])[0]
             original_type = packet.payload[12]
-            fragment_data = packet.payload[13:]
+            fragment_data = bytes(packet.payload[13:])
 
             result = self.fragment_collector.add_fragment(
                 fragment_id,
@@ -1640,20 +1769,91 @@ class BitchatClient:
             )
 
             if result:
-                complete_data, _ = result
+                complete_data = result[0]
+                data_bytes = (complete_data if isinstance(complete_data, bytes)
+                              else bytes(complete_data))
                 try:
-                    reassembled_packet = parse_bitchat_packet(complete_data)
-                    await self.handle_packet(reassembled_packet, complete_data)
-                except Exception as e:
-                    debug_full_println(
-                        f"[FRAG] Failed to parse reassembled packet: {e}"
+                    _otn = MessageType(original_type).name
+                except ValueError:
+                    _otn = f"0x{original_type:02x}"
+                print(f"[FRAG] reassembled origType={_otn} len={len(data_bytes)} "
+                      f"hex={data_bytes[:48].hex()}", flush=True)
+                # Reassembled bytes are either a full re-encoded packet or the
+                # original packet's PAYLOAD (of original_type). Try a full-packet
+                # decode first (it handles its own decompression); otherwise
+                # dispatch a synthetic packet carrying the payload.
+                dispatched = False
+                try:
+                    fp = parse_bitchat_packet(data_bytes)
+                    if fp is not None and int(fp.msg_type) == original_type:
+                        await self.handle_packet(fp, data_bytes)
+                        dispatched = True
+                except Exception:
+                    dispatched = False
+                if not dispatched:
+                    try:
+                        _mt = MessageType(original_type)
+                    except ValueError:
+                        _mt = MessageType.MESSAGE
+                    reassembled = BitchatPacket(
+                        msg_type         = _mt,
+                        sender_id        = packet.sender_id,
+                        sender_id_str    = packet.sender_id_str,
+                        recipient_id     = packet.recipient_id,
+                        recipient_id_str = packet.recipient_id_str,
+                        payload          = data_bytes,
+                        ttl              = packet.ttl,
                     )
+                    try:
+                        await self.handle_packet(reassembled, data_bytes)
+                    except Exception as e:
+                        debug_full_println(f"[FRAG] dispatch failed: {e}")
 
         if packet.ttl > 1:
             await asyncio.sleep(random.uniform(0.01, 0.05))
             relay_data      = bytearray(raw_data)
             relay_data[2] = packet.ttl - 1
             await self.send_packet(bytes(relay_data))
+
+    # ------------------------------------------------------------------
+    # handle_noise_handshake  (current protocol: a single message type 0x10
+    # carries every Noise XX stage; the encryption service tracks which stage
+    # we are in, so one handler serves both initiator and responder roles.)
+    # ------------------------------------------------------------------
+    async def handle_noise_handshake(self, packet: BitchatPacket):
+        if (packet.recipient_id_str
+                and packet.recipient_id_str != self.my_peer_id):
+            return
+        try:
+            payload_bytes = (bytes(packet.payload)
+                             if isinstance(packet.payload, bytearray)
+                             else packet.payload)
+            response = self.encryption_service.process_handshake_message(
+                packet.sender_id_str, payload_bytes
+            )
+            if response:
+                resp = create_bitchat_packet_with_recipient(
+                    self.my_peer_id, packet.sender_id_str,
+                    MessageType.NOISE_HANDSHAKE, response, None,
+                )
+                resp = bytearray(resp)
+                resp[2] = 3   # TTL
+                await self.send_packet(bytes(resp))
+                print(f"[NOISE] handshake step -> {packet.sender_id_str} "
+                      f"({len(response)}B)", flush=True)
+            if self.encryption_service.is_session_established(
+                    packet.sender_id_str):
+                self.handshake_attempt_times.pop(packet.sender_id_str, None)
+                nick = (self.peers.get(packet.sender_id_str, Peer()).nickname
+                        or packet.sender_id_str)
+                print(f"\r\033[K\033[92m\u2713 Secure session established with "
+                      f"{nick}\033[0m\n> ", end='', flush=True)
+                await asyncio.sleep(0.1)
+                await self.send_pending_private_messages(packet.sender_id_str)
+        except Exception as e:
+            print(f"[NOISE] handshake from {packet.sender_id_str} FAILED: {e}",
+                  flush=True)
+            self.encryption_service.clear_handshake_state(packet.sender_id_str)
 
     # ------------------------------------------------------------------
     # handle_key_exchange
@@ -1869,87 +2069,57 @@ class BitchatClient:
             )
 
             try:
-                if len(decrypted_payload) > 0 and decrypted_payload[0] == 0x01:
-                    inner_packet = parse_bitchat_packet(decrypted_payload)
-                    if inner_packet:
-                        debug_println(
-                            f"[NOISE] Decrypted inner packet: type="
-                            f"{inner_packet.msg_type.name if hasattr(inner_packet.msg_type, 'name') else inner_packet.msg_type}"
-                        )
-
-                        if inner_packet.msg_type == MessageType.MESSAGE:
-                            try:
-                                message = parse_bitchat_message_payload(
-                                    inner_packet.payload
-                                )
-                                if message.id not in self.processed_messages:
-                                    self.bloom.add(message.id)
-                                    self.processed_messages.add(message.id)
-                                    await self.display_message(
-                                        message, packet, True
-                                    )
-                                    await self.send_delivery_ack(
-                                        message.id,
-                                        packet.sender_id_str,
-                                        True,
-                                    )
-                                else:
-                                    debug_println(
-                                        f"[DUPLICATE] Ignoring duplicate "
-                                        f"encrypted message: {message.id}"
-                                    )
-                            except Exception as e:
-                                debug_println(
-                                    f"[NOISE] Failed to parse inner message "
-                                    f"payload: {e}"
-                                )
-                        else:
-                            debug_println(
-                                f"[NOISE] Unexpected inner packet type: "
-                                f"{inner_packet.msg_type}"
+                # Current BitChat noiseEncrypted plaintext framing:
+                #   [NoisePayloadType:1][payload]
+                #     0x01 privateMessage -> PrivateMessagePacket TLV
+                #                            (0x00 messageID, 0x01 content)
+                #     0x02 readReceipt / 0x03 delivered -> UTF-8 message id
+                dp    = bytes(decrypted_payload)
+                ptype = dp[0] if dp else 0
+                body  = dp[1:]
+                if ptype == 0x01:
+                    mid, content = None, None
+                    i = 0
+                    while i + 2 <= len(body):
+                        t  = body[i]
+                        ln = body[i + 1]
+                        if i + 2 + ln > len(body):
+                            break
+                        val = body[i + 2:i + 2 + ln]
+                        if t == 0x00:
+                            mid = val.decode('utf-8', errors='ignore')
+                        elif t == 0x01:
+                            content = val.decode('utf-8', errors='ignore')
+                        i += 2 + ln
+                    if content is not None:
+                        _mid = mid or hashlib.sha256(dp).hexdigest()[:16]
+                        if _mid not in self.processed_messages:
+                            self.bloom.add(_mid)
+                            self.processed_messages.add(_mid)
+                            print(f"[DM] {packet.sender_id_str}: {content}",
+                                  flush=True)
+                            message = BitchatMessage(
+                                id=_mid, content=content, channel=None,
+                                is_encrypted=False, encrypted_content=None,
                             )
-                            await self.handle_packet(
-                                inner_packet, decrypted_payload
+                            await self.display_message(message, packet, True)
+                            await self.send_delivery_ack(
+                                _mid, packet.sender_id_str, True
                             )
                     else:
-                        debug_println(
-                            "[NOISE] Failed to parse decrypted data as "
-                            "BitchatPacket"
-                        )
+                        debug_println("[NOISE] privateMessage TLV had no content")
+                elif ptype in (0x02, 0x03):
+                    debug_println(
+                        f"[NOISE] receipt type=0x{ptype:02x} for "
+                        f"{body.decode('utf-8', errors='ignore')}"
+                    )
                 else:
                     debug_println(
-                        "[NOISE] Decrypted data does not start with version 1, "
-                        "likely acknowledgment/receipt"
+                        f"[NOISE] unknown NoisePayloadType 0x{ptype:02x}"
                     )
-                    try:
-                        data_str = decrypted_payload.decode('utf-8').strip()
-                        if data_str.startswith('{') and data_str.endswith('}'):
-                            ack_data = json.loads(data_str)
-                            debug_println(
-                                f"[NOISE] Received acknowledgment: {ack_data}"
-                            )
-                        else:
-                            debug_println(
-                                "[NOISE] Unknown decrypted data format"
-                            )
-                    except Exception as json_e:
-                        debug_println(
-                            f"[NOISE] Failed to parse as JSON acknowledgment: "
-                            f"{json_e}"
-                        )
-
             except Exception as e:
                 debug_println(
-                    f"[NOISE] Error parsing decrypted inner packet: {e}"
-                )
-                preview = (
-                    decrypted_payload[:50]
-                    if len(decrypted_payload) >= 50
-                    else decrypted_payload
-                )
-                debug_println(
-                    f"[NOISE] Decrypted data preview: "
-                    f"{preview.hex() if isinstance(preview, bytes) else preview}"
+                    f"[NOISE] Error parsing decrypted payload: {e}"
                 )
 
         except Exception as e:
@@ -3160,24 +3330,19 @@ class BitchatClient:
         msg_id    = str(uuid.uuid4())
         timestamp = int(time.time() * 1000)
 
-        payload = encode_message_payload(
-            msg_id,
-            self.nickname,
-            text,
-            timestamp,
-            channel     = channel_name,
-            channel_key = channel_key,
-            sender_peer_id = self.my_peer_id,
-        )
+        # Current BitChat public messages carry the RAW UTF-8 content as the
+        # payload (identity + timestamp live in the packet header), not the
+        # legacy BitchatMessage struct.
+        payload = text.encode("utf-8")
 
-        packet = create_bitchat_packet(
+        packet = create_signed_bitchat_packet(
             self.my_peer_id,
             MessageType.MESSAGE,
             payload,
+            self.encryption_service.sign_data,
+            ttl=5,
         )
-        pkt_data      = bytearray(packet)
-        pkt_data[2] = 5   # TTL
-        await self.send_packet(bytes(pkt_data))
+        await self.send_packet(packet)
 
         self.delivery_tracker.track_message(msg_id, text, False)
 
@@ -3248,42 +3413,30 @@ class BitchatClient:
 
         timestamp = int(time.time() * 1000)
 
-        inner_payload = encode_message_payload(
-            msg_id,
-            self.nickname,
-            text,
-            timestamp,
-            recipient_id   = peer_id,
-            sender_peer_id = self.my_peer_id,
-        )
-
-        # iOS encrypts the ENTIRE inner BitchatPacket (type=MESSAGE), then
-        # wraps the ciphertext in an outer NOISE_ENCRYPTED packet.
-        inner_packet = create_bitchat_packet_with_recipient(
-            self.my_peer_id,
-            peer_id,
-            MessageType.MESSAGE,
-            inner_payload,
-            None,
-        )
-        _inner = bytearray(inner_packet)
-        _inner[2] = 7   # TTL
-        inner_packet = bytes(_inner)
+        # Current BitChat private message: encrypt
+        #   [NoisePayloadType.privateMessage=0x01] + PrivateMessagePacket TLV
+        #   (0x00 messageID, 0x01 content)   [each TLV length is 1 byte]
+        # then wrap the ciphertext in a SIGNED NOISE_ENCRYPTED (0x11) packet
+        # addressed to the peer (the phones sign these too -> flags 0x03).
+        _mid   = msg_id.encode('utf-8')[:255]
+        _cont  = text.encode('utf-8')[:255]
+        pm_tlv = (bytes([0x00, len(_mid)]) + _mid
+                  + bytes([0x01, len(_cont)]) + _cont)
+        plaintext = bytes([0x01]) + pm_tlv         # 0x01 = privateMessage
 
         encrypted_payload = self.encryption_service.encrypt_for_peer(
-            peer_id, inner_packet
+            peer_id, plaintext
         )
 
-        outer_packet = create_bitchat_packet_with_recipient(
+        outer_packet = create_signed_bitchat_packet(
             self.my_peer_id,
-            peer_id,
             MessageType.NOISE_ENCRYPTED,
             encrypted_payload,
-            None,
+            self.encryption_service.sign_data,
+            ttl=3,
+            recipient_id=peer_id,
         )
-        outer_data      = bytearray(outer_packet)
-        outer_data[2]   = 3   # TTL
-        await self.send_packet(bytes(outer_data))
+        await self.send_packet(outer_packet)
 
         self.delivery_tracker.track_message(msg_id, text, True)
         print(
