@@ -42,7 +42,9 @@ class BitChatBridge(SageMessagingAdapter):
 
     PROFILE = ChannelProfile(
         name="bitchat", max_chars=500, strip_markdown=True,
-        split_long=True, sage_prefix="Sage: ",
+        # No content prefix: BitChat already shows "Sage" as the sender, so a
+        # "Sage: " prefix just doubles up (bitchat/Sage: Sage: ...).
+        split_long=True, sage_prefix="",
     )
     EXPERIMENTAL = True
     _MAX_RECV = 50

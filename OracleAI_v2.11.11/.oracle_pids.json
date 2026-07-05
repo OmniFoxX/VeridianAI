@@ -9,14 +9,14 @@
   {
     "pid": 3536,
     "label": "Llama-Sage",
-    "argv0": "E:\\OracleAI_v2.11.11\\backend\\llama-server.exe",
+    "argv0": "llama-server.exe",
     "create_time": 1783013948.9906416,
     "registered_at": 1783013948.999432
   },
   {
     "pid": 15356,
     "label": "Llama-Daemon",
-    "argv0": "E:\\OracleAI_v2.11.11\\backend\\llama-server.exe",
+    "argv0": "llama-server.exe",
     "create_time": 1783013949.000883,
     "registered_at": 1783013949.0097759
   },
