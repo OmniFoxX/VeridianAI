@@ -38,7 +38,7 @@ PRODUCT = "OracleAI"
 # verify() will then mark a build "official" only if its shipped public key
 # matches this fingerprint (so a swapped key reads as "foreign_key"). Leaving it
 # blank still verifies the signature, just without pinning to your specific key.
-OFFICIAL_FINGERPRINT = "486f75266989ccdab2ed8d64eea29297"
+OFFICIAL_FINGERPRINT = "a6275345d8a615469f687dcb404d87cf"
 
 _THIS = Path(__file__).resolve()
 ROOT = _THIS.parent.parent                 # project root

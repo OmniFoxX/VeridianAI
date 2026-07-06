@@ -1,0 +1,39 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+env/
+
+# Build output
+dist/
+node_modules/
+build/
+
+# Sensitive data
+sage_data/
+**/sage_data/
+sage_data/logs/
+sage_data/memory/
+sage_data/downloads/
+*.key
+*.fernet
+.env
+.oai_signing_key.pem
+**/.oai_signing_key.pem
+
+# OracleAI specific
+sage_plm.pt
+mlm_training_data/
+*.gguf
+*.bin
+*.exe
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor junk
+.vscode/
+*.swp

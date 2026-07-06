@@ -1,0 +1,22 @@
+name: OracleAI Continue Config
+version: 2.0.0
+schema: v1
+
+models:
+  - name: Autodetect
+    provider: ollama
+    model: AUTODETECT
+    roles:
+      - chat
+      - edit
+      - apply
+      - autocomplete
+      - embed
+
+mcpServers:
+  - name: OracleAI
+    transport: http
+    url: http://127.0.0.1:8000/mcp/v1/jsonrpc
+    requestOptions:
+      headers:
+        Authorization: Bearer ${{ env.ORACLE_API_KEY }}

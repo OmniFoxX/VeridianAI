@@ -1,0 +1,66 @@
+name: Template Config Full
+version: 1.0.0
+schema: v1
+models:
+  - uses: anthropic/claude-sonnet-4-6
+    with:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    override:
+      defaultCompletionOptions:
+        temperature: 0.8
+  - name: GPT-4
+    provider: openai
+    model: gpt-4
+    roles:
+      - chat
+      - edit
+    defaultCompletionOptions:
+      temperature: 0.5
+      maxTokens: 2000
+    requestOptions:
+      headers:
+        Authorization: Bearer YOUR_OPENAI_API_KEY
+  - name: Ollama Starcoder
+    provider: ollama
+    model: starcoder
+    roles:
+      - autocomplete
+    autocompleteOptions:
+      debounceDelay: 350
+      maxPromptTokens: 1024
+      onlyMyCode: true
+    defaultCompletionOptions:
+      temperature: 0.3
+      stop:
+        - "\n"
+rules:
+  - Give concise responses
+  - Always assume TypeScript rather than JavaScript
+prompts:
+  - name: test
+    description: Unit test a function
+    prompt: |
+      Please write a complete suite of unit tests for this function. You should use the Jest testing framework.
+      The tests should cover all possible edge cases and should be as thorough as possible.
+      You should also include a description of each test case.
+  - uses: myprofile/my-favorite-prompt
+context:
+  - provider: diff
+  - provider: file
+  - provider: code
+mcpServers:
+  - name: DevServer
+    command: npm
+    args:
+      - run
+      - dev
+    env:
+      PORT: "3000"
+data:
+  - name: My Private Company
+    destination: https://mycompany.com/ingest
+    schema: 0.2.0
+    level: noCode
+    events:
+      - autocomplete
+      - chatInteraction
