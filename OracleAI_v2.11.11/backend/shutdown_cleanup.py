@@ -169,7 +169,15 @@ def _pass2_sweep() -> int:
             name = (proc.info.get("name") or "").lower()
             # Only ever consider our own process families — never sweep
             # explorer.exe or similar just because a path matched.
-            if not any(k in name for k in ("python", "llama-server")):
+            # v2.11.15: lemonade + ollama re-added (they were dropped when
+            # this filter was tightened, which let a detached Lemonade
+            # server outlive quit). Safe: the path/cwd conditions below
+            # still require the process to be rooted in THIS project —
+            # tier_launcher spawns with cwd=<root>, while a user's own
+            # tray Lemonade or standalone Ollama runs from its install
+            # dir and never matches.
+            if not any(k in name for k in
+                       ("python", "llama-server", "lemonade", "ollama")):
                 continue
             cmdline = " ".join(proc.info.get("cmdline") or []).lower()
             exe = (proc.info.get("exe") or "").lower()

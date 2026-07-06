@@ -234,6 +234,43 @@ function createWindow() {
     return { action: 'deny' };
   });
 
+  // v2.11.15: right-click context menu. Electron ships NO native context
+  // menu, so copy/paste via mouse silently did nothing — a papercut for
+  // everyone who doesn't reach for Ctrl+C. Menu adapts to the target:
+  // text field -> Cut/Copy/Paste/Select All; selection -> Copy;
+  // link -> Copy Link Address. Roles act on the focused webContents.
+  mainWindow.webContents.on('context-menu', (_event, params) => {
+    const template = [];
+    if (params.isEditable) {
+      template.push(
+        { label: 'Cut', role: 'cut', enabled: params.selectionText.length > 0 },
+        { label: 'Copy', role: 'copy', enabled: params.selectionText.length > 0 },
+        { label: 'Paste', role: 'paste' },
+        { type: 'separator' },
+        { label: 'Select All', role: 'selectAll' },
+      );
+    } else if (params.selectionText && params.selectionText.trim()) {
+      template.push(
+        { label: 'Copy', role: 'copy' },
+        { type: 'separator' },
+        { label: 'Select All', role: 'selectAll' },
+      );
+    }
+    if (params.linkURL) {
+      if (template.length) template.push({ type: 'separator' });
+      template.push({
+        label: 'Copy Link Address',
+        click: () => { try { require('electron').clipboard.writeText(params.linkURL); } catch { /* ignore */ } },
+      });
+    }
+    if (!template.length) return;   // nothing useful to offer — no empty menu
+    try {
+      Menu.buildFromTemplate(template).popup({ window: mainWindow });
+    } catch (e) {
+      console.error('[Electron] context menu failed:', e && e.message);
+    }
+  });
+
   buildMenu();
 }
 

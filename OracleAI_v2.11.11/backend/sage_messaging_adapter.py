@@ -71,6 +71,11 @@ class SageMessagingAdapter(ABC):
         self.config   = dict(config or {})
         self._reply_fn = None          # async fn(text)->str, injected by the router
         self._ready    = False
+        # v2.11.15: adapters record their most recent failure here so the
+        # UI can SHOW it. Before this, connect errors only reached the
+        # backend console (hidden unless Developer Mode) — "it just won't
+        # connect" with no visible reason. Cleared on successful connect.
+        self.last_error = None
 
     # --- contract ---
     @abstractmethod
@@ -269,6 +274,7 @@ class SageChannelRouter:
                 "connected":    a.connected(),
                 "experimental": getattr(a, "EXPERIMENTAL", False),
                 "note":         a.unavailable_reason(),
+                "error":        getattr(a, "last_error", None),
                 "listening":    name in self._tasks,
             }
         return {
@@ -317,6 +323,7 @@ class DiscordAdapter(SageMessagingAdapter):
     def __init__(self, config: dict):
         super().__init__(config)
         self._client   = None
+        self._task     = None      # v2.11.15: gateway task, observed for errors
         self._token    = self.config.get("token", "")
         self._watched  = self.config.get("watched_channels", [])
         self._nickname = self.config.get("nickname", "Sage")
@@ -341,10 +348,24 @@ class DiscordAdapter(SageMessagingAdapter):
         return None
 
     async def connect(self) -> bool:
+        """v2.11.15 rework — the old version had two lies in it:
+          1. client.start() ran as a fire-and-forget task whose EXCEPTIONS
+             VANISHED — a bad token (LoginFailure) or the Message Content
+             Intent being disabled in the Discord Developer Portal
+             (PrivilegedIntentsRequired) killed the connection silently.
+          2. When on_ready hadn't fired after the wait, it returned True
+             anyway ("assume connecting") — so the UI said connected while
+             nothing would ever communicate. Exactly the no-handshake
+             symptom Todd reported.
+        Now: the task's outcome is observed, failures land in last_error
+        with an actionable hint, and connect() only returns True when the
+        gateway is actually READY."""
         if not self.available():
+            self.last_error = "discord.py not installed (pip install discord.py)"
             logger.error("[Discord] discord.py not installed.")
             return False
         if not self._token:
+            self.last_error = "no bot token configured"
             logger.error("[Discord] no bot token configured.")
             return False
         try:
@@ -356,6 +377,7 @@ class DiscordAdapter(SageMessagingAdapter):
             @self._client.event
             async def on_ready():
                 logger.info("[Discord] connected as %s", self._client.user)
+                self.last_error = None
                 self._ready = True
 
             @self._client.event
@@ -372,13 +394,41 @@ class DiscordAdapter(SageMessagingAdapter):
                     raw={"message_id": message.id, "channel_id": message.channel.id},
                 ))
 
-            asyncio.create_task(self._client.start(self._token))
-            for _ in range(20):
+            self._task = asyncio.create_task(self._client.start(self._token))
+
+            def _observe(t):
+                exc = None
+                try:
+                    exc = t.exception()
+                except (asyncio.CancelledError, asyncio.InvalidStateError):
+                    return
+                if exc is None:
+                    return
+                name = type(exc).__name__
+                if name == "PrivilegedIntentsRequired":
+                    self.last_error = ("Message Content Intent is OFF for this bot — "
+                                       "enable it: discord.com/developers > your app > "
+                                       "Bot > Privileged Gateway Intents")
+                elif name == "LoginFailure":
+                    self.last_error = "login failed — the bot token is wrong or was reset"
+                else:
+                    self.last_error = f"{name}: {exc}"
+                self._ready = False
+                logger.error("[Discord] gateway task died: %s", self.last_error)
+            self._task.add_done_callback(_observe)
+
+            # Wait up to 15s for a REAL ready (or an early task death).
+            for _ in range(30):
                 if self._ready:
                     return True
+                if self._task.done():
+                    return False          # _observe filled last_error
                 await asyncio.sleep(0.5)
-            return True            # slow to fire on_ready; assume connecting
+            self.last_error = ("no response from Discord after 15s — check your "
+                               "network, the token, and the bot's server invite")
+            return False
         except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
             logger.error("[Discord] connect failed: %s", exc)
             return False
 
@@ -478,6 +528,7 @@ class MastodonAdapter(SageMessagingAdapter):
 
     async def connect(self) -> bool:
         if not self.available() or not self._instance or not self._token:
+            self.last_error = self.unavailable_reason() or "not configured"
             return False
         import aiohttp
         try:
@@ -486,13 +537,24 @@ class MastodonAdapter(SageMessagingAdapter):
                                  headers=self._hdr(),
                                  timeout=aiohttp.ClientTimeout(total=10)) as r:
                     if r.status != 200:
-                        logger.error("[Mastodon] verify_credentials -> %s", r.status)
+                        # v2.11.15: say WHY in the UI, not just the console.
+                        if r.status == 401:
+                            self.last_error = ("token rejected (401) — regenerate it: "
+                                               "your instance > Preferences > Development")
+                        elif r.status == 404:
+                            self.last_error = ("instance URL looks wrong (404) — expected "
+                                               "e.g. https://mastodon.social")
+                        else:
+                            self.last_error = f"verify_credentials -> HTTP {r.status}"
+                        logger.error("[Mastodon] %s", self.last_error)
                         return False
                     me = await r.json()
             self._ready = True
+            self.last_error = None
             logger.info("[Mastodon] connected as @%s", me.get("username"))
             return True
         except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
             logger.error("[Mastodon] connect failed: %s", exc)
             return False
 
@@ -588,6 +650,7 @@ class BlueSkyAdapter(SageMessagingAdapter):
 
     async def connect(self) -> bool:
         if not self.available() or not self._handle or not self._app_password:
+            self.last_error = self.unavailable_reason() or "not configured"
             return False
         import aiohttp
         try:
@@ -596,16 +659,28 @@ class BlueSkyAdapter(SageMessagingAdapter):
                                   json={"identifier": self._handle, "password": self._app_password},
                                   timeout=aiohttp.ClientTimeout(total=10)) as r:
                     if r.status != 200:
-                        logger.error("[BlueSky] createSession -> %s", r.status)
+                        # v2.11.15: say WHY in the UI, not just the console.
+                        if r.status == 401:
+                            self.last_error = ("sign-in rejected (401) — check the handle "
+                                               "(e.g. you.bsky.social) and use an App "
+                                               "Password (Settings > App Passwords), not "
+                                               "your account password")
+                        else:
+                            self.last_error = f"createSession -> HTTP {r.status}"
+                        logger.error("[BlueSky] %s", self.last_error)
                         return False
                     d = await r.json()
             self._jwt = d.get("accessJwt")
             self._did = d.get("did")
             self._ready = bool(self._jwt and self._did)
             if self._ready:
+                self.last_error = None
                 logger.info("[BlueSky] connected as %s", self._handle)
+            else:
+                self.last_error = "session created but no token returned — try again"
             return self._ready
         except Exception as exc:
+            self.last_error = f"{type(exc).__name__}: {exc}"
             logger.error("[BlueSky] connect failed: %s", exc)
             return False
 

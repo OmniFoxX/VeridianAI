@@ -2,7 +2,7 @@
 mcp_handlers.py -- shared MCP (Model Context Protocol) tool dispatch
 ====================================================================
 
-v2.3 (2026-06-03): exposes Sage's tool tags to external MCP clients
+v2.3+ (2026-06-03): exposes Sage's tool tags to external MCP clients
 (Continue.dev, Claude Desktop, etc.) via a single shared dispatch
 module used by both the HTTP route (main.py /mcp/v1/jsonrpc) and the
 stdio entry (mcp_server.py).
@@ -95,14 +95,23 @@ def _procedural_memory():
 # ---------------------------------------------------------------------------
 
 MCP_SERVER_NAME = "oracleai-sage"
-MCP_SERVER_VERSION = "2.7.1"
+MCP_SERVER_VERSION = "2.11.11"
 MCP_PROTOCOL_VERSION = "2025-03-26"  # MCP spec version this implementation targets
 
 
-def server_info() -> Dict[str, Any]:
-    """Response payload for the MCP `initialize` handshake."""
+def server_info(client_protocol: str = None) -> Dict[str, Any]:
+    """Response payload for the MCP `initialize` handshake.
+
+    v2.11.15 version negotiation: per the MCP spec, when the client
+    requests a protocol version the server supports, the server should
+    ECHO that version — always answering with our own latest made strict
+    clients treat the handshake as a mismatch and disconnect. We accept
+    the known date-versioned protocol strings; anything unrecognized gets
+    our native version (the spec's 'respond with your latest' fallback)."""
+    _known = {"2024-11-05", "2025-03-26", MCP_PROTOCOL_VERSION}
+    proto = client_protocol if client_protocol in _known else MCP_PROTOCOL_VERSION
     return {
-        "protocolVersion": MCP_PROTOCOL_VERSION,
+        "protocolVersion": proto,
         "capabilities": {
             "tools": {"listChanged": False},
             "logging": {},
@@ -767,7 +776,7 @@ def handle_jsonrpc(request: Dict[str, Any]) -> Dict[str, Any] | None:
 
     try:
         if method == "initialize":
-            return _ok(server_info())
+            return _ok(server_info(params.get("protocolVersion")))
         if method == "initialized" or method == "notifications/initialized":
             # MCP notification, no response expected
             return None if req_id is None else _ok({})

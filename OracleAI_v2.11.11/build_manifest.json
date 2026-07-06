@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "75a14ecc9c1d413bbeb847796eac783b",
-    "built_utc": "2026-07-06T06:43:40.905168+00:00",
+    "build_id": "8e1a32979e9348e68419bf4bafd63265",
+    "built_utc": "2026-07-06T07:26:16.027337+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -88,7 +88,7 @@
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/main.py": "310e246ea33b2665af19c0564869c17d7da344631f7f4de9b1a49c6401d1bb49",
-      "backend/mcp_handlers.py": "1b603812ca31530b72fcc50a6fa361d44c6340b2ea027241d79cac92e2bef177",
+      "backend/mcp_handlers.py": "ed36501c18c4426bab3e40214af39f5233730ebc7bf26c7ba860353e9fdb657c",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "409a06caf40066052c8295e11d1d4a9a637be4530f860e7c4940652454a71761",
       "backend/migrate_at_rest.py": "a08e422bd1c583e9bed1f722e24bd86c8db49e3df76033cce05920f497124621",
@@ -110,11 +110,11 @@
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
       "backend/sage_daemon_client.py": "2ec56533c7e00a0022c046b3936626e5a63532931b5d6f6076275f6d1005be6b",
       "backend/sage_engine.py": "b716de09bad829f27aea4d028ef95254dbd601d52b11f7031aba866c09152821",
-      "backend/sage_messaging_adapter.py": "b887cba2b7f38acfc70343e6ced3d3f909e4ca113c9ce5798085001c375c7e66",
+      "backend/sage_messaging_adapter.py": "3ed8447fac827b52d3ef5b37cec2bd1407491c552e4d66839d92e6a876880db1",
       "backend/sage_rag.py": "23cc633599b0b7ee63756c041ec038222c60f8679bc4458cf8d77ba4026535c5",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
       "backend/session.py": "10c430b1e469c0a4190bc87d2d113580e9c675b1f5f72d906bbfc3b9c1d51d5b",
-      "backend/shutdown_cleanup.py": "0e012bc217d7bf7c3272af8fa788523144ebeda97fef42325b93bd76a4a4d49f",
+      "backend/shutdown_cleanup.py": "19365ddefe69c1054444e58bccfb6651894ddccacf202a1f58a3bf0eae671f29",
       "backend/skill_api.py": "29fde4ab4ee820302f7388df8796e40f9980e472a625cd1c83f3a978a1039daf",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
@@ -159,7 +159,7 @@
       "bitchat-python/bitchat/persistence.py": "8779e316adb91ca4f1f40d999572f82923cb18d0c49e400610ad009a3bd909f5",
       "bitchat-python/bitchat/terminal_ux.py": "338bb6e8096eb1ddeda22ae2d750e2b141569a9bd8e36dc82c54ebf998e30f97",
       "electron/first_run.js": "576e9f233afe4aa9679a490b620a1eb3a91dbec6969f9a0d72a54dc7ce1e4ef2",
-      "electron/main.js": "d3b1d2c509949fa5347f548a6ee40a073b3fe27cabe3ac823231e0458089687f",
+      "electron/main.js": "6114297cc270e8ce96bc0ca5a689b911a8bff47f89eddbc3de9be3491a9353ec",
       "electron/preload.js": "37770f697d4cdf964eaccf82f14ad243c2634cd056ae2db122072ba213083319",
       "frontend/css/comfyui-wizard.css": "b8d41b8e6737d002c158f99df12da3b25eff1bd33b86d6e7baaa4621f4ff5140",
       "frontend/css/command-palette.css": "2f3188f97505dfbb68ab097eacebe7750dd373df1f6fd86a98ab6f9aa10757c6",
@@ -195,5 +195,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "qS0Mc7a9NKiNO0etcY5zeF9ZL+7yhZQzIRz7QkhsAvMVzhUf1mqGeXpDA4ZflfBgcsAVOL5iZ//LEicRHaI/BQ=="
+  "signature_b64": "T8m7e4a24z+7I8j3tfu8DFE4MidWSQ45oOdeLm6nZ+tf/Ba7FSVYu2FkG7zb7ob8hoS8D3FP1Bw3PwxHZBfhDw=="
 }
