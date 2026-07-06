@@ -119,6 +119,43 @@ def _find_lemonade():
         return [exe] if exe else None
 
 
+def _ollama_registry_env() -> dict:
+    """v2.11.15b: read OLLAMA_MODELS (and OLLAMA_HOST if the user set one)
+    straight from the Windows registry — machine level, then user level.
+
+    Why: these are often set as MACHINE env vars (Todd's models live at
+    E:\\Ollamas\\.ollama\\models via one). A spawned process only inherits
+    the environment its parent chain captured at ITS launch — so whether
+    our Ollama saw the models depended on how/when OracleAI happened to be
+    started. That roulette is how 31 models 'vanished' from the picker.
+    The registry value is authoritative; read it directly, always."""
+    out = {}
+    if os.name != "nt":
+        return out
+    try:
+        import winreg
+        hives = [
+            (winreg.HKEY_LOCAL_MACHINE,
+             r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment"),
+            (winreg.HKEY_CURRENT_USER, r"Environment"),   # user overrides machine
+        ]
+        for hive, keypath in hives:
+            try:
+                with winreg.OpenKey(hive, keypath) as k:
+                    for name in ("OLLAMA_MODELS",):
+                        try:
+                            val, _t = winreg.QueryValueEx(k, name)
+                            if val:
+                                out[name] = os.path.expandvars(str(val))
+                        except OSError:
+                            pass
+            except OSError:
+                continue
+    except Exception:
+        pass
+    return out
+
+
 def _resolve_ollama() -> str:
     """Full path to ollama.exe: PATH first, then the standard install dirs
     (fresh installs have a stale PATH until next login). Falls back to the
@@ -172,6 +209,7 @@ def main():
     # until the user logs out/in — bare "ollama" would fail on the very
     # first launch, which is exactly the run that matters most.
     _spawn("Ollama-Oracle", [_resolve_ollama(), "serve"], extra_env={
+        **_ollama_registry_env(),      # OLLAMA_MODELS from the registry (authoritative)
         "OLLAMA_HOST": f"127.0.0.1:{p_oracle}",
         "OLLAMA_MAX_LOADED_MODELS": "1",
         "OLLAMA_NUM_GPU": "1",

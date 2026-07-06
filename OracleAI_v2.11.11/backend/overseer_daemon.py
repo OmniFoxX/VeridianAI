@@ -192,13 +192,26 @@ def _ollama_port() -> int:
         return 11434
 
 
+def _ollama_registry_env() -> dict:
+    """OLLAMA_MODELS etc. read from the registry — shared with tier_launcher
+    so boot spawns and overseer respawns always agree. Empty on any failure."""
+    try:
+        from tier_launcher import _ollama_registry_env as _shared
+        return _shared()
+    except Exception:
+        return {}
+
+
 DAEMON_REGISTRY: Dict[str, dict] = {
     "ollama_oracle": {
         "port":        _ollama_port(),
         "start_cmd":   [_resolve_ollama_exe(), "serve"],
         # Same env tier_launcher gives the boot-time spawn, so a respawned
-        # Ollama binds the same address with the same GPU policy.
+        # Ollama binds the same address with the same GPU policy — including
+        # OLLAMA_MODELS read from the registry (v2.11.15b: inherited env is
+        # roulette for machine-level vars; the registry is authoritative).
         "env": {
+            **_ollama_registry_env(),
             "OLLAMA_HOST": f"127.0.0.1:{_ollama_port()}",
             "OLLAMA_MAX_LOADED_MODELS": "1",
             "OLLAMA_NUM_GPU": "1",
