@@ -119,6 +119,22 @@ def _find_lemonade():
         return [exe] if exe else None
 
 
+def _resolve_ollama() -> str:
+    """Full path to ollama.exe: PATH first, then the standard install dirs
+    (fresh installs have a stale PATH until next login). Falls back to the
+    bare name so behavior is unchanged where it already worked."""
+    exe = shutil.which("ollama")
+    if exe:
+        return exe
+    local = os.environ.get("LOCALAPPDATA", "")
+    pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    for cand in (Path(local) / "Programs" / "Ollama" / "ollama.exe" if local else None,
+                 Path(pf) / "Ollama" / "ollama.exe"):
+        if cand and cand.exists():
+            return str(cand)
+    return "ollama"
+
+
 def _spawn_npu_tier():
     enabled, port = _npu_tier_config()
     if not enabled:
@@ -151,7 +167,11 @@ def main():
     # NOTE: if the user already runs their own Ollama on this port, this
     # spawn fails to bind and exits on its own — and because only OUR
     # (dead) PID is in the ledger, cleanup never touches theirs.
-    _spawn("Ollama-Oracle", ["ollama", "serve"], extra_env={
+    # v2.11.15: resolve the exe explicitly. On a machine where the Setup
+    # Assistant JUST installed Ollama, PATH in this process tree is stale
+    # until the user logs out/in — bare "ollama" would fail on the very
+    # first launch, which is exactly the run that matters most.
+    _spawn("Ollama-Oracle", [_resolve_ollama(), "serve"], extra_env={
         "OLLAMA_HOST": f"127.0.0.1:{p_oracle}",
         "OLLAMA_MAX_LOADED_MODELS": "1",
         "OLLAMA_NUM_GPU": "1",

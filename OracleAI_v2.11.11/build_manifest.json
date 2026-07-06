@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "52932846de9943cc899a2c0d0770f422",
-    "built_utc": "2026-07-06T05:27:01.621845+00:00",
+    "build_id": "75a14ecc9c1d413bbeb847796eac783b",
+    "built_utc": "2026-07-06T06:43:40.905168+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -140,7 +140,7 @@
       "backend/test_skill_store.py": "8a52ca7974d1ff438802874f9fe73b71ac41b9d1dd52fc93f5b2338ec715d426",
       "backend/test_skill_trust.py": "f3da7de5e2795bfd872a4cd1e14163c42c4fd631e5bbe723dce0e8af0409da82",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
-      "backend/tier_launcher.py": "90069b79c0506a2e4e09dae25ec56b45e0f170d7ac31ccf55fd977060154380e",
+      "backend/tier_launcher.py": "baa0e96926657883293336b2ee5c426cadbf3006bd70c67d674c1019a3d0aa5f",
       "backend/tier_lifecycle.py": "87a9c2a7f7329e27af754350afff1c432c5cf4146f36f077e0e784caf4ce16c9",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
       "backend/train_plm_daemon_v2.py": "31965e5a27009003787cc7de1a82efdcbd0814c24d251223fb714a5b90d9feda",
@@ -158,7 +158,7 @@
       "bitchat-python/bitchat/fragmentation.py": "a2b437a3852d6aead756ed4dc5ba716332df4c0d3c3b342bcb2a47818d071c5c",
       "bitchat-python/bitchat/persistence.py": "8779e316adb91ca4f1f40d999572f82923cb18d0c49e400610ad009a3bd909f5",
       "bitchat-python/bitchat/terminal_ux.py": "338bb6e8096eb1ddeda22ae2d750e2b141569a9bd8e36dc82c54ebf998e30f97",
-      "electron/first_run.js": "34b35d6bc3055b3668a2e97bbf76c971023e464b191d0580ec20ffb687885ed0",
+      "electron/first_run.js": "576e9f233afe4aa9679a490b620a1eb3a91dbec6969f9a0d72a54dc7ce1e4ef2",
       "electron/main.js": "d3b1d2c509949fa5347f548a6ee40a073b3fe27cabe3ac823231e0458089687f",
       "electron/preload.js": "37770f697d4cdf964eaccf82f14ad243c2634cd056ae2db122072ba213083319",
       "frontend/css/comfyui-wizard.css": "b8d41b8e6737d002c158f99df12da3b25eff1bd33b86d6e7baaa4621f4ff5140",
@@ -195,5 +195,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "0yTN7k6tmXdEAsuas9CW5bZVtIIXv638I9oTgzN/PWKoOQtbXKSRbOEFfkXvFotWu6arDkYPPFXDBsYbN7jhDQ=="
+  "signature_b64": "qS0Mc7a9NKiNO0etcY5zeF9ZL+7yhZQzIRz7QkhsAvMVzhUf1mqGeXpDA4ZflfBgcsAVOL5iZ//LEicRHaI/BQ=="
 }
