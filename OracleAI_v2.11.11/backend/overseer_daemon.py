@@ -160,7 +160,52 @@ SHARED_RESOURCES = [
 #     sys.executable inherits the user's chosen interpreter. Hardcoding
 #     r"python" would have broken Todd's setup (py launcher) and
 #     anyone else who only has python3.
+# v2.11.15: Ollama joined the registry. The Oracle tier was launched ONCE at
+# boot with no recovery — when Ollama's new desktop app (0.31+) auto-updated
+# and restarted itself mid-session, the tier silently died and every Ollama
+# model vanished from the model picker until a full OracleAI restart. The
+# overseer's port heartbeat + restart machinery is exactly the right home:
+# dead for >threshold -> respawned with the same env tier_launcher uses.
+def _resolve_ollama_exe() -> str:
+    """ollama.exe via PATH, then the standard install dirs (mirrors
+    tier_launcher._resolve_ollama — duplicated to keep the overseer
+    import-light and standalone-safe)."""
+    import shutil as _sh
+    exe = _sh.which("ollama")
+    if exe:
+        return exe
+    _local = os.environ.get("LOCALAPPDATA", "")
+    _pf = os.environ.get("ProgramFiles", r"C:\Program Files")
+    for _cand in ((Path(_local) / "Programs" / "Ollama" / "ollama.exe") if _local else None,
+                  Path(_pf) / "Ollama" / "ollama.exe"):
+        if _cand and _cand.exists():
+            return str(_cand)
+    return "ollama"
+
+
+def _ollama_port() -> int:
+    try:
+        from config_store import OracleConfig
+        return int(OracleConfig.load(PROJECT_ROOT / "config.json")
+                   .network.ports.ollama_oracle or 11434)
+    except Exception:
+        return 11434
+
+
 DAEMON_REGISTRY: Dict[str, dict] = {
+    "ollama_oracle": {
+        "port":        _ollama_port(),
+        "start_cmd":   [_resolve_ollama_exe(), "serve"],
+        # Same env tier_launcher gives the boot-time spawn, so a respawned
+        # Ollama binds the same address with the same GPU policy.
+        "env": {
+            "OLLAMA_HOST": f"127.0.0.1:{_ollama_port()}",
+            "OLLAMA_MAX_LOADED_MODELS": "1",
+            "OLLAMA_NUM_GPU": "1",
+            "OLLAMA_GPU_OVERHEAD": "536870912",
+        },
+        "description": "Oracle tier (Ollama LLM server)",
+    },
     "sage": {
         "port":        9998,
         "start_cmd":   [sys.executable, str(PROJECT_ROOT / "backend" / "sage_daemon.py")],
@@ -688,6 +733,9 @@ class OverseerDaemon:
             else:
                 _popen_kw["stdout"] = subprocess.DEVNULL
                 _popen_kw["stderr"] = subprocess.DEVNULL
+            # v2.11.15: per-daemon environment (Ollama needs OLLAMA_HOST etc.).
+            if config.get("env"):
+                _popen_kw["env"] = {**os.environ, **config["env"]}
             proc = subprocess.Popen(config["start_cmd"], **_popen_kw)
             # v2.11.12e zombie fix: register the respawned generation in
             # the shared PID ledger. Without this, a daemon rotated after
