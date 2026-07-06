@@ -46,7 +46,7 @@ class BitChatBridge(SageMessagingAdapter):
         # "Sage: " prefix just doubles up (bitchat/Sage: Sage: ...).
         split_long=True, sage_prefix="",
     )
-    EXPERIMENTAL = True
+    EXPERIMENTAL = False
     _MAX_RECV = 50
 
     def __init__(self, config: dict):
@@ -74,9 +74,12 @@ class BitChatBridge(SageMessagingAdapter):
     def unavailable_reason(self) -> str:
         if aiohttp is None:
             return "pip install aiohttp"
-        return "experimental: needs a local BitChat↔HTTP bridge at %s:%d" % (
-            self._host, self._port
-        )
+        # Not an error — a standing hardware requirement shown next to the
+        # channel. Sage joins the mesh by advertising as a real BLE peer, which
+        # needs a Bluetooth LE (4.0+) adapter that supports the peripheral /
+        # advertising role (a USB BLE dongle; most built-in Windows radios can't
+        # advertise a GATT service). The gateway now auto-starts on Connect.
+        return "needs a Bluetooth LE (4.0+) dongle (peripheral-capable)"
 
     def connected(self) -> bool:
         return bool(self._connected)
@@ -172,6 +175,46 @@ class BitChatBridge(SageMessagingAdapter):
         except Exception as exc:
             logger.error("[BitChat] send error: %s", exc)
             return False
+
+    async def sage_respond(self, message: ChannelMessage) -> bool:
+        """Route Sage's reply the way the incoming message arrived.
+
+        A reply to a *private DM* goes back to that same peer as an encrypted
+        DM — never leaked into the public mesh. A reply to public chat is
+        broadcast as before. This override lives here (not in the generic base)
+        because only the BitChat bridge knows the gateway's DM convention:
+        the gateway routes a message whose content is "DM:<peer_id>:<nick>:<text>"
+        as an encrypted private message (content colons survive its split(':',3)).
+        """
+        if not self._reply_fn:
+            logger.warning("[BitChat] no reply_fn injected — cannot auto-respond.")
+            return False
+        try:
+            result = await self._reply_fn(message.content)
+        except Exception as exc:
+            logger.exception("[BitChat] reply generation error: %s", exc)
+            return False
+        if not result:
+            return False
+
+        raw       = getattr(message, "raw", None) or {}
+        is_private = bool(raw.get("private"))
+        peer_id    = (raw.get("peer_id") or "").strip()
+        nick       = (message.sender or raw.get("sender") or "").strip()
+        # Only route as a DM when we have a real peer to reply to — never echo
+        # a self/system pseudo-peer back out.
+        route_dm   = is_private and bool(peer_id) and peer_id not in ("self", "system")
+
+        ok_all = True
+        for chunk in self._format_for_channel(result):
+            if route_dm:
+                payload = f"DM:{peer_id}:{nick}:{chunk}"
+                ok = await self.send(payload, channel=message.channel)
+            else:
+                ok = await self.send(chunk, channel=message.channel)
+            if not ok:
+                ok_all = False
+        return ok_all
 
     async def receive(self, timeout: float = 5.0) -> list:
         if not await self._reconnect_if_needed():

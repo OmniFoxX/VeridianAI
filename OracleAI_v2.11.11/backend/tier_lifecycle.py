@@ -350,10 +350,88 @@ def spawn_llama_server(tier: str, ctx_size: int) -> subprocess.Popen:
     return subprocess.Popen(cmd, creationflags=_dm_creationflags())
 
 
+_GATEWAY_PY: Optional[list] = None
+
+
+def _gateway_python() -> list:
+    """Return a Python interpreter (as a Popen argv prefix) that actually has
+    the gateway's BLE dependencies (bleak + winrt).
+
+    We CANNOT assume sys.executable works: start.bat launches the app with the
+    first `py`/`python` on PATH, which on this machine is a 3.13 that has no
+    bleak, while the BLE stack (bleak/winrt) lives in Python 3.14. The old
+    manual workflow ran the gateway from that 3.14 by hand. So we probe a few
+    candidate interpreters and pick the first that can import bleak+winrt. The
+    result is cached for the process (probing is done once, on first Connect)."""
+    global _GATEWAY_PY
+    if _GATEWAY_PY is not None:
+        return _GATEWAY_PY
+    import os
+    # Probe for the FULL set the gateway imports. winrt is split per-namespace,
+    # so an interpreter can have winrt.windows.devices.bluetooth yet still lack
+    # winrt.windows.security.cryptography — exactly what broke auto-start here
+    # (the pythoncore-3.14 env had bluetooth but not security; C:\Python314 has
+    # the complete set). A shallow probe would wrongly accept the partial env.
+    probe = (
+        "import bleak, fastapi, uvicorn, cryptography;"
+        "import winrt.windows.devices.bluetooth;"
+        "import winrt.windows.devices.bluetooth.genericattributeprofile;"
+        "import winrt.windows.storage.streams;"
+        "import winrt.windows.security.cryptography"
+    )
+    candidates = [[sys.executable]]
+    if sys.platform == "win32":
+        # py-launcher targets, then bare names, then common install locations.
+        candidates += [["py", "-3.14"], ["py", "-3.13"], ["py", "-3.12"], ["py"]]
+    candidates += [["python"], ["python3"]]
+    if sys.platform == "win32":
+        _la = os.environ.get("LOCALAPPDATA", "")
+        for _base in (r"C:\Python314", r"C:\Python313", r"C:\Python312",
+                      os.path.join(_la, r"Programs\Python\Python314") if _la else "",
+                      os.path.join(_la, r"Programs\Python\Python313") if _la else ""):
+            if _base:
+                candidates.append([os.path.join(_base, "python.exe")])
+    hidden = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    seen, chosen = set(), None
+    for c in candidates:
+        key = tuple(c)
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            r = subprocess.run(c + ["-c", probe], capture_output=True,
+                               timeout=25, creationflags=hidden)
+            if r.returncode == 0:
+                chosen = c
+                break
+        except Exception:
+            continue
+    _GATEWAY_PY = chosen or [sys.executable]
+    if chosen and chosen != [sys.executable]:
+        print(f"[tier] bitchat: gateway interpreter -> {chosen} "
+              f"(app interpreter {sys.executable} lacks bleak/winrt)")
+    elif not chosen:
+        print("[tier] bitchat: WARNING no interpreter with bleak/winrt found; "
+              f"falling back to {sys.executable} — gateway will likely fail. "
+              "Install bleak+winrt into that Python, or a 3.14 on PATH.")
+    return _GATEWAY_PY
+
+
 def spawn_bitchat_gateway() -> subprocess.Popen:
-    """Spawn the BitChat BLE gateway. Console visibility follows Developer Mode."""
-    gateway = pathlib.Path(__file__).parent / "bitchat_ble_gateway.py"
+    """Spawn the BitChat gateway. Console visibility follows Developer Mode.
+
+    Uses the WinRT peripheral gateway (Sage advertises as a real BLE peer that
+    the phones handshake with) and falls back to the legacy central-role BLE
+    gateway only if the WinRT script is missing. Both expose the identical
+    :8080 WS/HTTP contract, so ensure_/stop_bitchat_gateway are unaffected.
+    Runs under an interpreter that actually has the BLE deps (see
+    _gateway_python) — NOT necessarily the app's own Python. This is what lets
+    BitChat auto-start from the UI toggle instead of a manual terminal launch."""
+    here = pathlib.Path(__file__).parent
+    gateway = here / "bitchat_winrt_gateway.py"
+    if not gateway.exists():
+        gateway = here / "bitchat_ble_gateway.py"
     return subprocess.Popen(
-        [sys.executable, str(gateway)],
+        _gateway_python() + [str(gateway)],
         creationflags=_dm_creationflags(),
     )

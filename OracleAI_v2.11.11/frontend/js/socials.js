@@ -1,4 +1,4 @@
-/* socials.js -- Socials channel tab (BitChat experimental + Discord + more).
+/* socials.js -- Socials channel tab (BitChat + Discord + more).
  * Full-area view in the Oracle (games) panel, shown via the 📡 tab. Talks to
  * /api/socials/*. The feed only polls while the tab is open. Pure-ASCII source. */
 (function () {
@@ -37,7 +37,9 @@
         var c = chans[n];
         var dot = c.connected ? "🟢" : (c.available ? "⚪" : "🔴");
         var label = n + (c.experimental ? " (experimental)" : "");
-        var note = c.note ? (' <span style="opacity:0.7">— ' + esc(c.note) + "</span>") : "";
+        // Show the requirement/setup note as guidance until the channel is
+        // connected; once it's up (green dot) the note is redundant.
+        var note = (c.note && !c.connected) ? (' <span style="opacity:0.7">— ' + esc(c.note) + "</span>") : "";
         var btn = c.connected
           ? '<button class="toolbar-btn" aria-label="Disconnect ' + esc(n) + '" data-tip="Disconnect from ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',false)">Disconnect</button>'
           : '<button class="toolbar-btn"' + (c.available ? "" : " disabled") + ' aria-label="Connect ' + esc(n) + '" data-tip="Connect to ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',true)">Connect</button>';
@@ -98,8 +100,8 @@
       + '<input id="cfg-bsky-service" class="setting-select" type="text" placeholder="service (default https://bsky.social)" value="' + esc(k.service || "") + '" style="width:100%;margin-top:2px">'
       + '<div style="display:flex;gap:4px;margin-top:3px"><button class="toolbar-btn" onclick="socialsSaveBluesky()">Save</button>'
       + '<button class="toolbar-btn" onclick="socialsClearToken(\'bluesky\',\'app_password\')">Remove password</button></div></div>'
-      // --- BitChat (experimental) ---
-      + '<div><div><b>BitChat</b> <span style="opacity:0.7">(experimental)</span></div>'
+      // --- BitChat (requires a peripheral-capable BLE 4.0+ dongle) ---
+      + '<div><div><b>BitChat</b> <span style="opacity:0.7">(needs a BLE 4.0+ dongle)</span></div>'
       + '<div style="display:flex;gap:4px;margin-top:2px">'
       + '<input id="cfg-bitchat-host" class="setting-select" type="text" placeholder="host" value="' + esc(b.host || "localhost") + '" style="flex:1">'
       + '<input id="cfg-bitchat-port" class="setting-select" type="number" placeholder="port" value="' + esc(b.port || 8080) + '" style="width:80px"></div>'

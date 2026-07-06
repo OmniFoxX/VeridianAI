@@ -657,6 +657,35 @@ def should_fragment(packet: bytes) -> bool:
     return len(packet) > FRAGMENT_THRESHOLD
 
 
+def _unpadded_len(packet: bytes) -> int:
+    """Real (pre-padding) length of a BitChat packet = header + sender +
+    [recipient] + [route] + payload + [signature], excluding PKCS#7 padding.
+    Sage sends v1; v2 handled defensively."""
+    try:
+        if len(packet) < 14:
+            return len(packet)
+        version = packet[0]
+        flags   = packet[11]
+        has_recipient = bool(flags & FLAG_HAS_RECIPIENT)
+        has_signature = bool(flags & FLAG_HAS_SIGNATURE)
+        has_route     = (version == 2) and bool(flags & 0x08)
+        if version == 2:
+            plen = int.from_bytes(packet[12:16], "big"); off = 16
+        else:
+            plen = (packet[12] << 8) | packet[13]; off = 14
+        off += 8                      # sender
+        if has_recipient:
+            off += 8
+        if has_route and off < len(packet):
+            off += 1 + packet[off] * 8
+        off += plen
+        if has_signature:
+            off += SIGNATURE_SIZE
+        return min(off, len(packet))
+    except Exception:
+        return len(packet)
+
+
 def unpad_message(data: bytes) -> bytes:
     """Strip PKCS#7-style zero padding from a decrypted message."""
     if not data:
@@ -1331,74 +1360,62 @@ class BitchatClient:
     # send_packet_with_fragmentation
     # ------------------------------------------------------------------
     async def send_packet_with_fragmentation(self, packet: bytes):
-        if not self.client or not self.characteristic:
-            debug_println(
-                "[!] No connection available. Cannot send fragmented message."
-            )
-            return
+        """Fragment a large packet into current-protocol FRAGMENT (0x20) packets.
 
+        Each fragment payload is [fragmentID:8][index:2 BE][total:2 BE]
+        [originalType:1][chunk]; the reassembled chunks reconstruct the ORIGINAL
+        (unpadded) packet, which the receiver parses. Preserves the original
+        type, recipient and ttl so DMs route to the right peer."""
+        if not self.client or not self.characteristic:
+            debug_println("[!] No connection available. Cannot send fragmented message.")
+            return
         if not self.client.is_connected:
             debug_println("[!] Connection lost. Cannot send fragmented packet.")
             if self.client:
                 self.handle_disconnect(self.client)
             return
 
-        debug_println(f"[FRAG] Original packet size: {len(packet)} bytes")
+        core      = packet[:_unpadded_len(packet)]      # strip padding first
+        orig_type = core[1] if len(core) > 1 else int(MessageType.MESSAGE)
+        try:
+            _p        = parse_bitchat_packet(packet)
+            recipient = _p.recipient_id_str
+            ttl       = max(int(_p.ttl), 3)
+        except Exception:
+            recipient, ttl = None, 7
 
-        fragment_size    = 150
-        chunks           = [
-            packet[i:i + fragment_size]
-            for i in range(0, len(packet), fragment_size)
-        ]
-        total_fragments  = len(chunks)
-        fragment_id      = os.urandom(8)
-
-        debug_println(f"[FRAG] Fragment ID: {fragment_id.hex()}")
-        debug_println(f"[FRAG] Total fragments: {total_fragments}")
+        fragment_size = 150                              # -> ~193B frag packet
+        chunks = [core[i:i + fragment_size]
+                  for i in range(0, len(core), fragment_size)]
+        total = len(chunks)
+        fid   = os.urandom(8)
+        print(f"[TX] FRAGMENTING {len(core)}B type=0x{orig_type:02x} -> "
+              f"{total} frags (id={fid.hex()})", flush=True)
 
         for index, chunk in enumerate(chunks):
-            if index == 0:
-                fragment_type = MessageType.FRAGMENT_START
-            elif index == len(chunks) - 1:
-                fragment_type = MessageType.FRAGMENT_END
-            else:
-                fragment_type = MessageType.FRAGMENT_CONTINUE
-
-            frag_payload = bytearray()
-            frag_payload.extend(fragment_id)
-            frag_payload.extend(struct.pack('>H', index))
-            frag_payload.extend(struct.pack('>H', total_fragments))
-            frag_payload.append(MessageType.MESSAGE.value)
-            frag_payload.extend(chunk)
-
-            frag_packet = create_bitchat_packet(
-                self.my_peer_id,
-                fragment_type,
-                bytes(frag_payload),
+            frag_payload = (bytes(fid)
+                            + struct.pack('>H', index)
+                            + struct.pack('>H', total)
+                            + bytes([orig_type])
+                            + bytes(chunk))
+            frag_packet = create_bitchat_packet_with_recipient(
+                self.my_peer_id, recipient, MessageType.FRAGMENT,
+                frag_payload, None, ttl,
             )
-
             try:
                 await self.client.write_gatt_char(
-                    self.characteristic,
-                    frag_packet,
-                    response=False,
+                    self.characteristic, frag_packet, response=False,
                 )
-                debug_println(
-                    f"[FRAG] ✓ Fragment {index + 1}/{total_fragments} sent"
-                )
-                if index < len(chunks) - 1:
+                if index < total - 1:
                     await asyncio.sleep(0.02)
             except Exception as e:
                 if "not connected" in str(e).lower():
-                    debug_println(
-                        f"[FRAG] Connection lost while sending fragment "
-                        f"{index + 1}"
-                    )
+                    debug_println(f"[FRAG] connection lost on fragment {index + 1}")
                     if self.client:
                         self.handle_disconnect(self.client)
                     return
                 else:
-                    raise e
+                    debug_println(f"[FRAG] fragment {index + 1} send error: {e}")
 
     # ------------------------------------------------------------------
     # Notification handler
@@ -2096,13 +2113,25 @@ class BitchatClient:
                         if _mid not in self.processed_messages:
                             self.bloom.add(_mid)
                             self.processed_messages.add(_mid)
-                            print(f"[DM] {packet.sender_id_str}: {content}",
-                                  flush=True)
-                            message = BitchatMessage(
-                                id=_mid, content=content, channel=None,
-                                is_encrypted=False, encrypted_content=None,
+                            # BitChat sends internal control DMs as plain text
+                            # ([FAVORITED]/[UNFAVORITED] favorite sync, receipts).
+                            # Ack them but keep them out of the human feed.
+                            _c = content.lstrip()
+                            _is_control = (
+                                _c.startswith("[FAVORITED]")
+                                or _c.startswith("[UNFAVORITED]")
+                                or _c.startswith("[DELIVERED]")
+                                or _c.startswith("[READ]")
+                                or _c.startswith("[NOISE")
                             )
-                            await self.display_message(message, packet, True)
+                            if not _is_control:
+                                print(f"[DM] {packet.sender_id_str}: {content}",
+                                      flush=True)
+                                message = BitchatMessage(
+                                    id=_mid, content=content, channel=None,
+                                    is_encrypted=False, encrypted_content=None,
+                                )
+                                await self.display_message(message, packet, True)
                             await self.send_delivery_ack(
                                 _mid, packet.sender_id_str, True
                             )

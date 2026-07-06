@@ -510,6 +510,16 @@ async def _handle_outbound(channel: str, content: str):
         parts = content.split(":", 3)
         if len(parts) == 4:
             _, peer_id, nick, dm = parts
+            # Echo Sage's outbound DM into the feed (private, self-echo) so the
+            # UI shows the reply — consistent with the slash-command DM path,
+            # and filtered from auto-reply by echo=True/peer_id='self'.
+            try:
+                inbound_queue.put_nowait({
+                    "type": "message", "sender": NICKNAME, "channel": nick,
+                    "content": dm, "timestamp": time.time(),
+                    "peer_id": "self", "private": True, "echo": True})
+            except asyncio.QueueFull:
+                pass
             await _sage_client.send_private_message(dm, peer_id, nick)
         return
     await _sage_client.send_public_message(content)

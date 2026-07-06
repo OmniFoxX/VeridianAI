@@ -918,9 +918,10 @@ try:
         """One-shot Sage reply for channel auto-reply, via the real model_manager."""
         _msgs = [
             {"role": "system", "content": "You are Sage replying on a Bluetooth "
-             "mesh chat where each message is tiny. Reply in ONE or TWO short "
-             "sentences, UNDER 160 characters total. Friendly, plain-text. No "
-             "preamble, no sign-off, and do NOT prefix your reply with 'Sage:'."},
+             "mesh chat. Keep replies conversational and reasonably brief — a few "
+             "short sentences is ideal (long messages are auto-fragmented, so "
+             "you're not hard-limited). Friendly, plain-text. No preamble, no "
+             "sign-off, and do NOT prefix your reply with 'Sage:'."},
             {"role": "user", "content": (_text or "")[:2000]},
         ]
         # Pick the active model from the configured slots (default -> secondary
@@ -944,7 +945,9 @@ try:
             # own prefix), and cap length so the reply fits one BLE notification.
             if _out[:5].lower() == "sage:":
                 _out = _out[5:].strip()
-            return _out[:200]
+            # Outbound fragmentation handles long messages now, so allow a
+            # generous cap (a safety bound against runaway generations).
+            return _out[:800]
         except Exception as _gen_err:
             print(f"[SOCIALS] reply generation error: {_gen_err}")
             return ""
