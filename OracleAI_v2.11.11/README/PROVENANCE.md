@@ -34,4 +34,8 @@ handoff/integrity guard, and the CRAIID modules (`backend/craiid/*`) are
 integrity-sensitive. Altering them is unsupported and will mark the build as
 modified.
 
-**Official public-key fingerprint:** _(486f75266989ccdab2ed8d64eea29297)_
+**Official public-key fingerprint:** `a6275345d8a615469f687dcb404d87cf`
+
+> **Revoked:** `486f75266989ccdab2ed8d64eea29297` — this key was exposed on
+> 2026-07-05 and is **no longer official**. Any build presenting the revoked
+> fingerprint should be treated as untrusted, even with a valid signature.
