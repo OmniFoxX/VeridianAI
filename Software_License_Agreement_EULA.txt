@@ -1,8 +1,8 @@
 DOCUMENT 3 OF 4: SOFTWARE LICENSE AGREEMENT (EULA)
-ORACLEAI — ELECTRUM CONSILIARIUS, ETC.
+VERIDIAN — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
-ORACLEAI END-USER LICENSE AGREEMENT (EULA)
-Published by: Electrum Consiliarius, Etc. Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
+VERIDIAN END-USER LICENSE AGREEMENT (EULA)
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PLAIN-ENGLISH SUMMARY — READ THIS FIRST
@@ -11,16 +11,16 @@ This box is a plain summary for readability. The full legal agreement below cont
 
 What we give you:
 
-If you're using OracleAI for personal use or because of a disability: it's free, forever, no tricks.
+If you're using VeridianAI for personal use or because of a disability: it's free, forever, no tricks.
 Optional $1.00 one-time contribution if you want to support us — totally voluntary, no features gated behind it.
 You own everything you create with it. Your prompts, your outputs, your model files. All yours. We literally cannot see them — they never leave your computer. That's by design.
 The license is perpetual for personal/accessibility use. You don't have to re-buy it, re-subscribe, or worry about it expiring.
 What we keep:
 
-The OracleAI software itself. The code we wrote is ours. You can use it; you just can't copy it, sell it, or claim you made it.
+The VeridianAI software itself. The code we wrote is ours. You can use it; you just can't copy it, sell it, or claim you made it.
 What you need for business use:
 
-If you're using OracleAI for commercial purposes (running it for clients, integrating it into a product you sell, or deploying it in a business context), you need to buy a commercial license from us. Contact silverfox4816@gmail.com.
+If you're using VeridianAI for commercial purposes (running it for clients, integrating it into a product you sell, or deploying it in a business context), you need to buy a commercial license from us. Contact silverfox4816@gmail.com.
 The honest disclaimer:
 
 The software is provided as-is. AI is imperfect. We're not responsible if the AI says something wrong, if your GPU runs hot, or if you rely on AI output for something important and it doesn't work out. Use your judgment.
@@ -34,9 +34,9 @@ As used in this End-User License Agreement ("Agreement" or "EULA"), the followin
 
 "Agreement" means this End-User License Agreement, as amended from time to time.
 
-"Accessibility Use" means any use of the Software by an individual whose primary or co-primary purpose for using OracleAI is to assist with, accommodate, or supplement a physical, sensory, cognitive, or neurological disability as recognized under applicable law, including but not limited to the Americans with Disabilities Act (42 U.S.C. § 12101 et seq.) or equivalent statutes.
+"Accessibility Use" means any use of the Software by an individual whose primary or co-primary purpose for using VeridianAI is to assist with, accommodate, or supplement a physical, sensory, cognitive, or neurological disability as recognized under applicable law, including but not limited to the Americans with Disabilities Act (42 U.S.C. § 12101 et seq.) or equivalent statutes.
 
-"Commercial Deployment" means any use of the Software in connection with: (a) offering products, services, or capabilities to customers or clients for monetary or other valuable consideration in which OracleAI or its outputs play a material role; (b) internal enterprise operations of a for-profit entity; (c) resale, sublicensing, or redistribution of the Software or its capabilities; or (d) any systematic, organizational, automated, or revenue-affecting use beyond isolated personal productivity.
+"Commercial Deployment" means any use of the Software in connection with: (a) offering products, services, or capabilities to customers or clients for monetary or other valuable consideration in which VeridianAI or its outputs play a material role; (b) internal enterprise operations of a for-profit entity; (c) resale, sublicensing, or redistribution of the Software or its capabilities; or (d) any systematic, organizational, automated, or revenue-affecting use beyond isolated personal productivity.
 
 "Commercial License" means a separate paid license agreement obtained from Publisher authorizing Commercial Deployment.
 
@@ -50,9 +50,9 @@ As used in this End-User License Agreement ("Agreement" or "EULA"), the followin
 
 "Personal Use" means use by an individual natural person for that person's own non-commercial purposes, including learning, productivity, creative projects, research, and personal communication, where no revenue, commercial advantage, organizational deployment, or third-party service provision is derived from the use.
 
-"Publisher" means Electrum Consiliarius, Etc., a business organized under the laws of Washington State, USA.
+"Publisher" means MentiSphere Software, a business organized under the laws of Washington State, USA.
 
-"Software" means the OracleAI local AI inference platform, including all client application files, executable binaries, configuration utilities, interface components, associated libraries, and documentation published by Publisher under the OracleAI name, as delivered to Licensee, together with any updates, patches, or new versions provided by Publisher.
+"Software" means the VeridianAI local AI inference platform, including all client application files, executable binaries, configuration utilities, interface components, associated libraries, and documentation published by Publisher under the VeridianAI name, as delivered to Licensee, together with any updates, patches, or new versions provided by Publisher.
 
 "User Content" means all prompts, input data, instructions, embedded documents, media files, and any other materials Licensee provides as input to AI Model Weights through the Software, and all outputs — text, images, audio, code, or other modalities — generated as a result of that input, together with all local context, conversation histories, session states, and fine-tuning datasets Licensee creates or processes on Licensee's Device.
 
@@ -78,7 +78,7 @@ Publisher offers Licensee the entirely voluntary option to make a one-time perso
 2.3 Commercial License Required for Commercial Deployment
 Any Commercial Deployment of the Software requires a separate, valid, paid Commercial License from Publisher. Licensee may not use the Software for Commercial Deployment under the license granted in Section 2.1. Commercial Deployment without a valid Commercial License constitutes material breach of this Agreement, infringement of Publisher's intellectual property rights, and grounds for injunctive relief and damages.
 
-[COMMERCIAL LICENSE TERMS — FUTURE TERMS TO BE INSERTED HERE. TO OBTAIN A COMMERCIAL LICENSE, CONTACT SILVERFOX4816@GMAIL.COM. COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH ELECTRUM CONSILIARIUS, ETC.]
+[COMMERCIAL LICENSE TERMS — FUTURE TERMS TO BE INSERTED HERE. TO OBTAIN A COMMERCIAL LICENSE, CONTACT SILVERFOX4816@GMAIL.COM. COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH MENTISPHERE SOFTWARE]
 
 2.4 License Scope Limitations
 The licenses granted in Section 2.1 do not include the right to:
@@ -87,17 +87,17 @@ The licenses granted in Section 2.1 do not include the right to:
 
 SECTION 3 — OWNERSHIP AND INTELLECTUAL PROPERTY
 3.1 Publisher's Intellectual Property
-The Software — including all source code (whether compiled or interpreted), object code, software architecture, design patterns, user interface elements, documentation, and associated materials created by Publisher — is and remains the sole and exclusive intellectual property of Electrum Consiliarius, Etc. The Software is protected by:
+The Software — including all source code (whether compiled or interpreted), object code, software architecture, design patterns, user interface elements, documentation, and associated materials created by Publisher — is and remains the sole and exclusive intellectual property of MentiSphere Software The Software is protected by:
 
 United States copyright law, 17 U.S.C. § 101 et seq., and applicable U.S. trade secret law;
 The Berne Convention for the Protection of Literary and Artistic Works;
 The Agreement on Trade-Related Aspects of Intellectual Property Rights (TRIPS);
-Applicable trademark law governing the "OracleAI" name and any associated marks; and
+Applicable trademark law governing the "VeridianAI" name and any associated marks; and
 Intellectual property treaties of all other applicable national and international jurisdictions.
 All rights not expressly granted in this Agreement are reserved by Publisher. This Agreement does not convey to Licensee any ownership interest in the Software; it conveys only a limited license as described herein.
 
 3.2 Absolute User Ownership of User Content — Irrevocable Declaration
-Electrum Consiliarius, Etc. hereby irrevocably declares and agrees that:
+MentiSphere Software hereby irrevocably declares and agrees that:
 
 Licensee retains one hundred percent (100%) legal and beneficial ownership of all User Content without exception or qualification.
 
@@ -207,7 +207,7 @@ This Agreement shall be governed exclusively by the laws of the State of Washing
 
 SECTION 10 — ENTIRE AGREEMENT AND MISCELLANEOUS
 10.1 Entire Agreement
-This EULA, together with the OracleAI Terms of Service and Privacy Policy, constitutes the entire agreement between Licensee and Publisher with respect to the Software and supersedes all prior agreements, representations, and understandings.
+This EULA, together with the VeridianAI Terms of Service and Privacy Policy, constitutes the entire agreement between Licensee and Publisher with respect to the Software and supersedes all prior agreements, representations, and understandings.
 
 10.2 Updates and New Versions
 Publisher may update this EULA to reflect changes in the Software, applicable law, or Publisher's policies. Material changes will be disclosed in accordance with the Terms of Service (Article XII). Continued use of the Software after the effective date of updates constitutes acceptance.
@@ -219,4 +219,4 @@ If any provision of this Agreement is held invalid or unenforceable, the remaini
 Failure by Publisher to enforce any provision of this Agreement shall not constitute a waiver.
 
 10.5 Contact
-Electrum Consiliarius, Etc. silverfox4816@gmail.com
+MentiSphere Software silverfox4816@gmail.com

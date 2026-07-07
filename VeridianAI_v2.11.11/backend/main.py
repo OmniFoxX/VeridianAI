@@ -1,5 +1,5 @@
 """
-OracleAI v2.9.10 Backend — FastAPI Server v2
+VeridianAI v2.12 Backend — FastAPI Server v2
 Handles inference, hardware, plugins, Sage engine, archives, and WebSocket chat.
 """
 
@@ -892,7 +892,7 @@ from starlette.concurrency import run_in_threadpool as _run_in_threadpool
 try:
     from voice_service import VoiceService
     voice_service = VoiceService({
-        "wake_word":          config.get("voice_wake_word", "Sage"),
+        "wake_word":          config.get("voice_wake_word", "Toga"),
         "stt_engine":         config.get("voice_stt_engine", "whisper"),
         "language":           config.get("voice_language", "en"),
         "record_seconds":     config.get("voice_record_seconds", 6),
@@ -917,7 +917,7 @@ try:
     async def _socials_reply(_text: str) -> str:
         """One-shot Sage reply for channel auto-reply, via the real model_manager."""
         _msgs = [
-            {"role": "system", "content": "You are Sage replying on a Bluetooth "
+            {"role": "system", "content": "You are Toga replying on a Bluetooth "
              "mesh chat. Keep replies conversational and reasonably brief — a few "
              "short sentences is ideal (long messages are auto-fragmented, so "
              "you're not hard-limited). Friendly, plain-text. No preamble, no "
@@ -981,7 +981,7 @@ try:
                 print(f"[SOCIALS] store unavailable (ns={ns}): {_e}")
         router = SageChannelRouter(
             reply_fn=_socials_reply,
-            wake_word=config.get("voice_wake_word", "Sage"),
+            wake_word=config.get("voice_wake_word", "Toga"),
             store=store,
         )
 

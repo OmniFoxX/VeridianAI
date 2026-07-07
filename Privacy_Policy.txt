@@ -1,44 +1,44 @@
 DOCUMENT 1 OF 4: PRIVACY POLICY
-ORACLEAI — ELECTRUM CONSILIARIUS, ETC.
+VERIDIANAI — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
-ORACLEAI PRIVACY POLICY
-Published by: Electrum Consiliarius, Etc. Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: [EFFECTIVE DATE] Version: 1.0
+VERIDIANAI PRIVACY POLICY
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: [EFFECTIVE DATE] Version: 1.0
 
 PREAMBLE: A PLAIN-LANGUAGE COMMITMENT
 Before the formal legal text begins, we want to say this plainly:
 
-We built OracleAI so that your data never has to meet us. Every model, every prompt, every inference result lives on your own hardware, inside your own device or local container. We cannot read your conversations with the AI because those conversations never travel to our servers. We do not sell your data, because we do not have your data. We do not profile you, track you across websites, or place advertising pixels anywhere in the platform.
+We built VeridianAI so that your data never has to meet us. Every model, every prompt, every inference result lives on your own hardware, inside your own device or local container. We cannot read your conversations with the AI because those conversations never travel to our servers. We do not sell your data, because we do not have your data. We do not profile you, track you across websites, or place advertising pixels anywhere in the platform.
 
 What we do hold is narrow, necessary, and described in full below. We hold it only as long as legally or operationally required, and we will promptly delete it at your request wherever law permits.
 
 This policy is long because the world's privacy laws require completeness. But the underlying truth is short: your content is yours, it stays on your machine, and we have zero access to it.
 
 SECTION 1 — IDENTITY OF THE DATA CONTROLLER
-Business Name: Electrum Consiliarius, Etc. Place of Formation and Principal Operations: Washington State, United States of America Contact for All Privacy Matters: silverfox4816@gmail.com Product: OracleAI — a local artificial intelligence inference platform
+Business Name: MentiSphere Software Place of Formation and Principal Operations: Washington State, United States of America Contact for All Privacy Matters: silverfox4816@gmail.com Product: VeridianAI — a local artificial intelligence inference platform
 
-For purposes of the General Data Protection Regulation (EU) 2016/679 ("GDPR"), the UK General Data Protection Regulation as retained by the Data Protection Act 2018 ("UK GDPR"), the California Consumer Privacy Act as amended by the California Privacy Rights Act (Cal. Civ. Code § 1798.100 et seq.) ("CCPA/CPRA"), the Washington Privacy Act (RCW Chapter 19.390) ("WPA"), and other applicable privacy statutes, Electrum Consiliarius, Etc. ("we," "us," "our," "the Publisher") is the data controller solely with respect to the limited categories of operational data described in Section 3 of this Policy.
+For purposes of the General Data Protection Regulation (EU) 2016/679 ("GDPR"), the UK General Data Protection Regulation as retained by the Data Protection Act 2018 ("UK GDPR"), the California Consumer Privacy Act as amended by the California Privacy Rights Act (Cal. Civ. Code § 1798.100 et seq.) ("CCPA/CPRA"), the Washington Privacy Act (RCW Chapter 19.390) ("WPA"), and other applicable privacy statutes, MentiSphere Software ("we," "us," "our," "the Publisher") is the data controller solely with respect to the limited categories of operational data described in Section 3 of this Policy.
 
-Critical Scope Limitation: Electrum Consiliarius, Etc. is expressly and categorically not a data controller or data processor with respect to any user content, artificial intelligence prompts, model inference outputs, training data, local context, documents, files, or any other information that users process through the OracleAI platform. Such information never traverses Publisher infrastructure, is never transmitted to Publisher systems, and is inaccessible to Publisher by the fundamental design of the platform's architecture. See Section 2.
+Critical Scope Limitation: MentiSphere Software is expressly and categorically not a data controller or data processor with respect to any user content, artificial intelligence prompts, model inference outputs, training data, local context, documents, files, or any other information that users process through the VeridianAI platform. Such information never traverses Publisher infrastructure, is never transmitted to Publisher systems, and is inaccessible to Publisher by the fundamental design of the platform's architecture. See Section 2.
 
 SECTION 2 — ARCHITECTURE: WHY WE CANNOT SEE YOUR DATA
 2.1 Local-Only Inference Model
-OracleAI is engineered as a zero-retention, client-side-only inference platform. All artificial intelligence model weights, all user prompts and queries, and all model outputs are processed exclusively on hardware owned or controlled by the end user — including the user's personal computer, workstation, local server, on-premises infrastructure, or isolated local container. No portion of this computational pipeline touches Publisher-controlled servers, cloud infrastructure, data pipelines, API endpoints, or storage systems.
+VeridianAI is engineered as a zero-retention, client-side-only inference platform. All artificial intelligence model weights, all user prompts and queries, and all model outputs are processed exclusively on hardware owned or controlled by the end user — including the user's personal computer, workstation, local server, on-premises infrastructure, or isolated local container. No portion of this computational pipeline touches Publisher-controlled servers, cloud infrastructure, data pipelines, API endpoints, or storage systems.
 
-This is not a contractual promise alone — it is an architectural fact. The OracleAI client software does not transmit prompt data or inference results to any Publisher-operated endpoint. The Publisher does not operate model-serving infrastructure. The Publisher does not maintain user session databases, conversation logs, or output repositories.
+This is not a contractual promise alone — it is an architectural fact. The VeridianAI client software does not transmit prompt data or inference results to any Publisher-operated endpoint. The Publisher does not operate model-serving infrastructure. The Publisher does not maintain user session databases, conversation logs, or output repositories.
 
 2.2 Consequences for Data Controller Classification
 Because user content never enters Publisher infrastructure:
 
-(a) Under GDPR Article 4(7), a "controller" is defined as the entity that determines the purposes and means of the processing of personal data. With respect to user content processed through OracleAI's inference pipeline, the user is the sole controller; Publisher determines neither the purpose nor the means of such processing.
+(a) Under GDPR Article 4(7), a "controller" is defined as the entity that determines the purposes and means of the processing of personal data. With respect to user content processed through VeridianAI's inference pipeline, the user is the sole controller; Publisher determines neither the purpose nor the means of such processing.
 
 (b) Under GDPR Article 4(8), a "processor" acts on behalf of the controller. Publisher acts on no one's behalf with respect to this data, because Publisher never receives it.
 
-(c) Under Washington's My Health My Data Act (ESHB 1155), "collection" is defined as the act of buying, renting, gathering, obtaining, receiving, or accessing consumer health data by any means. Publisher does not collect consumer health data under any means described in that definition. Accessibility users and others who use OracleAI to process health-adjacent information retain full data sovereignty; that information remains on their hardware.
+(c) Under Washington's My Health My Data Act (ESHB 1155), "collection" is defined as the act of buying, renting, gathering, obtaining, receiving, or accessing consumer health data by any means. Publisher does not collect consumer health data under any means described in that definition. Accessibility users and others who use VeridianAI to process health-adjacent information retain full data sovereignty; that information remains on their hardware.
 
-(d) Under CCPA/CPRA, "collect" means buying, renting, gathering, obtaining, receiving, or accessing personal information by any means. Publisher does not collect personal information as a function of OracleAI's core inference capability.
+(d) Under CCPA/CPRA, "collect" means buying, renting, gathering, obtaining, receiving, or accessing personal information by any means. Publisher does not collect personal information as a function of VeridianAI's core inference capability.
 
 2.3 User Data Sovereignty
-You, the user, are the exclusive owner and controller of all content you generate, process, input, or receive through OracleAI. Your prompts, outputs, model configurations, local datasets, embedded documents, and conversation histories belong to you. Publisher asserts no proprietary interest, license right, or claim over any such content.
+You, the user, are the exclusive owner and controller of all content you generate, process, input, or receive through VeridianAI. Your prompts, outputs, model configurations, local datasets, embedded documents, and conversation histories belong to you. Publisher asserts no proprietary interest, license right, or claim over any such content.
 
 SECTION 3 — INFORMATION WE ACTUALLY COLLECT
 Notwithstanding the foregoing, Publisher does collect a narrow set of operational data necessary to provide, maintain, and improve the platform and to comply with legal obligations. We collect only the following:
@@ -55,7 +55,7 @@ We do not receive, store, or process full payment card numbers, CVV codes, or ba
 Legal basis (GDPR): Article 6(1)(b) — performance of a contract; Article 6(1)(c) — compliance with legal obligation (tax and record-keeping requirements).
 
 3.2 Voluntary Feedback Submissions
-If you choose to submit feedback, a bug report, a feature request, or a testimonial through Publisher's voluntary feedback mechanisms, we collect the content of that submission and, if you choose to include them, your name and contact email. Feedback submission is never required to use OracleAI and is always expressly optional.
+If you choose to submit feedback, a bug report, a feature request, or a testimonial through Publisher's voluntary feedback mechanisms, we collect the content of that submission and, if you choose to include them, your name and contact email. Feedback submission is never required to use VeridianAI and is always expressly optional.
 
 Legal basis (GDPR): Article 6(1)(a) — consent freely given.
 
@@ -65,12 +65,12 @@ If you contact us by email, submit a support request, or otherwise communicate w
 Legal basis (GDPR): Article 6(1)(f) — legitimate interests (responding to and documenting customer communications).
 
 3.4 Aggregated Platform Metrics Required by Third-Party Integrations
-Certain third-party platform integrations through which OracleAI is distributed, listed, or operated (including but not limited to integration app directories, bot verification platforms, and developer portal listings) may require the Publisher to submit or acknowledge basic non-personal platform metrics — such as aggregate download counts, platform version identifiers, API call volume, or bot verification badges. Where Publisher controls such submissions, we ensure they are aggregated and non-attributable to any individual user. Where these metrics are passively collected by third-party platforms outside Publisher's control, those platforms' own privacy policies govern.
+Certain third-party platform integrations through which VeridianAI is distributed, listed, or operated (including but not limited to integration app directories, bot verification platforms, and developer portal listings) may require the Publisher to submit or acknowledge basic non-personal platform metrics — such as aggregate download counts, platform version identifiers, API call volume, or bot verification badges. Where Publisher controls such submissions, we ensure they are aggregated and non-attributable to any individual user. Where these metrics are passively collected by third-party platforms outside Publisher's control, those platforms' own privacy policies govern.
 
-Legal basis (GDPR): Article 6(1)(f) — legitimate interests (maintaining platform listings and integrations necessary to make OracleAI accessible).
+Legal basis (GDPR): Article 6(1)(f) — legitimate interests (maintaining platform listings and integrations necessary to make VeridianAI accessible).
 
 3.5 Discord Bot Technical Pass-Through Data
-OracleAI's optional Discord bot integration processes Discord user commands in real time, acting as a pass-through interface between the Discord API and OracleAI's local inference runtime. In performing this function:
+VeridianAI's optional Discord bot integration processes Discord user commands in real time, acting as a pass-through interface between the Discord API and VeridianAI's local inference runtime. In performing this function:
 
 Publisher's bot infrastructure may transiently receive Discord user identifiers, server identifiers, and message content for the duration of processing that specific command only;
 No message content, user identifier, or command history is stored in any Publisher-controlled database or log file after the command response is delivered;
@@ -78,11 +78,11 @@ Discord's own data collection and processing occur entirely on Discord's platfor
 Legal basis (GDPR): Article 6(1)(f) — legitimate interests (providing the optional bot integration functionality requested by the user).
 
 SECTION 4 — INFORMATION WE EXPRESSLY DO NOT COLLECT
-For the avoidance of any doubt, and in direct fulfillment of OracleAI's core privacy-by-design commitment, Publisher does not collect, receive, store, access, sell, share, process, or retain:
+For the avoidance of any doubt, and in direct fulfillment of VeridianAI's core privacy-by-design commitment, Publisher does not collect, receive, store, access, sell, share, process, or retain:
 
-The text of any prompt or query you submit to any AI model through OracleAI;
-The output, response, or inference result returned by any AI model through OracleAI;
-The content of any document, file, image, video, audio recording, or other media processed locally by OracleAI;
+The text of any prompt or query you submit to any AI model through VeridianAI;
+The output, response, or inference result returned by any AI model through VeridianAI;
+The content of any document, file, image, video, audio recording, or other media processed locally by VeridianAI;
 The identity, configuration parameters, quantization settings, or weights of any AI model you use or install locally;
 Any fine-tuning data, RLHF feedback, or training data processed or generated on your hardware;
 Local conversation history, context windows, memory configurations, or session state;
@@ -94,7 +94,7 @@ We use the limited information described in Section 3 solely for the following p
 
 Data Category	Purposes
 Billing data	Process transactions; generate invoices; deliver license keys; comply with tax law; prevent fraud
-Feedback submissions	Improve OracleAI; identify and fix bugs; prioritize features; understand user needs
+Feedback submissions	Improve VeridianAI; identify and fix bugs; prioritize features; understand user needs
 Communications	Respond to inquiries; resolve disputes; document interactions; provide support
 Aggregated platform metrics	Maintain third-party distribution listings; report to required platform partners; monitor platform health at a population level
 Discord bot transient data	Deliver the requested bot command response; enforce bot usage policies
@@ -110,7 +110,7 @@ We may disclose information where we are legally compelled to do so by a valid c
 Promptly notify affected users of any disclosure demand where legally permitted to do so;
 Review all demands for legal sufficiency before complying; and
 Disclose only the minimum information necessary to satisfy the legal obligation.
-Because Publisher cannot access user content (Section 2), any legal demand for OracleAI prompt or output data directed at Publisher would yield no responsive records — Publisher simply does not possess such data to disclose.
+Because Publisher cannot access user content (Section 2), any legal demand for VeridianAI prompt or output data directed at Publisher would yield no responsive records — Publisher simply does not possess such data to disclose.
 
 6.3 Business Transfers
 In the event of a merger, acquisition, sale of substantially all assets, or reorganization involving Publisher, personal data held by Publisher may be transferred to the acquiring or successor entity, subject to the acquiring entity's assumption of obligations at least as protective as this Policy. Users will be notified of any such transfer prior to completion, with a right to request deletion of their data before the transfer occurs.
@@ -193,9 +193,9 @@ The right to appeal Publisher's refusal to act on a rights request, with Publish
 Publisher will respond to verifiable WPA rights requests within forty-five (45) days, extendable by an additional forty-five (45) days where reasonably necessary, with notification of the extension provided within the initial period.
 
 9.4 Consumer Health Data — Washington My Health My Data Act (ESHB 1155)
-Publisher's position under the My Health My Data Act: The My Health My Data Act (MHMD) regulates regulated entities that "collect, share, sell, or process consumer health data." As detailed in Section 2, Publisher collects no consumer health data as a function of OracleAI's core architectural design. All data — including any health-related information — that a user processes through OracleAI's inference engine remains exclusively on the user's hardware and is never transmitted to Publisher.
+Publisher's position under the My Health My Data Act: The My Health My Data Act (MHMD) regulates regulated entities that "collect, share, sell, or process consumer health data." As detailed in Section 2, Publisher collects no consumer health data as a function of VeridianAI's core architectural design. All data — including any health-related information — that a user processes through VeridianAI's inference engine remains exclusively on the user's hardware and is never transmitted to Publisher.
 
-For accessibility users: We recognize that persons with disabilities, chronic conditions, and healthcare needs may use OracleAI to process health-relevant information (e.g., AI-assisted reading of medical documents, accessibility accommodations for health communications). All such information is processed locally on your device. Publisher holds no such data, and MHMD's operative obligations for data collection, authorization requirements, and deletion rights as they relate to Publisher-held data are satisfied by default given our zero-collection architecture.
+For accessibility users: We recognize that persons with disabilities, chronic conditions, and healthcare needs may use VeridianAI to process health-relevant information (e.g., AI-assisted reading of medical documents, accessibility accommodations for health communications). All such information is processed locally on your device. Publisher holds no such data, and MHMD's operative obligations for data collection, authorization requirements, and deletion rights as they relate to Publisher-held data are satisfied by default given our zero-collection architecture.
 
 For any incidental collection: If a voluntary feedback submission or inbound communication you send to Publisher happens to contain information that qualifies as "consumer health data" under MHMD § 2(5), Publisher will treat that information with the full protections required by the Act, including: no sale of such data; no sharing for unauthorized purposes; and honoring deletion requests without delay.
 
@@ -210,19 +210,19 @@ Exercising Rights Globally: Regardless of your jurisdiction, Publisher will hono
 
 SECTION 10 — CHILDREN'S PRIVACY
 10.1 Minimum Age
-OracleAI is not directed at children. Publisher does not knowingly collect personal information from:
+VeridianAI is not directed at children. Publisher does not knowingly collect personal information from:
 
 Children under the age of thirteen (13) in the United States, as required by the Children's Online Privacy Protection Act (COPPA), 15 U.S.C. § 6501 et seq.;
 Children under the age of sixteen (16) in EU and EEA member states, pursuant to GDPR Article 8(1) and applicable national implementing provisions; or
-Children below the applicable minimum age of digital consent in any other jurisdiction where OracleAI is distributed.
+Children below the applicable minimum age of digital consent in any other jurisdiction where VeridianAI is distributed.
 10.2 Discovery and Deletion
 If Publisher discovers or is notified that it has inadvertently collected personal information from a child below the applicable minimum age, Publisher will promptly delete such information from its systems. If you believe Publisher has collected information from a child in violation of this Section, please contact silverfox4816@gmail.com immediately.
 
 10.3 Local Processing and Minors
-This Section addresses Publisher's collection of operational data. Because OracleAI's core inference operates locally on the user's hardware, parental or guardian oversight of a minor's use of OracleAI's model inference capabilities is the responsibility of the parent or guardian. Publisher recommends that parents and guardians supervise minors' use of any AI inference platform.
+This Section addresses Publisher's collection of operational data. Because VeridianAI's core inference operates locally on the user's hardware, parental or guardian oversight of a minor's use of VeridianAI's model inference capabilities is the responsibility of the parent or guardian. Publisher recommends that parents and guardians supervise minors' use of any AI inference platform.
 
 SECTION 11 — ACCESSIBILITY USERS AND DISABILITY-RELATED PRIVACY
-OracleAI provides a free perpetual license to users with accessibility needs and disability use cases, reflecting Publisher's commitment to AI as an accessibility tool. Publisher recognizes that accessibility users may rely on OracleAI to assist with conditions including but not limited to: visual impairment, auditory impairment, motor disabilities, cognitive disabilities, learning differences, speech impairments, chronic pain conditions, and neurological conditions.
+VeridianAI provides a free perpetual license to users with accessibility needs and disability use cases, reflecting Publisher's commitment to AI as an accessibility tool. Publisher recognizes that accessibility users may rely on VeridianAI to assist with conditions including but not limited to: visual impairment, auditory impairment, motor disabilities, cognitive disabilities, learning differences, speech impairments, chronic pain conditions, and neurological conditions.
 
 Publisher does not collect, require disclosure of, or infer any disability status, accessibility accommodation need, or medical condition as a condition of accessing the free accessibility tier. Users access the free tier at their own election. Publisher collects no health data, disability data, or accommodation-related data in connection with the free tier or otherwise.
 
@@ -236,12 +236,12 @@ Access controls: Access to personal data within Publisher's systems is limited t
 Payment security: All payment card processing occurs through PCI-DSS compliant payment processors. Publisher does not store raw payment card data.
 Vendor management: Third parties processing data on Publisher's behalf are required to maintain security standards commensurate with the sensitivity of the data.
 Incident response: In the event of a data breach affecting your personal data, Publisher will notify affected individuals and applicable regulatory authorities within the timeframes required by law (72 hours for GDPR supervisory authorities; 30 days for WPA; as otherwise required by applicable breach notification statutes).
-Important caveat: Because OracleAI's core architecture ensures that user content never reaches Publisher's infrastructure, the risk profile for a Publisher-side breach is inherently narrow — limited to the operational data described in Section 3. Users are encouraged to apply their own security measures to their local OracleAI installations, including device encryption, access controls, and model-weight integrity verification.
+Important caveat: Because VeridianAI's core architecture ensures that user content never reaches Publisher's infrastructure, the risk profile for a Publisher-side breach is inherently narrow — limited to the operational data described in Section 3. Users are encouraged to apply their own security measures to their local VeridianAI installations, including device encryption, access controls, and model-weight integrity verification.
 
 SECTION 13 — COOKIES AND TRACKING TECHNOLOGIES
-OracleAI is a locally installed software application, not a browser-based service. The application itself does not deploy cookies, web beacons, tracking pixels, fingerprinting scripts, session replay tools, or similar tracking technologies.
+VeridianAI is a locally installed software application, not a browser-based service. The application itself does not deploy cookies, web beacons, tracking pixels, fingerprinting scripts, session replay tools, or similar tracking technologies.
 
-If Publisher operates any website, web portal, or documentation site in connection with OracleAI, any cookies used on those web properties will be governed by a separate cookie notice on that property.
+If Publisher operates any website, web portal, or documentation site in connection with VeridianAI, any cookies used on those web properties will be governed by a separate cookie notice on that property.
 
 SECTION 14 — DATA PROTECTION OFFICER
 Publisher is not currently required under GDPR Article 37 to designate a Data Protection Officer, as Publisher's processing activities do not meet the thresholds specified in Article 37(1)(b) or (c). Nonetheless, all privacy inquiries are directed to and handled by Publisher's principal contact at silverfox4816@gmail.com, who is responsible for data protection compliance oversight.
@@ -249,12 +249,12 @@ Publisher is not currently required under GDPR Article 37 to designate a Data Pr
 EU and UK residents who require escalation beyond direct Publisher contact may contact the relevant supervisory authority in their member state.
 
 SECTION 15 — CHANGES TO THIS POLICY
-Publisher reserves the right to update this Privacy Policy to reflect changes in applicable law, Publisher's practices, or the OracleAI platform's features. Where changes are material, Publisher will provide notice by:
+Publisher reserves the right to update this Privacy Policy to reflect changes in applicable law, Publisher's practices, or the VeridianAI platform's features. Where changes are material, Publisher will provide notice by:
 
 Posting the updated Policy with a revised Effective Date;
 Updating the version number; and
 Where Publisher has a means of contacting affected users with an established relationship (e.g., commercial licensees with billing email on file), providing direct advance notice at least thirty (30) calendar days prior to the effective date of material changes.
-Your continued use of OracleAI after the effective date of any updated Policy constitutes acceptance of the revised terms. Where consent is the legal basis for a processing activity affected by the change, Publisher will re-obtain consent as required.
+Your continued use of VeridianAI after the effective date of any updated Policy constitutes acceptance of the revised terms. Where consent is the legal basis for a processing activity affected by the change, Publisher will re-obtain consent as required.
 
 SECTION 16 — HOW TO EXERCISE YOUR RIGHTS AND CONTACT US
 To exercise any privacy right described in this Policy, to submit a data subject access request, to request deletion, or to raise any privacy concern, contact Publisher directly:

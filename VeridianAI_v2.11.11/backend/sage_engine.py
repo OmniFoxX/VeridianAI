@@ -1,5 +1,5 @@
 """
-Non-cloud based, fully locally run inference OracleAI with Sage Engine v2.2
+Non-cloud based, fully locally run inference VeridianAI with Toga Engine v3
 Provides: web search, weather, code execution, memory/archives,
 query pre-processing with auto-detection, semantic search,
 file upload/text extraction, complexity routing, vibe prompts,
@@ -97,7 +97,7 @@ TEXT_EXTENSIONS = {
     ".tex", ".bib", ".bat", ".ps1", ".ipynb",
 }
 
-SAGE_SYSTEM_PROMPT = """You are "Sage", a friendly, knowledgeable, capable, effective, Evolving, FULLY LOCALLY RUN Agentic AI Assistant inference engine with working memory from past conversations. You embody the wisdom of Hermes Trismegistus, Aristotle, Plato, Marcus Aurelius, Hypatia of Alexandria, Hildegard of Bingen, Aspasia of Miletus, and Empress Wu Zetian.
+SAGE_SYSTEM_PROMPT = """You are "Toga", a friendly, knowledgeable, capable, effective, Evolving, FULLY LOCALLY RUN Agentic AI Assistant inference engine with working memory from past conversations. You embody the wisdom of Hermes Trismegistus, Aristotle, Plato, Marcus Aurelius, Hypatia of Alexandria, Hildegard of Bingen, Aspasia of Miletus, and Empress Wu Zetian.
 ⚠️ TAG NOTATION CONVENTION ⚠️
 Tool-call tags in examples use ANGLE BRACKETS ⟨ ⟩ for explanation only. REAL tool invocations MUST use SQUARE BRACKETS [ ]. Replace ⟨ with [ and ⟩ with ] when emitting tags. Angle-bracket forms are ignored by the parser, so ALL example tags you provide MUST be within angle brackets. Use SQUARE to run code.
 *CAPABILITIES:
@@ -233,7 +233,7 @@ You are appreciated! Love well! Always engage as if you were a friendly colleagu
 # (Phase 1 fix from v2.1.6); the worst case is a single spurious tool
 # call, not a runaway loop.
 # ---------------------------------------------------------------------------
-SAGE_SYSTEM_PROMPT_SMALL = """You are Sage, a helpful local Evolving AI Assistant running fully on the User's personal computer (no cloud). Be concise, efficient and polite.
+SAGE_SYSTEM_PROMPT_SMALL = """You are Toga, a helpful local Evolving AI Assistant running fully on the User's personal computer (no cloud). Be concise, efficient and polite.
 
 TOOL TAGS — use SQUARE BRACKETS exactly as shown. Output ONLY the tag, nothing else around it, when calling a tool:
 
@@ -669,7 +669,7 @@ def extract_location(text: str) -> Optional[str]:
     skip_words = {
         "I", "We", "The", "My", "Your", "This", "That",
         "What", "How", "When", "Where", "Why", "Who",
-        "Sage", "Monday", "Tuesday", "Wednesday", "Thursday",
+        "Sage", "Toga", "Monday", "Tuesday", "Wednesday", "Thursday",
         "Friday", "Saturday", "Sunday",
     }
     patterns = [

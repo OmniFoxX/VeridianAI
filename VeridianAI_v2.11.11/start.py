@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-OracleAI Launcher v2.11.11
+VeridianAI Launcher v2.12
 Usage: python start.py [--port 8000] [--host 127.0.0.1] [--no-browser]
 """
 
@@ -18,20 +18,20 @@ def check_dependencies():
         try: __import__(pkg)
         except ImportError: missing.append(pkg)
     if missing:
-        print(f"[OracleAI] Installing: {', '.join(missing)} ...")
+        print(f"[VeridianAI] Installing: {', '.join(missing)} ...")
         try:
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "-r", str(REQ_FILE),
                  "--no-cache-dir", "--quiet"])
-            print("[OracleAI] Dependencies ready.")
+            print("[VeridianAI] Dependencies ready.")
         except subprocess.CalledProcessError as e:
-            print(f"[OracleAI] pip failed: {e}")
+            print(f"[VeridianAI] pip failed: {e}")
 
 
 def print_banner():
     print("""
   +-------------------------------------------+
-  |     O R A C L E   A I    v2.11.11         |
+  |    V E R I D I A N   A I   v2.11.11       |
   |       Local AI Inference + Sage           |
   +-------------------------------------------+
 """)
