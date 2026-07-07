@@ -1,4 +1,4 @@
-## Building
+## .exe Building
 
 **Windows:**
 npm run pack-win

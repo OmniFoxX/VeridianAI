@@ -1,4 +1,4 @@
-# Force LF for everything except Windows-specific files
+# Force LF for everything Except Windows-specific files
 * text=auto eol=lf
 *.bat text eol=crlf
 *.cmd text eol=crlf
