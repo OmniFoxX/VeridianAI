@@ -1,4 +1,4 @@
-/* OracleAI service worker — deliberately minimal.
+/* VeridianAI service worker — deliberately minimal.
  *
  * The UI is served LIVE by the FastAPI backend (and intentionally no-cached
  * server-side), so this SW does NOT cache the app shell — caching it would
@@ -7,7 +7,7 @@
  *   2. When the backend/Ollama isn't running, show a friendly offline page
  *      instead of the browser's raw connection error.
  */
-const CACHE = 'oracleai-shell-v2';
+const CACHE = 'veridianai-shell-v2';
 const OFFLINE_URL = '/static/offline.html';
 
 self.addEventListener('install', (event) => {

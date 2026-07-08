@@ -1,6 +1,6 @@
 /* ============================================================
-   ComfyUI Setup Wizard — OracleAI v2.9.10
-   Matches OracleAI's existing modal/settings design language.
+   ComfyUI Setup Wizard — VeridianAI v2.9.10
+   Matches VeridianAI's existing modal/settings design language.
    ============================================================ */
 
 .comfyui-wizard-overlay {
@@ -226,7 +226,7 @@
   flex-wrap: wrap;
 }
 
-/* Reuse OracleAI's existing toolbar-btn + action-btn classes.
+/* Reuse VeridianAI's existing toolbar-btn + action-btn classes.
    These extra modifiers handle wizard-specific sizing. */
 .wizard-btn-primary {
   background: var(--gold, #c9a84c);

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OracleAI — not running yet</title>
+  <title>VeridianAI — not running yet</title>
   <style>
     :root { color-scheme: dark; }
     html, body { margin: 0; height: 100%; }
@@ -37,13 +37,13 @@
 <body>
   <main class="card" role="main" aria-labelledby="offline-title">
     <div class="ring" aria-hidden="true"></div>
-    <h1 id="offline-title">O R A C L E&nbsp;&nbsp;A I</h1>
-    <p>OracleAI isn't responding yet.</p>
-    <p>This installed app is just the interface &mdash; the OracleAI engine (and
+    <h1 id="offline-title">V E R I D I A N&nbsp;&nbsp;A I</h1>
+    <p>VeridianAI isn't responding yet.</p>
+    <p>This installed app is just the interface &mdash; the VeridianAI engine (and
        <strong>Ollama</strong>) need to be running on this computer first.</p>
-    <p class="hint">Start OracleAI (run <code>start.bat</code> or open the OracleAI
+    <p class="hint">Start VeridianAI (run <code>start.bat</code> or open the VeridianAI
        desktop app), wait for the tiers to come online, then reload.</p>
-    <button id="reload-btn" autofocus aria-label="Reload and check if the OracleAI engine is running" onclick="tryReload()">Reload</button>
+    <button id="reload-btn" autofocus aria-label="Reload and check if the VeridianAI engine is running" onclick="tryReload()">Reload</button>
     <p id="offline-status" class="hint" style="margin-top:14px" role="status" aria-live="polite"></p>
   </main>
   <script>
@@ -66,11 +66,11 @@
       checking = true;
       var s = document.getElementById('offline-status');
       var b = document.getElementById('reload-btn');
-      if (s) s.textContent = 'Checking for the OracleAI engine…';
+      if (s) s.textContent = 'Checking for the VeridianAI engine…';
       if (b) b.disabled = true;
       ping().then(function (up) {
         if (up) { location.reload(); return; }
-        if (s) s.textContent = 'Still not responding — make sure OracleAI is running, then try again.';
+        if (s) s.textContent = 'Still not responding — make sure VeridianAI is running, then try again.';
         if (b) b.disabled = false;
         checking = false;
       });
