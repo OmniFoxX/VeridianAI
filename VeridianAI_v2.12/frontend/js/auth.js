@@ -35,7 +35,7 @@
     ov.id = "auth-overlay";
     ov.setAttribute("role", "dialog");
     ov.setAttribute("aria-modal", "true");
-    ov.setAttribute("aria-label", needsSetup ? "OracleAI account setup" : "OracleAI sign in");
+    ov.setAttribute("aria-label", needsSetup ? "VeridianAI account setup" : "VeridianAI sign in");
     ov.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;" +
       "align-items:center;justify-content:center;background:" + V("--bg", "#060a14");
     ov.innerHTML =
@@ -44,7 +44,7 @@
       ';box-shadow:0 20px 60px rgba(0,0,0,0.5)">' +
       '<div style="font-family:' + V("--font-display", "serif") + ';font-size:22px;' +
       'letter-spacing:0.04em;text-align:center">' +
-      '<span style="color:' + V("--text", "#e2e8f8") + '">Oracle</span>' +
+      '<span style="color:' + V("--text", "#e2e8f8") + '">Veridian</span>' +
       '<span style="color:' + V("--gold", "#f0a500") + '">AI</span></div>' +
       '<div style="text-align:center;font-size:13px;margin:6px 0 18px;color:' +
       V("--text-muted", "#7890b8") + '">' + subtitle + '</div>' +
@@ -140,7 +140,7 @@
       cluster.appendChild(usersBtn);
     }
     // Preferred home: header controls, to the LEFT of the model dropdown (sits in
-    // the gap between the OracleAI emblem and the model selector).
+    // the gap between the VeridianAI emblem and the model selector).
     var controls = document.querySelector(".header-controls");
     if (controls) { controls.insertBefore(cluster, controls.firstChild); return; }
     // Fallbacks keep it usable if the header markup ever changes.

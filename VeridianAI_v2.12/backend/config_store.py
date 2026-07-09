@@ -193,6 +193,12 @@ class SageSection:
     web_search_enabled: bool = True
     code_exec_enabled: bool = True
     privacy_mode: bool = False
+    # v2.12.1 personalization: the assistant's NAME (persona self-reference)
+    # and the voice/socials WAKE WORD. assistant_name is per-user capable
+    # (PER_USER_KEYS in main.py) so each profile can name their own Toga;
+    # voice_wake_word stays owner-level — there's one microphone.
+    assistant_name: str = "Toga"
+    voice_wake_word: str = "Toga"
 
 
 @dataclass
@@ -413,6 +419,9 @@ class OracleConfig:
             "web_search_enabled":      self.sage.web_search_enabled,
             "code_exec_enabled":       self.sage.code_exec_enabled,
             "privacy_mode":            self.sage.privacy_mode,
+            # v2.12.1 personalization
+            "assistant_name":          self.sage.assistant_name,
+            "voice_wake_word":         self.sage.voice_wake_word,
         }
 
     @classmethod
@@ -538,6 +547,18 @@ class OracleConfig:
         cfg.sage.web_search_enabled = bool(_g("web_search_enabled", cfg.sage.web_search_enabled))
         cfg.sage.code_exec_enabled  = bool(_g("code_exec_enabled",  cfg.sage.code_exec_enabled))
         cfg.sage.privacy_mode       = bool(_g("privacy_mode",       cfg.sage.privacy_mode))
+        # v2.12.1 personalization — sanitized: printable, no quotes/brackets
+        # (they'd break prompt framing and tag parsing), max 24 chars.
+        def _clean_name(v, fallback):
+            try:
+                s = "".join(ch for ch in str(v) if ch.isprintable()
+                            and ch not in '"\'[]{}<>|')
+                s = s.strip()[:24]
+                return s or fallback
+            except Exception:
+                return fallback
+        cfg.sage.assistant_name  = _clean_name(_g("assistant_name",  cfg.sage.assistant_name), "Toga")
+        cfg.sage.voice_wake_word = _clean_name(_g("voice_wake_word", cfg.sage.voice_wake_word), "Toga")
 
         return cfg
 

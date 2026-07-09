@@ -1,5 +1,5 @@
 /**
- * OracleAI — Chat Module v2.9.10
+ * VeridianAI — Chat Module v2.9.10
  * FIXES: spacebar in input, game panel no longer auto-opens,
  *        autoResize respects min-height, archive/privacy/print intact
  */
@@ -456,13 +456,13 @@ function handleStreamDone(fullContent, meta) {
         footer.appendChild(badge);
       }
       if (meta && meta.offloaded) {
-        // v2.9: this turn's inference actually ran on a remote Sage Network node
+        // v2.9: this turn's inference actually ran on a remote Toga Network node
         const onode = document.createElement("span");
         onode.className = "offload-badge";
         let host = String(meta.offloaded);
         try { host = new URL(String(meta.offloaded)).host || host; } catch (e) {}
         onode.textContent = "\u2197 ran on " + host;
-        onode.title = "Sage Network: this reply was generated on " + String(meta.offloaded);
+        onode.title = "Toga Network: this reply was generated on " + String(meta.offloaded);
         onode.style.cssText =
           "margin-left:6px;padding:1px 6px;border-radius:4px;font-size:11px;" +
           "background:rgba(46,204,113,0.14);border:1px solid rgba(46,204,113,0.5);" +
@@ -650,7 +650,7 @@ function handleAiqNudgeReceived(data) {
 
 function handleStallDetected(data) {
   streaming = false;
-  const reason = data?.reason || "Sage appears to have stalled.";
+  const reason = data?.reason || "Toga appears to have stalled.";
   if (streamEl) {
     const bubble = streamEl.querySelector(".message-bubble");
     if (bubble) {
@@ -682,7 +682,7 @@ function handleStallDetected(data) {
 
 /* --- Render --------------------------------------------------- */
 function handleImageGenerated(data) {
-  // Sage-triggered image (from the [GENERATE_IMAGE:] agentic dispatch).
+  // Toga-triggered image (from the [GENERATE_IMAGE:] agentic dispatch).
   if (!data || !data.data) return;
   const url = `data:${data.mimetype || "image/png"};base64,${data.data}`;
   appendImageResult(url, data.prompt);
@@ -697,7 +697,7 @@ function appendImageResult(imgUrl, prompt) {
   wrap.className = "message assistant";
   const role = document.createElement("div");
   role.className = "message-role";
-  role.textContent = "Oracle";
+  role.textContent = "Veridian";
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
   const img = document.createElement("img");
@@ -772,7 +772,7 @@ function appendMessage(msg, isStreaming = false) {
 
   const role = document.createElement("div");
   role.className = "message-role";
-  role.textContent = msg.role === "user" ? "You" : "Oracle";
+  role.textContent = msg.role === "user" ? "You" : "Veridian";
 
   const bubble = document.createElement("div");
   bubble.className = "message-bubble";
@@ -850,7 +850,7 @@ function appendMessage(msg, isStreaming = false) {
 
 // v2.2 fix — two rendering bugs Leo identified after Todd's OOM event:
 //   (a) Angle brackets vanish: marked passes raw HTML through by
-//       default, so when Sage writes "<div>" in prose, the browser
+//       default, so when Toga writes "<div>" in prose, the browser
 //       renders an actual div element (invisible) instead of showing
 //       the text. The renderer.html override below escapes raw HTML
 //       so it appears as text. Inside fenced code blocks marked uses
@@ -865,7 +865,7 @@ function appendMessage(msg, isStreaming = false) {
 //       needs no protection. Inside backtick `inline code` is also
 //       skipped.
 //
-// Both fixes are renderer-only — Sage's output and the chat memory
+// Both fixes are renderer-only — Toga's output and the chat memory
 // chain still hold the raw text exactly as she emitted it. We're
 // just rendering it correctly.
 
@@ -879,7 +879,7 @@ function _configureMarkedOnce() {
       renderer: {
         html(html) {
           // Escape raw HTML so it appears as text. We escape rather
-          // than strip so users can see exactly what Sage wrote (e.g.
+          // than strip so users can see exactly what Toga wrote (e.g.
           // an explanation of <div> renders as "<div>" text rather
           // than disappearing).
           return String(html)
@@ -948,7 +948,7 @@ function setStreamingState(active) {
     btn.title = active ? "Stop generation" : "Send";
   }
   if (eye) eye.classList.toggle("thinking", active);
-  setStatus(active ? "Oracle is thinking…" : "Ready");
+  setStatus(active ? "Veridian is thinking…" : "Ready");
 }
 
 function setStatus(msg) {
@@ -980,12 +980,12 @@ async function voiceRefreshStatus() {
       const need = [];
       if (!c.can_transcribe) need.push("openai-whisper");
       if (!c.can_record) need.push("sounddevice");
-      if (el) el.textContent = "needs setup — install, then restart OracleAI";
+      if (el) el.textContent = "needs setup — install, then restart VeridianAI";
       if (hint) {
         // Show the EXACT interpreter running the app so deps land in the right place.
         const py = d.python ? ('"' + d.python + '"') : "py";
         hint.textContent =
-          "Install into the interpreter running OracleAI, then restart:\n"
+          "Install into the interpreter running VeridianAI, then restart:\n"
           + py + " -m pip install " + (need.join(" ") || "openai-whisper sounddevice")
           + (d.python_version ? ("\n(running Python " + d.python_version + ")") : "");
         hint.style.display = "block";
@@ -1101,7 +1101,7 @@ function _voiceSpeakNow(text) {
   } catch (e) {}
 }
 function voiceMaybeSpeak(text) { if (voiceSpeakReplies) _voiceSpeakNow(text); }
-function voiceTestSpeak() { _voiceSpeakNow("This is the OracleAI reply voice."); }
+function voiceTestSpeak() { _voiceSpeakNow("This is the VeridianAI reply voice."); }
 function voiceSelectVoice(uri) {
   try { localStorage.setItem("oai_tts_voice", uri); } catch (e) {}
   setStatus("Reply voice set");
@@ -1179,6 +1179,47 @@ function oracleConfirm(message, opts) {
 }
 window.oracleConfirm = oracleConfirm;
 
+/* v2.12.0: type-to-confirm modal (Promise<string|null>). Same DOM-modal
+   approach as oracleConfirm so it survives Electron (where window.prompt is
+   unreliable). Resolves the typed text on OK, null on cancel/escape. */
+function oraclePrompt(message, opts) {
+  opts = opts || {};
+  return new Promise(function (resolve) {
+    var root = document.getElementById("modal-root");
+    if (!root) { resolve(window.prompt(message)); return; }
+    root.innerHTML =
+      '<div class="modal-overlay" id="oracle-prompt-overlay" style="z-index:100001" role="dialog" aria-modal="true" aria-labelledby="oracle-prompt-title">' +
+        '<div class="modal-box" style="max-width:420px">' +
+          '<div class="modal-title" id="oracle-prompt-title">' + escapeHtml(opts.title || "Confirm") + '</div>' +
+          '<div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap;margin-bottom:10px">' + escapeHtml(message) + '</div>' +
+          '<input id="oracle-prompt-input" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid var(--border,#2a3550);background:var(--panel,#0e1730);color:var(--text,#e9edf6);font-size:14px" />' +
+          '<div class="modal-actions">' +
+            '<button class="modal-btn" id="oracle-prompt-cancel">' + escapeHtml(opts.cancelLabel || "Cancel") + '</button>' +
+            '<button class="modal-btn primary" id="oracle-prompt-ok">' + escapeHtml(opts.okLabel || "OK") + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    var onKey;
+    var finish = function (val) {
+      document.removeEventListener("keydown", onKey, true);
+      root.innerHTML = "";
+      resolve(val);
+    };
+    var inp = document.getElementById("oracle-prompt-input");
+    onKey = function (e) {
+      if (e.key === "Escape") { e.preventDefault(); finish(null); }
+      else if (e.key === "Enter") { e.preventDefault(); finish(inp ? inp.value : null); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    var ov = document.getElementById("oracle-prompt-overlay");
+    ov.addEventListener("click", function (e) { if (e.target === ov) finish(null); });
+    document.getElementById("oracle-prompt-ok").onclick = function () { finish(inp ? inp.value : null); };
+    document.getElementById("oracle-prompt-cancel").onclick = function () { finish(null); };
+    if (inp) inp.focus();
+  });
+}
+window.oraclePrompt = oraclePrompt;
+
 async function clearChat() {
   if (await oracleConfirm("Are you sure you want to clear the chat? This cannot be undone.",
       { title: "Clear chat", okLabel: "Clear", cancelLabel: "Cancel" })) {
@@ -1235,9 +1276,60 @@ window.toggleUrgent = toggleUrgent;
 // Start visually 'off' (greyscale) once the DOM is ready.
 document.addEventListener("DOMContentLoaded", _syncUrgentBtn);
 
+/* --- Burn: one-touch Zero Data Retention (v2.12.0) --------------------- */
+// Two-stage confirmation: a loud modal spelling out EXACTLY what dies, then
+// a typed "BURN" (the backend also requires confirm:"BURN"). Wipes chat
+// memory, archives, the memory-chain log, procedural memory, snapshots,
+// uploads, downloads, nudges — but never config, keys, or models. Scope is
+// the CALLER's data only (a child profile burns just its own namespace).
+async function burnAllData() {
+  const ok = await oracleConfirm(
+    "This permanently ERASES ALL of your data:\n\n" +
+    "  • Every conversation (current + saved archives)\n" +
+    "  • Chat memory and the encrypted memory-chain log\n" +
+    "  • Learned procedural memory and snapshots\n" +
+    "  • Uploaded files and generated downloads\n\n" +
+    "It does NOT delete your settings, keys, or installed models.\n" +
+    "This is Zero Data Retention. It CANNOT be undone.\n\n" +
+    "Continue?",
+    { title: "🔥 Burn all my data", okLabel: "Continue…", cancelLabel: "Cancel" });
+  if (!ok) return;
+
+  // Stage 2: type-to-confirm. oraclePrompt falls back to window.prompt.
+  let typed = null;
+  if (typeof oraclePrompt === "function") {
+    typed = await oraclePrompt('Type BURN (all caps) to confirm permanent erasure:',
+                               { title: "🔥 Final confirmation", okLabel: "Burn it" });
+  } else {
+    typed = window.prompt('Type BURN (all caps) to confirm permanent erasure:');
+  }
+  if (typed !== "BURN") { setStatus("Burn cancelled"); return; }
+
+  setStatus("🔥 Burning all data…");
+  try {
+    const resp = await fetch("/api/burn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: "BURN" }),
+    });
+    const r = await resp.json();
+    if (resp.ok && r.ok) {
+      _clearMessagesNow();
+      setStatus("🔥 All data erased — Zero Data Retention complete");
+    } else {
+      const detail = (r && r.errors && r.errors.length) ? (" (" + r.errors[0] + ")") : "";
+      setStatus("Burn finished with issues" + detail + " — see setup/console log");
+      _clearMessagesNow();
+    }
+  } catch (e) {
+    setStatus("Burn failed: " + (e && e.message ? e.message : e));
+  }
+}
+window.burnAllData = burnAllData;
+
 /* --- AI QNudge: side-channel send (does NOT post a normal chat turn) ---
    Takes whatever is in the composer and signs+deposits it as a mid-run
-   nudge for Sage via /api/aiq-nudge, the button-equivalent of the
+   nudge for Toga via /api/aiq-nudge, the button-equivalent of the
    aiq_nudge_send.py terminal helper. On success the box is cleared and a
    status line confirms; the transcript is left untouched. */
 async function handleNudgeClick() {
@@ -1249,7 +1341,7 @@ async function handleNudgeClick() {
   }
   const btn = document.getElementById("nudge-btn");
   if (btn) btn.disabled = true;
-  setStatus("Sending nudge to Sage…");
+  setStatus("Sending nudge to Toga…");
   try {
     const resp = await fetch("/api/aiq-nudge", {
       method: "POST",
@@ -1261,7 +1353,7 @@ async function handleNudgeClick() {
     if (resp.ok && data.success) {
       input.value = "";
       autoResize(input);
-      setStatus("👋 Nudge sent to Sage");
+      setStatus("👋 Nudge sent to Toga");
     } else {
       // FastAPI HTTPException -> {detail: "..."}; fall back to status code.
       const detail = data.detail || data.error || ("HTTP " + resp.status);

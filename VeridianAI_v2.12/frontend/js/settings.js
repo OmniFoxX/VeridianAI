@@ -1,6 +1,6 @@
 /**
- * OracleAI — Settings Module v2
- * Added: Tavily key, Sage config, multi-model, vibe prompts
+ * VeridianAI — Settings Module v2
+ * Added: Tavily key, Toga config, multi-model, vibe prompts
  */
 
 window._appConfig = {};
@@ -82,11 +82,15 @@ function applySettingsToUI(cfg) {
   document.documentElement.setAttribute("data-theme", theme);
   syncThemeButton(theme);
 
-  // Sage toggles -- previously read `cfg.X !== true` which inverted every
+  // Toga toggles -- previously read `cfg.X !== true` which inverted every
   // toggle (true config -> unchecked UI, false config -> checked UI). Now
   // reads the config value directly with a default-on fallback matching
   // DEFAULT_CONFIG in main.py, and uses `=== false` only for auto_route
   // which defaults off.
+  // v2.12.1 personalization: current assistant name + wake word.
+  setVal("setting-assistant-name", cfg.assistant_name || "Toga");
+  setVal("setting-wake-word", cfg.voice_wake_word || "Toga");
+
   setChecked("toggle-sage", cfg.sage_mode !== false);
   setChecked("toggle-agentic", cfg.agentic_mode !== false);
   setChecked("toggle-websearch", cfg.web_search_enabled !== false);
@@ -144,6 +148,11 @@ async function loadMultiProfileToggle() {
     const section = document.getElementById("multiprofile-section");
     if (section) section.style.display = isOwner ? "" : "none";
     if (isOwner) setChecked("toggle-multiprofile", !!s.multiuser);
+    // v2.12.1: wake word is owner-level (one mic per machine). Non-owners
+    // can still rename their OWN assistant (assistant_name is per-user), but
+    // the wake word field is hidden for them.
+    const wwGroup = document.getElementById("wake-word-group");
+    if (wwGroup) wwGroup.style.display = isOwner ? "" : "none";
   } catch (e) { /* leave hidden */ }
 }
 
@@ -193,7 +202,7 @@ async function setDevMode(enabled) {
 async function setBrowserCookies(enabled) {
   if (enabled) {
     const ok = await window.oracleConfirm(
-      "Let Sage's browser keep cookies between sessions?\n\n" +
+      "Let Toga's browser keep cookies between sessions?\n\n" +
       "Bookmarks and history already persist. Cookies can also hold personal " +
       "or session data (logins). They're stored only in this machine's " +
       "per-user browser profile, and are not encrypted at rest. Enable?",
@@ -288,7 +297,7 @@ function onBackendChange(val) {
  * Refresh the model picker AND apply any pending tier ctx_size changes.
  *
  * Calls POST /api/models/refresh, which:
- *   1. Detects whether Sage or Daemon llama-server tiers need to restart
+ *   1. Detects whether Toga or Daemon llama-server tiers need to restart
  *      (because the user changed the global n_ctx in Settings).
  *   2. Restarts any tier whose cached ctx_size differs from the desired.
  *   3. Returns the fresh model list + list of restarted tiers + warnings.
@@ -335,7 +344,10 @@ async function reloadModels() {
         opt.value = m.id;
         // Show tier as a small suffix if present, so user can tell which
         // tier a model lives on. Falls back to just name if no tier info.
-        const tierLabel = m.tier ? `  [${m.tier}]` : "";
+        // v2.12.0 rebrand: internal tier labels (Oracle/Sage/Daemon) stay stable
+        // for routing/logs; users see functional names that never need renaming.
+        const TIER_DISPLAY = { Oracle: "Reasoning", Sage: "Agent", Daemon: "Utility", NPU: "NPU" };
+        const tierLabel = m.tier ? `  [${TIER_DISPLAY[m.tier] || m.tier}]` : "";
         const sizeLabel = m.size ? "  (" + formatBytes(m.size) + ")" : "";
         opt.textContent = `${m.name}${tierLabel}${sizeLabel}`;
         sel.appendChild(opt);
@@ -371,7 +383,8 @@ async function reloadModels() {
 
     // Surface tier restart feedback
     if (restarted_tiers && restarted_tiers.length > 0) {
-      const names = restarted_tiers.map((t) => `${t.tier} (ctx=${t.ctx_size})`).join(", ");
+      const _TIER_DISPLAY = { Oracle: "Reasoning", Sage: "Agent", Daemon: "Utility", NPU: "NPU" };
+      const names = restarted_tiers.map((t) => `${_TIER_DISPLAY[t.tier] || t.tier} (ctx=${t.ctx_size})`).join(", ");
       if (status) status.textContent = `Restarted: ${names}`;
       console.log("[Settings] Tiers restarted:", restarted_tiers);
     } else if (status) {
@@ -404,7 +417,7 @@ function onModelChange(modelId) {
 }
 
 /* --- Plugins ------------------------------------------------- */
-/* --- Sage Network ------------------------------------------- */
+/* --- Toga Network ------------------------------------------- */
 async function snLoadStatus() {
   try {
     const r = await fetch("/api/sage-network/status");
@@ -424,7 +437,7 @@ async function snLoadStatus() {
     if (off) off.checked = !!s.offload_enabled;
     const addr = document.getElementById("sn-lan-addr");
     if (addr) addr.textContent = (s.lan_ip || "?") + ":" + (s.app_port || 8000);
-  } catch (e) { /* Sage Network section is optional */ }
+  } catch (e) { /* Toga Network section is optional */ }
 }
 
 async function snRevealToken() {
@@ -441,7 +454,7 @@ async function snRevealToken() {
 
 function snSetBind(toLan) {
   updateSetting("host", toLan ? "0.0.0.0" : "127.0.0.1");
-  setStatus(toLan ? "Bind set to LAN - RESTART OracleAI to apply"
+  setStatus(toLan ? "Bind set to LAN - RESTART VeridianAI to apply"
                   : "Bind set to localhost - restart to apply");
 }
 
@@ -584,7 +597,7 @@ function toggleSidebar() {
 }
 
 function switchPanel(name, btn) {
-  document.title = `${name.charAt(0).toUpperCase() + name.slice(1)} - OracleAI`;
+  document.title = `${name.charAt(0).toUpperCase() + name.slice(1)} - VeridianAI`;
   document
     .querySelectorAll(".nav-tab")
     .forEach((b) => b.classList.remove("active"));

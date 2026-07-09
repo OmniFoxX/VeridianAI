@@ -1,5 +1,5 @@
 /**
- * OracleAI — Hardware Panel v2
+ * VeridianAI — Hardware Panel v2
  * Now shows physical cores vs threads, improved Intel Arc detection display.
  */
 

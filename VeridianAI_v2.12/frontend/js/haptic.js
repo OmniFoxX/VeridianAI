@@ -1,5 +1,5 @@
 /**
- * OracleAI Haptic Manager
+ * VeridianAI Haptic Manager
  * Wraps the Web Vibration API with enable/disable toggle.
  * Patterns map to meaningful UI events.
  */

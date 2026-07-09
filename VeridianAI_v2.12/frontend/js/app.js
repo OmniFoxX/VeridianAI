@@ -1,5 +1,5 @@
 /**
- * OracleAI — App Initialization v2
+ * VeridianAI — App Initialization v2
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 4. Model list
   reloadModels();
 
-  // 4b. Sage Network status (fingerprint, toggle, remote url)
+  // 4b. Toga Network status (fingerprint, toggle, remote url)
   snLoadStatus();
 
   // 5. Plugins
@@ -35,9 +35,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('resize', fitGameCanvas);
   
   // 9. Default page title (WCAG 2.4.2)
-  document.title = "OracleAI Chat";
+  document.title = "VeridianAI Chat";
 
-  console.log('%cOracleAI v2.9.10 ready', 'color:#f0a500;font-size:14px;font-weight:bold;font-family:Georgia,serif');
+  console.log('%cVeridianAI v2.12 ready', 'color:#f0a500;font-size:14px;font-weight:bold;font-family:Georgia,serif');
 });
 
 function fitGameCanvas() {

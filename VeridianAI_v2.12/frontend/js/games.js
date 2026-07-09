@@ -1,11 +1,11 @@
 /**
- * OracleAI — Mini-Games Module v2.1
+ * VeridianAI — Mini-Games Module v2.1
  * FIXES: bulletproof keyboard scoping (spacebar never stolen from textarea),
  *        delta-time speed, close button stops game loop, scoreboards
  */
 
 if (typeof Haptic === 'undefined') {
-  console.warn('[OracleAI] Haptic module not loaded — using silent fallback');
+  console.warn('[VeridianAI] Haptic module not loaded — using silent fallback');
   window.Haptic = {
     vibrate: function() {}, setEnabled: function() {},
     isEnabled: function() { return false; }, isSupported: function() { return false; },
@@ -558,7 +558,7 @@ const TicTacToe = (() => {
     let res=checkWin(board);
     if (res) { endGame(res); return; }
     if (board.every(c=>c)) { endGame(null); return; }
-    playerTurn=false; statusMsg='Oracle is thinking…';
+    playerTurn=false; statusMsg='Toga is thinking…';
     moveTimeout=setTimeout(aiMove,380+Math.random()*300);
   }
 
@@ -587,7 +587,7 @@ const TicTacToe = (() => {
     gameOver=true; result=res;
     if (!res) statusMsg="It's a draw! Click to replay";
     else if (res.winner==='X') { score++; statusMsg='You win! Click to replay'; Haptic.vibrate(Haptic.PATTERNS.done); GameManager.checkHighScore('tictactoe',score); }
-    else { statusMsg='Oracle wins! Click to replay'; Haptic.vibrate(Haptic.PATTERNS.gameDie); }
+    else { statusMsg='Toga wins! Click to replay'; Haptic.vibrate(Haptic.PATTERNS.gameDie); }
   }
 
   function keydown() {}

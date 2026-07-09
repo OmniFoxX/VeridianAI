@@ -144,6 +144,15 @@
 <!-- Toga / Agent Settings -->
 <div class="settings-section">
 <div class="settings-section-title">Toga AI Agent</div>
+<!-- v2.12.1: personalization — rename the assistant + set the voice wake word -->
+<div class="setting-group">
+<label class="setting-label" data-tip="What the assistant calls itself and answers to. Default 'Toga'. This changes the persona name only — menus and labels stay the same. Per-profile: each user can pick their own.">Assistant Name</label>
+<input class="setting-input" id="setting-assistant-name" aria-label="Assistant name" placeholder="Toga" maxlength="24" onchange="updateSetting('assistant_name', this.value.trim() || 'Toga')" type="text"/>
+</div>
+<div class="setting-group" id="wake-word-group">
+<label class="setting-label" data-tip="The spoken/typed word that wakes hands-free voice and triggers social auto-replies. Default 'Toga'. Owner-level (one microphone per machine). Restart voice listening after changing.">Wake Word</label>
+<input class="setting-input" id="setting-wake-word" aria-label="Wake word" placeholder="Toga" maxlength="24" onchange="updateSetting('voice_wake_word', this.value.trim() || 'Toga')" type="text"/>
+</div>
 <div class="hw-toggle-row" style="margin-bottom:6px">
 <span class="hw-toggle-label" data-tip="Toga Mode: route messages through the Toga agent (memory, tools, procedural skills). Off = plain model chat with no agent layer.">Toga Mode</span>
 <label class="toggle-switch">
@@ -478,6 +487,7 @@
 <label class="attach-btn" for="file-input" aria-label="Attach file" data-tip="Attach file">📎</label>
 <input aria-label="📎" id="file-input" multiple="" onchange="handleFileAttach(event)" style="display:none" type="file"/>
 <button class="attach-btn" id="gen-image-btn" aria-label="Generate image" onclick="generateImageManual()" data-tip="Generate an image from the prompt in the box" type="button">🎨</button>
+<button class="attach-btn burn-btn" id="burn-btn" aria-label="Burn all my data" onclick="burnAllData()" data-tip="Burn — permanently erase ALL your data (chats, archives, memory). Zero Data Retention. Cannot be undone." type="button">🔥</button>
 </div>
 <label class="sr-only" for="user-input">Ask Toga</label>
 <textarea class="user-input" id="user-input" aria-label="Message to Toga" data-tip="Type your message here. Enter to send, Shift+Enter for a new line." oninput="autoResize(this)" onkeydown="handleInputKey(event)" placeholder="Ask Toga…" rows="4"></textarea>

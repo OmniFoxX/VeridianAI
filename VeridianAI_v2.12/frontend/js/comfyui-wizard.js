@@ -1,5 +1,5 @@
 /**
- * ComfyUI Setup Wizard — OracleAI v2.9.10
+ * ComfyUI Setup Wizard — VeridianAI v2.9.10
  * =========================================
  * Handles detection, download, install, and verification of ComfyUI portable.
  * Triggered by the image generation button (🎨) when ComfyUI is not set up.
@@ -23,7 +23,7 @@ const ComfyUIWizard = (() => {
 
   // Default install path shown in the wizard input.
   // The backend resolves the real default; this is just a hint.
-  const DEFAULT_HINT = '%USERPROFILE%\\OracleAI\\backend';
+  const DEFAULT_HINT = '%USERPROFILE%\\VeridianAI\\backend';
 
   // ── API calls ────────────────────────────────────────────────────────────
   async function _fetchStatus() {
@@ -136,7 +136,7 @@ const ComfyUIWizard = (() => {
 				  border-color:rgba(201,168,76,0.3);
 				  color:var(--gold)">
 		<span>🔀</span>
-		<span>Image generation is routed to <strong>${remoteUrl}</strong> via Sage Network.
+		<span>Image generation is routed to <strong>${remoteUrl}</strong> via Toga Network.
 		No local ComfyUI install is needed on this machine.</span>
 	  </div>
 	  ` : ''}
@@ -150,7 +150,7 @@ const ComfyUIWizard = (() => {
       </div>
       ` : `
       <p class="wizard-description" id="wiz-desc">
-        <strong>OracleAI needs ComfyUI</strong> to generate images. The setup
+        <strong>VeridianAI needs ComfyUI</strong> to generate images. The setup
         wizard will download the official portable package from GitHub, install
         it silently in the background, and configure everything automatically.
         <br><br>
@@ -193,7 +193,7 @@ const ComfyUIWizard = (() => {
                     opacity:0.6;
                     margin-top:3px;
                     font-family:'Rajdhani',sans-serif">
-          OracleAI will install ComfyUI here and remember this location.
+          VeridianAI will install ComfyUI here and remember this location.
           You can change it later in Settings → Image Generation.
         </div>
       </div>
@@ -677,7 +677,7 @@ const ComfyUIWizard = (() => {
       _triggerEl = null;
   }
 
-  // ── Focus trap (WCAG 2.1 — matches OracleAI's existing pattern) ──────────
+  // ── Focus trap (WCAG 2.1 — matches VeridianAI's existing pattern) ──────────
   function _trapFocus(el) {
       const focusableSelectors = [
           'button:not([disabled])',

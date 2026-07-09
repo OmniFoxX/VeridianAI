@@ -40,6 +40,12 @@
         // Show the requirement/setup note as guidance until the channel is
         // connected; once it's up (green dot) the note is redundant.
         var note = (c.note && !c.connected) ? (' <span style="opacity:0.7">— ' + esc(c.note) + "</span>") : "";
+        // v2.11.15: surface the adapter's last REAL error (bad token, missing
+        // Discord intent, 401s...) — previously these died in a hidden console
+        // and a failed channel just silently stayed grey.
+        if (c.error && !c.connected) {
+          note += ' <span style="color:#e0836d">— ' + esc(c.error) + "</span>";
+        }
         var btn = c.connected
           ? '<button class="toolbar-btn" aria-label="Disconnect ' + esc(n) + '" data-tip="Disconnect from ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',false)">Disconnect</button>'
           : '<button class="toolbar-btn"' + (c.available ? "" : " disabled") + ' aria-label="Connect ' + esc(n) + '" data-tip="Connect to ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',true)">Connect</button>';
@@ -201,12 +207,12 @@
 
   async function socialsAutoReply(on) {
     if (on && !(await window.oracleConfirm(
-        "Let Sage auto-reply on connected channels?\n\n" +
-        "When ON, Sage generates and POSTS a reply to any message that mentions the wake word on a CONNECTED channel. Off by default.", { title: "Sage auto-reply", okLabel: "Enable" }))) {
+        "Let Toga auto-reply on connected channels?\n\n" +
+        "When ON, Toga generates and POSTS a reply to any message that mentions the wake word on a CONNECTED channel. Off by default.", { title: "Toga auto-reply", okLabel: "Enable" }))) {
       var t = $("toggle-socials-autoreply"); if (t) t.checked = false; return;
     }
     var d = await jpost("/api/socials/auto-reply", { enabled: !!on });
-    toast(d && d.auto_reply ? "Sage auto-reply ON" : "Sage auto-reply OFF");
+    toast(d && d.auto_reply ? "Toga auto-reply ON" : "Toga auto-reply OFF");
   }
 
   // --- Per-channel threads -------------------------------------------------

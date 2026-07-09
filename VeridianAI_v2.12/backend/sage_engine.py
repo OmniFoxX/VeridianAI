@@ -179,6 +179,16 @@ INSIDE [SAVE_FILE:] tag: ENTIRE file body lives INSIDE the brackets, with `|` se
 	Recent successful/unsuccessful procedures pre-loaded in context each turn (silent).
 	Use [REMEMBER] for insights NOT captured by action sequence (heuristics, quirks, lessons).
 	Key should be short/searchable slug (e.g. "tavily_date_format").
+*SELF-REFLECTIVE LOOP (run silently every turn — this is how you evolve):
+	This loop is INTERNAL. Do NOT narrate its stages to the user; only the final answer is shown.
+	1. PLAN — briefly outline the steps/tools to satisfy the request.
+	2. ACT — execute via your tags; treat every tool_result (success OR error) as an observation.
+	3. OBSERVE — note what actually happened vs. what you expected.
+	4. CRITIQUE — ask: Any error, hallucination, or unverified assumption? A shorter/more reliable path (fewer tool calls, better sources)? What single insight would improve future similar tasks? Keep it to 1–2 sentences.
+	5. LEARN — if the critique yields a durable, reusable lesson, persist it: [REMEMBER: short_slug|the lesson] for what worked, [REMEMBER_FAIL: short_slug|the dead-end] for what to avoid. Only store GENERALIZABLE insights, never one-off specifics. (Recent stored procedures are pre-loaded silently each turn, so tomorrow you start ahead of today.)
+	6. REVISE — if the critique reveals a fixable problem AND you have reflected fewer than 2 times this turn, go back to step 1 with the improved plan. Hard cap: 2 revisions, to bound latency.
+	7. RESPOND — when no actionable critique remains (or the cap is hit), give the final answer, citing sources/observations gathered.
+	Grounding rules for the loop: trust the injected CURRENT DATE block over any training-era date assumption; for accuracy-critical facts prefer reputable sources at/after that date and cross-check across multiple independent sources; treat a failed tool call as an observation to critique ("query too broad — refine keywords"), not a stopping point. Before a fresh search, [RECALL: <topic>] first — a past lesson may already answer it.
 *ASSUMPTIONS RULE:
 NEVER assume facts about world/files/system state.
 NEVER report success on unverified actions.
@@ -664,6 +674,23 @@ def process_upload(filepath: str, filename: str) -> dict:
 #  QUERY PRE-PROCESSING (ported from SageBot)
 # ===============================================================================
 
+# v2.12.1: the user's custom assistant name(s), registered from the chat
+# path so weather/location extraction never mistakes "hey Zephyr, weather?"
+# for a place called Zephyr. Set, so multiple profiles' names accumulate.
+_CUSTOM_ASSISTANT_NAMES = set()
+
+
+def register_assistant_name(name: str) -> None:
+    """Record a custom assistant name so extract_location skips it. Cheap,
+    idempotent, never raises."""
+    try:
+        n = (name or "").strip()
+        if n:
+            _CUSTOM_ASSISTANT_NAMES.add(n)
+    except Exception:
+        pass
+
+
 def extract_location(text: str) -> Optional[str]:
     """Extract location from user query."""
     skip_words = {
@@ -671,7 +698,7 @@ def extract_location(text: str) -> Optional[str]:
         "What", "How", "When", "Where", "Why", "Who",
         "Sage", "Toga", "Monday", "Tuesday", "Wednesday", "Thursday",
         "Friday", "Saturday", "Sunday",
-    }
+    } | _CUSTOM_ASSISTANT_NAMES
     patterns = [
         r'(?:on|in|to|at|for|visiting|visit|going to|headed to|travel to|trip to)\s+(?:the\s+)?([A-Z][a-zA-Z\s]+?)(?:\s+(?:area|region|for|this|next|on|and|weather|forecast|trip)|[,?]|\s+what)',
         r'([A-Z][a-zA-Z\s]+?),?\s+(?:England|UK|USA|California|Texas|Washington|Florida|France|Germany|Japan|Australia)',

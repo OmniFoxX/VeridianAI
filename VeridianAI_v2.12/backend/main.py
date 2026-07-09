@@ -577,6 +577,10 @@ DEFAULT_CONFIG = {
     "sage_mode": True, "agentic_mode": True,
     "web_search_enabled": True, "code_exec_enabled": True,
     "privacy_mode": False,
+    # v2.12.1 personalization: persona name (per-user capable) + wake word
+    # (owner-level — one microphone). UI labels stay "Toga" by design; this
+    # only changes what the assistant answers to and calls itself.
+    "assistant_name": "Toga", "voice_wake_word": "Toga",
     "n_ctx": 256000,
 }
 
@@ -916,8 +920,10 @@ try:
 
     async def _socials_reply(_text: str) -> str:
         """One-shot Sage reply for channel auto-reply, via the real model_manager."""
+        # v2.12.1: use the owner's configured assistant name in socials replies.
+        _sa_name = str(config.get("assistant_name") or "Toga").strip() or "Toga"
         _msgs = [
-            {"role": "system", "content": "You are Toga replying on a Bluetooth "
+            {"role": "system", "content": f"You are {_sa_name} replying on a Bluetooth "
              "mesh chat. Keep replies conversational and reasonably brief — a few "
              "short sentences is ideal (long messages are auto-fragmented, so "
              "you're not hard-limited). Friendly, plain-text. No preamble, no "
@@ -1806,6 +1812,93 @@ async def api_get_config(request: Request):
     return _effective_config(_session_ns(request))
 
 
+@app.post("/api/burn")
+async def api_burn(payload: dict, request: Request):
+    """v2.12.0 Zero-Data-Retention 'Burn' — one-touch wipe of ALL of the
+    caller's stored data: chat memory, archives, the hash-chained memory
+    log, procedural memory, snapshots, uploads, downloads, and nudges.
+
+    Scope is per-profile and deliberately conservative:
+      * A signed-in NON-OWNER burns ONLY their own namespace
+        (sage_data/users/<ns>/...). They can never reach another profile
+        or the shared store.
+      * The OWNER / single-user burns the shared store. Child PROFILE
+        FOLDERS are left intact (deleting other people's accounts is a
+        separate, explicit admin action — Burn is 'erase MY data', not
+        'nuke everyone').
+    NEVER touches config.json, secrets/keys, or installed models.
+
+    Requires {"confirm": "BURN"} in the body — the UI's loud modal sends
+    it, and it stops an accidental/scripted POST from erasing anything.
+    """
+    if payload.get("confirm") != "BURN":
+        raise HTTPException(400, "burn requires explicit confirmation")
+    import shutil as _shutil
+    ns = _session_ns(request)
+    removed = []
+    errors = []
+
+    def _rm_file(p):
+        try:
+            if p and os.path.exists(p):
+                os.remove(p); removed.append(os.path.basename(p))
+        except Exception as e:
+            errors.append(f"{p}: {e}")
+
+    def _rm_tree_contents(d):
+        """Delete everything INSIDE d but keep d itself (so the app keeps
+        working without a restart). Best-effort per entry."""
+        try:
+            if not d or not os.path.isdir(d):
+                return
+            for name in os.listdir(d):
+                fp = os.path.join(d, name)
+                try:
+                    if os.path.isdir(fp):
+                        _shutil.rmtree(fp, ignore_errors=True)
+                    else:
+                        os.remove(fp)
+                except Exception as e:
+                    errors.append(f"{fp}: {e}")
+            removed.append(os.path.basename(d) + "/*")
+        except Exception as e:
+            errors.append(f"{d}: {e}")
+
+    try:
+        if ns:
+            # Non-owner: wipe ONLY sage_data/users/<ns>/*
+            base = os.path.join(str(DATA_DIR), "users", str(ns))
+            _rm_tree_contents(base)
+        else:
+            # Owner / single-user: shared stores, but NOT the users/ tree.
+            from config import (MEMORY_DIR, PROCEDURAL_DIR, SNAPSHOT_DIR,
+                                UPLOAD_DIR, LOG_DIR)
+            _rm_file(str(Path(BASE_DIR) / "chat_memory.json"))
+            _rm_tree_contents(str(Path(BASE_DIR) / "archives"))
+            _rm_tree_contents(str(Path(BASE_DIR) / "downloads"))
+            _rm_tree_contents(str(MEMORY_DIR))
+            _rm_tree_contents(str(PROCEDURAL_DIR))
+            _rm_tree_contents(str(SNAPSHOT_DIR))
+            _rm_tree_contents(str(UPLOAD_DIR))
+            _rm_tree_contents(str(Path(DATA_DIR) / "nudges"))
+            # Reset the in-memory chat + memory-chain so nothing lingers
+            # in RAM until restart.
+            try:
+                sage_engine.save_chat_memory([], None)
+            except Exception:
+                pass
+            try:
+                memory_logger.reset()
+            except Exception:
+                pass
+    except Exception as e:
+        errors.append(str(e))
+
+    print(f"[BURN] ns={ns or 'owner'} removed={removed} errors={len(errors)}")
+    return {"ok": not errors, "scope": ("user:" + str(ns)) if ns else "owner",
+            "removed": removed, "errors": errors}
+
+
 @app.post("/api/config")
 async def api_update_config(payload: dict, request: Request):
     global config
@@ -2067,6 +2160,9 @@ PER_USER_KEYS = frozenset({
     "theme", "haptic", "default_model", "temperature", "max_tokens",
     "sage_mode", "agentic_mode", "web_search_enabled", "code_exec_enabled",
     "privacy_mode",
+    # v2.12.1: each profile may name their own assistant (persona
+    # self-reference only; UI labels and the shared wake word stay global).
+    "assistant_name",
 })
 
 
@@ -4193,6 +4289,24 @@ async def ws_chat(websocket: WebSocket):
                     _base_prompt = sage_engine.SAGE_SYSTEM_PROMPT_SMALL
                 else:
                     _base_prompt = sage_engine.SAGE_SYSTEM_PROMPT
+                # v2.12.1 personalization: swap the persona's self-reference
+                # to this user's chosen name (per-profile via overlay; falls
+                # back to global config, then "Toga"). Only the NAME changes —
+                # capabilities, rules, and UI labels are untouched. Names are
+                # sanitized at the config layer (no quotes/brackets, ≤24 chars).
+                _aname = str(_eff.get("assistant_name") or "Toga").strip() or "Toga"
+                if _aname != "Toga":
+                    _base_prompt = _base_prompt.replace(
+                        'You are "Toga"', f'You are "{_aname}"', 1).replace(
+                        "You are Toga,", f"You are {_aname},", 1)
+                    _base_prompt += (
+                        f"\nYour name in this profile is {_aname} (the user "
+                        f"renamed you from the default 'Toga'); always refer "
+                        f"to yourself as {_aname}.")
+                    try:
+                        sage_engine.register_assistant_name(_aname)
+                    except Exception:
+                        pass
                 # Diagnostic so the chosen tier shows up in console logs.
                 # Concise on purpose — fires on every turn.
                 print(
@@ -4288,6 +4402,28 @@ async def ws_chat(websocket: WebSocket):
             # the cacheable front prefix. A change here then only re-processes
             # the tail, never the system+history prefix (KV-cache friendly).
             _late_ctx = []
+            # v2.12.0: CURRENT DATE/TIME, every turn. Injected at the TAIL (not
+            # the cacheable prefix) since it changes each turn. Fixes the
+            # perennial "model thinks it's 2023 and searches for stale info"
+            # problem — now Toga always knows the real now, and the note
+            # explicitly tells her to treat it as authoritative over training
+            # priors and to prefer sources at/after this date for current info.
+            try:
+                _now_str = TimeManager.local_display(
+                    fmt="%A, %B %d, %Y at %I:%M %p %Z")
+                _dt_block = (
+                    "=== CURRENT DATE & TIME (authoritative — trust this over "
+                    "any date assumption from training) ===\n"
+                    f"It is now {_now_str}.\n"
+                    "When answering anything time-sensitive (news, prices, "
+                    "'latest', 'current', who holds a role, etc.), reason from "
+                    "THIS date and prefer sources published at or after it. Do "
+                    "not assume an earlier year is 'current'.\n"
+                    "=== END DATE & TIME ==="
+                )
+                _late_ctx.append({"role": "system", "content": _dt_block})
+            except Exception as _dt_e:
+                print(f"[DATETIME] injection failed: {_dt_e}")
             if _proc_block:
                 _late_ctx.append({"role": "system", "content": _proc_block})
             if _warm:

@@ -172,7 +172,7 @@
         { label: 'Vibe Prompts',            action: () => safeCall('toggleVibeBar') },
         { label: 'Voice Input (push to talk)', action: () => safeCall('voicePushToTalk') },
         { label: 'Generate Image',          action: () => safeCall('generateImageManual') },
-        { label: 'Send Nudge to Sage',      action: () => safeCall('handleNudgeClick') },
+        { label: 'Send Nudge to Toga',      action: () => safeCall('handleNudgeClick') },
         { label: 'Attach',                  action: attachFileViaPicker },
         { label: 'Cancel',                  action: cancelOrStop },
         { label: 'Copy',                    action: copyViaExecCommand },
