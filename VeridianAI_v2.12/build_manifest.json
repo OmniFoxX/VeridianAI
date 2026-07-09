@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.11.11",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "1eb82f0c677540c0ab45b394562da892",
-    "built_utc": "2026-07-07T19:12:36.953953+00:00",
+    "build_id": "40f4c1c1dc144f6dad2604bd44503fdf",
+    "built_utc": "2026-07-09T00:09:30.126890+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -161,9 +161,9 @@
       "electron/first_run.js": "576e9f233afe4aa9679a490b620a1eb3a91dbec6969f9a0d72a54dc7ce1e4ef2",
       "electron/main.js": "4473c10db5c57ff7175f052c84b34b895ecf26a1659a99ef00823dd23c814c16",
       "electron/preload.js": "37770f697d4cdf964eaccf82f14ad243c2634cd056ae2db122072ba213083319",
-      "frontend/css/comfyui-wizard.css": "eaedfbdb23f8316f3d2331178ad9f309e1c59ef5551ec1aebd3bffaa5f9709b9",
-      "frontend/css/command-palette.css": "2f3188f97505dfbb68ab097eacebe7750dd373df1f6fd86a98ab6f9aa10757c6",
-      "frontend/css/styles.css": "d3327ac5018fa2ce0aeff94d87c3c9c20af6bc056f75cbc2abbf5c6a11b00d93",
+      "frontend/css/comfyui-wizard.css": "18eae3602295eaf3bbd5bd5307a2a5d3d383aa6e3ce6ddcb41e4b70b4d129e22",
+      "frontend/css/command-palette.css": "5d533601126f352d6ef25ffdb9ec9a42c9f97d978268d312cff9f2854ba54381",
+      "frontend/css/styles.css": "88e45210384d6a18f23be026ba1c1f662d524b978ef2c2e435fb1d5c7a2245b9",
       "frontend/index.html": "4f591120619c07ce6632854ce5f04fa74a4984ee5cab7077bc32c1e8d33a70ef",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/app.js": "d14721ae5f6e4a2fc9015baf12f152eeeb9bff230f76b2f3828a14fad9c94fac",
@@ -181,8 +181,8 @@
       "frontend/js/socials.js": "ff55cf332b76963b80fe10811c187691bea436b3095a5a26cb33cfe096761fce",
       "frontend/js/ui-unstick.js": "619fefbb917da5fdf2ce387b7f0139bd02c349c8967182cacb75dde42dca8164",
       "frontend/manifest.webmanifest": "997171b26a5f3195d3cf15bf71ed6d1f29a956afdda4634b788fc02007e52f81",
-      "frontend/offline.html": "1ab4ff6ee00e0f9663fc8c9581f0965527f6a5fd452eaf7580eb7764046959c1",
-      "frontend/sw.js": "056e07244ae6457c3fb45a4462615c086c994f31d5d2d649176b5674b714c614",
+      "frontend/offline.html": "ac88e9cb27c56234a57b7240de73b3e326d4d54b8dd4f18d3a7a16340d68fee6",
+      "frontend/sw.js": "6231f99d9f1e54eb7d8028a0c14aa83b9ba02590d3792e4aac9672f29631d25c",
       "LICENSES.chromium.html": "40b7f168306f35b386a190adb77d6f9984f0bbe38318c6788db4bfc02dab2943",
       "README/SageAetherNets_Win_FirewallSetup/setup_firewall.ps1": "48539e3d3d39e93d5318e21d1b8a6c1a36cc5817524423e08fa2f5edfbbac409",
       "rotate_api_key.bat": "93460b11635d3c7598f84343f4feea3f40ae5d2ba6e0709d2d4f5efb3e14fcfb",
@@ -193,5 +193,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "gstWwfhq+MPmK+qdhW5p+nMlzn2Zzgv8hQHIlo+iTZQO8jMF0uZjhFcKXszsbxyixdIZhHMROcZM6BVTgg/yDA=="
+  "signature_b64": "Gg8fynTPP/OgMx/OwetkpJWY0pLYNeMj0F30KNMMZe/Tys0Xw2qv/+IGOFL8OzS2BMahQj8bVIIFRlJq81OtCQ=="
 }
