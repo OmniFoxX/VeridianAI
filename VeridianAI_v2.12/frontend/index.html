@@ -145,11 +145,11 @@
 <div class="settings-section">
 <div class="settings-section-title">Toga AI Agent</div>
 <!-- v2.12.1: personalization — rename the assistant + set the voice wake word -->
-<div class="setting-group">
+<div class="setting-group" style="margin-bottom:12px">
 <label class="setting-label" data-tip="What the assistant calls itself and answers to. Default 'Toga'. This changes the persona name only — menus and labels stay the same. Per-profile: each user can pick their own.">Assistant Name</label>
 <input class="setting-input" id="setting-assistant-name" aria-label="Assistant name" placeholder="Toga" maxlength="24" onchange="updateSetting('assistant_name', this.value.trim() || 'Toga')" type="text"/>
 </div>
-<div class="setting-group" id="wake-word-group">
+<div class="setting-group" id="wake-word-group" style="margin-bottom:14px">
 <label class="setting-label" data-tip="The spoken/typed word that wakes hands-free voice and triggers social auto-replies. Default 'Toga'. Owner-level (one microphone per machine). Restart voice listening after changing.">Wake Word</label>
 <input class="setting-input" id="setting-wake-word" aria-label="Wake word" placeholder="Toga" maxlength="24" onchange="updateSetting('voice_wake_word', this.value.trim() || 'Toga')" type="text"/>
 </div>

@@ -1,13 +1,13 @@
-# OracleAI — Build Provenance & Integrity
+# VeridianAI — Build Provenance & Integrity
 
 **Canonical source:** https://github.com/OmniFoxX
 
-Official OracleAI builds ship a **signed build manifest** (`build_manifest.json`).
+Official VeridianAI builds ship a **signed build manifest** (`build_manifest.json`).
 It lists the product, version, build ID, and a SHA-256 of every shipped source
 file, and it is signed with the maintainer's (Todd/OmniFoxX) Ed25519 **private key**.
 The matching **public key** ships with the app (`backend/build_pubkey.pem`).
 
-At startup — and any time via `GET /api/build/integrity` — OracleAI verifies the
+At startup — and any time via `GET /api/build/integrity` — VeridianAI verifies the
 signature and re-hashes the shipped files, reporting one of:
 
 - **official** — signature valid, all files match, public-key fingerprint matches
@@ -22,7 +22,7 @@ signature and re-hashes the shipped files, reporting one of:
 ## What this does and doesn't do
 
 This is **tamper-evidence and provenance**, not copy protection. Anyone may build
-on OracleAI — but a modified copy cannot present itself as an official OmniFoxX
+on VeridianAI — but a modified copy cannot present itself as an official OmniFoxX
 build, because a fork cannot forge the maintainer's signature, and its public-key
 fingerprint will not match the one published at the canonical repo. If a modified
 copy misbehaves, its own integrity report identifies it as unofficial.

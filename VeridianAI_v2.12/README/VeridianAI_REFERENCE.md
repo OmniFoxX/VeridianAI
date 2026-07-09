@@ -1,20 +1,20 @@
-# OracleAI Reference
+# VeridianAI Reference
 
 **Version:** v2.11.11
 **Updated:** 2026-06-22
 **Maintainer:** Todd/"OmniFoxX" (developer/founder)
 **Mission:** Dissolve barriers between AI and disabled users. Reliability and memory integrity are load-bearing.
 
-Operational cheat sheet for OracleAI v2.1.5+. Tracks every tool tag, HTTP
+Operational cheat sheet for VeridianAI v2.1.5+. Tracks every tool tag, HTTP
 endpoint, daemon action, file path, port, and side-channel that exists in
 the current install. Written to be useful for both the human operator
-(Todd) and Sage herself when this file is uploaded as context.
+(Todd) and Toga herself when this file is uploaded as context.
 
 ---
 
 ## 1. Architecture Overview
 
-OracleAI runs three inference tiers in parallel plus an overseer daemon a set of supporting daemons. CRAIID concept to become reality, very soon.
+VeridianAI runs three inference tiers in parallel plus an overseer daemon a set of supporting daemons. CRAIID concept to become reality, very soon.
 All inference is local — no cloud round-trips.
 
 ### 1.1 Inference Tiers (typical ports, ports configurable v2.2+)
@@ -22,7 +22,7 @@ All inference is local — no cloud round-trips.
 | Tier       | Port  | Engine       | Role                                                                                              |
 | ---------- | ----- | ------------ | ------------------------------------------------------------------------------------------------- |
 | **Oracle** | 11434 | Ollama       | Primary user-facing chat. Largest model. (Ollama defaults to this port)                           |
-| **Sage**   | 11435 | llama-server | Agentic engine — interprets tool tags, runs SEARCH/WEATHER/BROWSE etc., follows multi-step plans. |
+| **Toga**   | 11435 | llama-server | Agentic engine — interprets tool tags, runs SEARCH/WEATHER/BROWSE etc., follows multi-step plans. |
 | **Daemon** | 11436 | llama-server | Tiny background inference (digest summarization, KB consolidation). Optional.                     |
 
 ### 1.2 Supporting Daemons (typical ports, ports configurable v2.2+)
@@ -36,12 +36,12 @@ All inference is local — no cloud round-trips.
 
 ### 1.3 File Layout (typical ports, ports configurable v2.2+)
 
-E:\OracleAI_v2.7
-├── start.bat ← launcher; launches Ollama + Sage + Daemon + sage_daemon + overseer ├── start.py ← Python entry, called by start.bat ├── config.json ← runtime overrides ├── chat_memory.json ← rolling chat memory ├── archives\ ← saved conversations (timestamped JSONs) ├── downloads\ ← [SAVE_FILE:] outputs land here ├── uploads\ ← user-uploaded files ├── plugins\ ← plugin manifests ├── frontend
+E:\VeridianAI_v2.7
+├── start.bat ← launcher; launches Ollama + Toga + Daemon + sage_daemon + overseer ├── start.py ← Python entry, called by start.bat ├── config.json ← runtime overrides ├── chat_memory.json ← rolling chat memory ├── archives\ ← saved conversations (timestamped JSONs) ├── downloads\ ← [SAVE_FILE:] outputs land here ├── uploads\ ← user-uploaded files ├── plugins\ ← plugin manifests ├── frontend
 │ ├── index.html │ └── js
 │ ├── chat.js ← WS handler, stream UI, stall banner, tool-call ⚡ │ └── settings.js ← Settings UI, max_tokens sanitizer ├── electron
 │ └── main.js ← Electron orchestration, port-conflict handling └── backend
-├── main.py ← FastAPI app + agentic loop dispatcher ├── sage_engine.py ← SAGE_SYSTEM_PROMPT (+ SAGE_SYSTEM_PROMPT_SMALL), tool fns, parser ├── model_manager.py ← tier routing + abort flag, adaptive ctx, generate() ├── task_prioritiser.py ← OAgentP/OAgentD/OSubAgent priority queue ├── overseer_daemon.py ← Systems supervisor/orchestrator (Phase 3, v2.1.8) ├── sage_daemon.py ← out-of-band mechanics daemon ├── sage_daemon_client.py ← TCP client wrapper ├── ipc_bridge.py ← Visible-browser IPC (9999) ├── ipc_monitor.py ← IPC web dashboard (9997) ├── browser_tool.py ← Playwright browser (Sage) ├── memory_logger_surprise.py ← Fernet+SHA3 chain log ├── procedural_memory.py ← KB with chain-witness provenance ├── plugin_manager.py ├── hw_utils.py ├── tier_lifecycle.py ├── time_manager.py ← Unified time source (v2.1.6) ├── config.py ← Paths + constants (PROJECT_DIR, DATA_DIR, LOG_DIR, ...) ├── \_tier_config_reader.py ← read by start.bat for ctx sizes ├── llama-server.exe ├── .fernet_key ← (gitignore-equivalent — back up with log) ├── verify_v214.py ← v2.1.4 regression suite (9 tests) ├── verify_procedural_wiring.py ← v2.1.4 procedural tests (8) ├── verify_v215.py ← v2.1.5 regression suite (6 tests) └── test_browser.py
+├── main.py ← FastAPI app + agentic loop dispatcher ├── sage_engine.py ← SAGE_SYSTEM_PROMPT (+ SAGE_SYSTEM_PROMPT_SMALL), tool fns, parser ├── model_manager.py ← tier routing + abort flag, adaptive ctx, generate() ├── task_prioritiser.py ← OAgentP/OAgentD/OSubAgent priority queue ├── overseer_daemon.py ← Systems supervisor/orchestrator (Phase 3, v2.1.8) ├── sage_daemon.py ← out-of-band mechanics daemon ├── sage_daemon_client.py ← TCP client wrapper ├── ipc_bridge.py ← Visible-browser IPC (9999) ├── ipc_monitor.py ← IPC web dashboard (9997) ├── browser_tool.py ← Playwright browser (Toga) ├── memory_logger_surprise.py ← Fernet+SHA3 chain log ├── procedural_memory.py ← KB with chain-witness provenance ├── plugin_manager.py ├── hw_utils.py ├── tier_lifecycle.py ├── time_manager.py ← Unified time source (v2.1.6) ├── config.py ← Paths + constants (PROJECT_DIR, DATA_DIR, LOG_DIR, ...) ├── \_tier_config_reader.py ← read by start.bat for ctx sizes ├── llama-server.exe ├── .fernet_key ← (gitignore-equivalent — back up with log) ├── verify_v214.py ← v2.1.4 regression suite (9 tests) ├── verify_procedural_wiring.py ← v2.1.4 procedural tests (8) ├── verify_v215.py ← v2.1.5 regression suite (6 tests) └── test_browser.py
 
 Outside the project (intentional, daemon-conflict-safe):
 
@@ -52,7 +52,7 @@ E:\sage_data
 │ ├── sage_daemon.log │ ├── overseer.log │ └── overseer_notifications.json ├── uploads
 ├── models
 │ └── \*.gguf └── snapshots\ ← read-only codebase snapshots
-| └── |\_\_Uploads\ OracleAI_v2.7_SageCopy ←Mirror copy for Sage to use for testing, etc.
+| └── |\_\_Uploads\ VeridianAI_v2.7_SageCopy ←Mirror copy for Toga to use for testing, etc.
 
 **Backup set (must snapshot together, The Trinity):**
 
@@ -65,16 +65,16 @@ undecryptable (chain still verifies, but content is `[DECRYPT_FAILED]` sentinels
 
 ---
 
-## 2. Tool Tags Sage Emits Inside Her Output
+## 2. Tool Tags Toga Emits Inside Her Output
 
-These tags get parsed out of Sage's generation by `parse_agent_actions()`
+These tags get parsed out of Toga's generation by `parse_agent_actions()`
 in `sage_engine.py` and dispatched in the agentic loop in `main.py`.
 
-Sage's instructions live in `sage_engine.py:SAGE_SYSTEM_PROMPT` (full, ~155 lines) or
+Toga's instructions live in `sage_engine.py:SAGE_SYSTEM_PROMPT` (full, ~155 lines) or
 `SAGE_SYSTEM_PROMPT_SMALL` (~25 lines, for ≤4B models — see §6).
 
 **Universal rule:** tags shown in the system prompt use ANGLE brackets `⟨ ⟩` for
-pedagogy only. Real tool invocations from Sage use SQUARE brackets `[ ]`. The parser
+pedagogy only. Real tool invocations from Toga use SQUARE brackets `[ ]`. The parser
 intentionally ignores angle-bracket forms.
 
 Anything inside `[ ... ]` here is a tag template — never display these tags in
@@ -88,7 +88,7 @@ part of the body/content being used for contextual reference.
 | `[SEARCH: query]`         | Tavily news search                    | Hard-capped at 5/response, 50/session                                                    |
 | `[SEARCH_GENERAL: query]` | Tavily general search                 | Same Tavily budget; good for weather/travel/facts                                        |
 | `[SEARCH_MEMORY: topic]`  | Search past conversation archives     | Memory READ — safe path; no external cost                                                |
-| `[WEATHER: city]`         | Current conditions                    | Sage corrects obvious misspellings silently; forecast-style queries should use [SEARCH:] |
+| `[WEATHER: city]`         | Current conditions                    | Toga corrects obvious misspellings silently; forecast-style queries should use [SEARCH:] |
 | `[BROWSE: url]`           | Fetch a specific URL via browser_tool | Browser plugin must be enabled                                                           |
 | `[WEB_SEARCH: query]`     | DuckDuckGo via browser_tool           | No Tavily cost; conserves budget                                                         |
 
@@ -116,7 +116,7 @@ part of the body/content being used for contextual reference.
 | `[TASK_DONE]`                        | Mark a multi-step task complete       | Triggers auto-log of the turn's tool sequence as a chain-witnessed successful procedure.                                                                                                                                                   |
 
 **v2.1.9 note:** no new tags were added in this version. The TaskP wiring (Phases 1–2)
-and stall detection (#56) operate beneath Sage's view — same tag surface, same emission rules.
+and stall detection (#56) operate beneath Toga's view — same tag surface, same emission rules.
 
 ### Auto-Logging Behaviour (no tag — happens automatically)
 
@@ -124,8 +124,8 @@ and stall detection (#56) operate beneath Sage's view — same tag surface, same
   chain-witnessed successful procedure keyed by an SHA-1 prefix of the user's request.
 - Same `(action_type, content)` failing 3× in one turn auto-logs as an unsuccessful
   procedure (no chain witness).
-- Top-5 successful + top-5 unsuccessful procedures are auto-injected into Sage's system
-  prompt every turn under a "PROCEDURAL MEMORY" block — Sage must NOT echo that block
+- Top-5 successful + top-5 unsuccessful procedures are auto-injected into Toga's system
+  prompt every turn under a "PROCEDURAL MEMORY" block — Toga must NOT echo that block
   to the user.
 
 ---
@@ -203,10 +203,10 @@ without a restart.
 | `network.ollama_url`          | `"http://localhost:11434"` | Override if Ollama runs elsewhere                     |
 | `network.ports.app`           | `8000`                     | FastAPI port (read by Electron + start.bat + backend) |
 | `network.ports.ollama_oracle` | `11434`                    | Ollama Oracle tier                                    |
-| `network.ports.llama_sage`    | `11435`                    | Sage llama-server                                     |
+| `network.ports.llama_sage`    | `11435`                    | Toga llama-server                                     |
 | `network.ports.llama_daemon`  | `11436`                    | Daemon llama-server                                   |
 | `network.ports.llama_embed`   | `11437`                    | Reserved (embed tier)                                 |
-| `network.ports.sage_daemon`   | `9998`                     | Sage Daemon Python TCP service                        |
+| `network.ports.sage_daemon`   | `9998`                     | Toga Daemon Python TCP service                        |
 | `network.ports.ipc_browser`   | `9999`                     | Privacy-browser IPC                                   |
 
 Precedence on read: env var override (e.g., `ORACLE_APP_PORT`) > `network.ports.*` > hardcoded fallback.
@@ -226,11 +226,11 @@ Precedence on read: env var override (e.g., `ORACLE_APP_PORT`) > `network.ports.
 | `aiq_nudge.enabled`       | `false`         | HMAC-signed mid-run side-channel (#44). Distribution-safe off. |
 | `aiq_nudge.watch_pattern` | `"nudge_*.txt"` | Glob pattern for nudge files                                   |
 
-### 3.8 Sage / Plugin Toggles (`sage`)
+### 3.8 Toga / Plugin Toggles (`sage`)
 
 | Path                      | Default | Notes                             |
 | ------------------------- | ------- | --------------------------------- |
-| `sage.sage_mode`          | `true`  | Enable agentic Sage layer         |
+| `sage.sage_mode`          | `true`  | Enable agentic Toga layer         |
 | `sage.agentic_mode`       | `true`  | Multi-step tool execution         |
 | `sage.web_search_enabled` | `true`  | SEARCH/SEARCH_GENERAL tags active |
 | `sage.code_exec_enabled`  | `true`  | CODE tag active                   |
@@ -244,7 +244,7 @@ Precedence on read: env var override (e.g., `ORACLE_APP_PORT`) > `network.ports.
 Default port `8000`; configurable via `network.ports.app` in `config.json`,
 overridable via `ORACLE_APP_PORT` env var or `python start.py --port N`.
 
-Hit from a browser or `curl` while OracleAI is running. (PowerShell users:
+Hit from a browser or `curl` while VeridianAI is running. (PowerShell users:
 `curl` is aliased to `Invoke-WebRequest` with incompatible syntax — use
 `curl.exe` explicitly or `Invoke-RestMethod`.)
 
@@ -262,7 +262,7 @@ Hit from a browser or `curl` while OracleAI is running. (PowerShell users:
 - `POST /api/models/load`
 - `POST /api/models/unload`
 - `POST /api/models/refresh`
-- `GET /api/tiers` — Oracle / Sage / Daemon / Embed status
+- `GET /api/tiers` — Oracle / Toga / Daemon / Embed status
 - `GET /api/tiers/{name}/status`
 - `POST /api/tiers/{name}/restart`
 
@@ -272,7 +272,7 @@ Hit from a browser or `curl` while OracleAI is running. (PowerShell users:
   nested v2 schema). `POST` validates against an allowlist derived from
   `OracleConfig.to_flat_dict().keys()`; unknown keys return HTTP 400
   with `"unknown config key: '<name>'"`.
-- `GET/POST /api/sage/config` — Sage-mode toggles
+- `GET/POST /api/sage/config` — Toga-mode toggles
 - `GET/POST /api/prompts/system` — read/write the system-prompt text file.
   `POST` body: `{"system_prompt": "..."}`. Empty/whitespace values are
   accepted (explicit clear).
@@ -304,7 +304,7 @@ Hit from a browser or `curl` while OracleAI is running. (PowerShell users:
 - `GET /api/launch-browser` — spawn visible browser (currently launches
   `_browser_test()` in headless mode — see §13 Known Quirks)
 
-### 4.7 Sage Daemon (port 9998)
+### 4.7 Toga Daemon (port 9998)
 
 - `GET /api/daemon/status` — daemon health + periodic-worker state
 - `GET /api/daemon/digest` — latest rolling chain digest (or null)
@@ -321,7 +321,7 @@ Hit from a browser or `curl` while OracleAI is running. (PowerShell users:
 
 ---
 
-## 5. Sage Daemon TCP Protocol (Port 9998)
+## 5. Toga Daemon TCP Protocol (Port 9998)
 
 Length-prefixed JSON over localhost TCP. Reachable via `SageDaemonClient`
 in `sage_daemon_client.py`. The HTTP `/api/daemon/*` endpoints proxy into these.
@@ -447,7 +447,7 @@ Two parallel watchdogs run per turn in `main.py`'s WS chat handler:
 (`chat.js:handleStallDetected`) renders an amber banner under the in-flight
 assistant bubble, preserves any partial response.
 
-**Does NOT** re-prompt Sage. Recovery is user-initiated retry. Re-prompting would
+**Does NOT** re-prompt Toga. Recovery is user-initiated retry. Re-prompting would
 re-engage the AIQNudge self-prompt-injection surface (queued separately as #44).
 
 **Architecture detail:** the watchdog is published via a `contextvars.ContextVar`
@@ -497,8 +497,8 @@ On launch:
 
 - Choice prompt: `1` = ollama/llama (stable), `2` = Intel Arc backend (experimental)
 - Self-locating paths via `%~dp0` so folder renames don't break startup
-- Spawns: Ollama Oracle (port 11434), llama-server Sage (port 11435),
-  Sage Daemon (port 9998), Daemon llama-server tier (port 11436), Overseer
+- Spawns: Ollama Oracle (port 11434), llama-server Toga (port 11435),
+  Toga Daemon (port 9998), Daemon llama-server tier (port 11436), Overseer
 
 Tunables at top of `start.bat`:
 
@@ -525,21 +525,21 @@ Toggle via sage_engine.set_feature(name, enabled).
 
 ## 14. AIQNudge (Mid-Run Side-Channel) v2.1.10 Addition - Official HMAC signing
 
-HMAC-SHA256 signing on nudge content; consumer verifies before forwarding to Sage. User sends signed QNudge via terminal command, Sage recieves notification on next agentic step. Sage can leave questions at arequested location or at the relative location "sage_data\nudges\AI_QNudge_Protocol_Sage.txt" per User's request.
+HMAC-SHA256 signing on nudge content; consumer verifies before forwarding to Toga. User sends signed QNudge via terminal command, Toga recieves notification on next agentic step. Toga can leave questions at arequested location or at the relative location "sage_data\nudges\AI_QNudge_Protocol_Sage.txt" per User's request.
 
 ## 15. Ports (typical ports, configurable v2.2+)
 
 Port Service
 8000 FastAPI backend (PORT_APP)
 9997 IPC monitor web dashboard
-9998 Sage Daemon TCP (PORT_DAEMON)
+9998 Toga Daemon TCP (PORT_DAEMON)
 9999 Browser IPC mirror (PORT_IPC_BROWSER)
 11434 Ollama Oracle tier
-11435 llama-server Sage tier
+11435 llama-server Toga tier
 11436 llama-server Daemon tier
 11437 nomic-embed (reserved, Phase 4)
 
-## 16. Verify Scripts (run from "OracleAI...\backend\")
+## 16. Verify Scripts (run from "VeridianAI...\backend\")
 
 py verify_v214.py → 9 tests, Fernet + chain integrity
 py verify_procedural_wiring.py → 8 tests, REMEMBER/RECALL + auto-capture
@@ -550,7 +550,7 @@ All three should be ALL GREEN. Run after any structural edit.
 
 See Model_Recommendations.txt for full reasoning.
 
-Profile Oracle Sage Daemon
+Profile Oracle Toga Daemon
 Minimal qwen2.5:7b llama3.1:8b qwen2.5-coder:1.5b-base
 Daily driver gemma4:31b (or qwen3-coder:30b for code) qwen3.5:latest qwen2.5:7b
 Nemotron dev nemotron-3-super:120b llama3.1:8b qwen2.5-coder:1.5b-base
@@ -585,7 +585,7 @@ backend/main.py.bak_pre_stall_detect Pre-#56
 ### v2.1.5 (April 2026)
 
 - TASK_DONE autolog (full tool sequence → chain-witnessed procedure)
-- Sage Daemon auto-launched + periodic worker thread
+- Toga Daemon auto-launched + periodic worker thread
 - Daemon-side KB consolidation (prunes stale unsuccessful, dedupes,
   NEVER touches chain-witnessed)
 - Daemon-side chain-log digest (rolling extractive summary, READ-ONLY
@@ -636,7 +636,7 @@ backend/main.py.bak_pre_stall_detect Pre-#56
 - **Overseer log relocation** — `sage_data/logs/overseer.log` +
   `overseer_notifications.json`, matching other daemons.
 - **max_tokens=-1 sanitizer** — End-to-end 5-layer guard.
-- **start.bat cleanup** — Reverted cmd /k diagnostic; both Llama-Sage and
+- **start.bat cleanup** — Reverted cmd /k diagnostic; both Llama-Toga and
   Llama-Daemon back to cmd /c. Added Overseer launch line.
 - **Latent bug fixes** — `[WS Error] {e}` NameError on disconnect (Phase 2
   splice leftover); `LoopDetector` deque pruning crash caught in deployment
@@ -675,7 +675,7 @@ chain-witnessed path.
   chain-witnessed successful procedure.
 - Auto-captured on 3 identical tool failures in a turn: marked unsuccessful
   (local only, not chain-witnessed).
-- Recent successful + unsuccessful procedures pre-loaded into Sage's context
+- Recent successful + unsuccessful procedures pre-loaded into Toga's context
   each turn (silent, never displayed).
 
 ### 20.3 Fernet Key
@@ -688,7 +688,7 @@ chain-witnessed path.
 
 ## 21. Quick Commands
 
-# Run OracleAI
+# Run VeridianAI
 
 .\start.bat
 
@@ -727,15 +727,15 @@ py verify_v215.py
 
 Procedural KB grows monotonically on the successful side. Chain-witnessed entries are never pruned (by design — provenance integrity). If the auto-injected PROCEDURAL MEMORY block in the system prompt ever feels bloated, lower the \_recent(succ, 5) count in main.py rather than touching the KB.
 Electron wrapper currently requires a "dance" with the backend and frontend to get everything working; even then may be a parser issue with printing angle brackets into chat. (#43 queued for v2.2)
-Printing the chat only works in light mode — letters are white in dark mode, invisible on a white printed background. Switch to light mode first. Also, the most recent prompt (user or Sage, depending on timing) may be truncated in the print output.
+Printing the chat only works in light mode — letters are white in dark mode, invisible on a white printed background. Switch to light mode first. Also, the most recent prompt (user or Toga, depending on timing) may be truncated in the print output.
 /api/launch-browser currently launches \_browser_test() in headless mode despite the intent to spawn a visible browser.
 ResourceLockManager exists in overseer_daemon.py and tracks chat_memory.json + hash_chain.log, but no writer calls acquire()/release() yet. Intentionally passive in v2.1.9.
 
 ## 23. The Compounding Loop
 
-This is the design intent — useful for Sage to know:
+This is the design intent — useful for Toga to know:
 
-Sage emits tool tags → tools run → results feed next step.
+Toga emits tool tags → tools run → results feed next step.
 On [TASK_DONE], the full sequence is auto-logged as a successful procedure, chain-witnessed for provenance.
 Failures get auto-captured after 3 retries; successes via [REMEMBER:] capture insights the bare sequence misses.
 Next turn, recent procedures get auto-injected into the system prompt.
@@ -746,7 +746,7 @@ Every turn that completes successfully makes the next one slightly better-inform
 
 -#43 — Electron startup race fix (stretch; needs live observation)
 -#68 — Unified config refactor — single source of truth in config.py + config.json (multi-session)
--WCAG 2.2 Passing Audit will cap v2.2. — Todd + Sage + Leo + Claude. - 1st audit results: 28 Passing, 13 Failing, 0 Partial, 19 N/A, 2 Unable To Audit - 9 of 13 fails rectified 5/16/26:  
+-WCAG 2.2 Passing Audit will cap v2.2. — Todd + Toga + Leo + Claude. - 1st audit results: 28 Passing, 13 Failing, 0 Partial, 19 N/A, 2 Unable To Audit - 9 of 13 fails rectified 5/16/26:  
 1 Border contrast 1.4.11 ✅ Done
 2 Confirm dialogs 3.3.4 ✅ Done
 3 Skip link 2.4.1 ✅ Done
@@ -770,9 +770,9 @@ Every change must be easily reversible (backups, additive patterns).
 One change verified working before the next begins.
 No new dependencies without explicit approval.
 Do NOT modify Fernet encryption or hash chain write paths under any circumstances. Resource arbitration (overseer's lock_manager) is currently passive for exactly this reason.
-OracleAI is intended for distribution. No user-specific hardcoded paths or keys. Everything optional and accessible by default.
+VeridianAI is intended for distribution. No user-specific hardcoded paths or keys. Everything optional and accessible by default.
 max_tokens=-1 is the canonical unlimited sentinel — UI renders as blank, sanitized at 5 layers.
 DO NOT SET SMALL LIMITS FOR ANYTHING DURING DEVELOPMENT! AIM STUPID HIGH, CORRECT LOWER AS NEEDED. STUPID HIGH. SERIOUSLY.
 YES, THAT MEANS YOU, TOO.
 
-# End of OracleAI Reference v2.2
+# End of VeridianAI Reference v2.2

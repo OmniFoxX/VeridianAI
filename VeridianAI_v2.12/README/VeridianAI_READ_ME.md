@@ -1,4 +1,4 @@
-## 🌎  ✨OracleAI✨ a production of ♾️Electrum Consiliarius, Etc.♾️ 💯% MADE⚡IN 🫶 THE USA 🆒  🌎
+## 🌎  ✨VeridianAI✨ a production of ♾️MentiSphere Software♾️ 💯% MADE⚡IN 🫶 THE USA 🆒  🌎
 ### A fully local, multi-tier, multi-modal AI inference platform
 ### Built for reliability, memory integrity, and accessibility — no cloud required.
 
@@ -14,9 +14,9 @@ starting with the disabled community.
 
 ---
 
-## What Is OracleAI?
+## What Is VeridianAI?
 
-OracleAI is a locally-run AI training/inference platform that gives you a persistent,
+VeridianAI is a locally-run AI training/inference platform that gives you a persistent,
 intelligent, agentic AI assistant — without sending a single byte to the cloud.
 
 It runs multiple AI models in parallel across dedicated tiers, mechanics offloaded
@@ -41,7 +41,7 @@ most deserve software that actually works for them.
   auto-injects lessons into future sessions
 - **Agentic tool execution** — web search, code execution, file management,
   browser automation, and more
-- **CRAIID** — a continuous handoff system that lets Sage think indefinitely
+- **CRAIID** — a continuous handoff system that lets Toga think indefinitely
   across fresh restarts without losing context (see below)
 - **WCAG 2.2 Level AA compliant** — fully accessible, screen-reader tested
 
@@ -60,7 +60,7 @@ deteriorate, or restart and lose everything you built together.
 
 **CRAIID does neither.**
 
-It detects when Sage is approaching her limits, then hands off to a fresh
+It detects when Toga is approaching her limits, then hands off to a fresh
 instance — briefed so completely that the new instance picks up exactly where
 the last one left off. The user notices nothing except that the assistant never
 gets dull.
@@ -97,7 +97,7 @@ pick up mid-sentence."*
 
 ## Architecture Overview
 
-OracleAI runs three inference tiers in parallel, supported by a set of daemons
+VeridianAI runs three inference tiers in parallel, supported by a set of daemons
 that handle memory, monitoring, and context management out-of-band.
 
 ### Inference Tiers
@@ -105,7 +105,7 @@ that handle memory, monitoring, and context management out-of-band.
 | Tier | Port | Engine | Role |
 |------|------|--------|------|
 | **Oracle** | 11434 | Ollama | Primary user-facing chat. Largest model. |
-| **Sage** | 11435 | llama-server | Agentic engine — interprets tool tags, executes multi-step plans. |
+| **Toga** | 11435 | llama-server | Agentic engine — interprets tool tags, executes multi-step plans. |
 | **Daemon** | 11436 | llama-server | Background inference — digest summarization, KB consolidation. |
 | **Embed** | 11437 | llama-server | Embedding tier (nomic-embed, v2.7.2+). |
 
@@ -124,15 +124,15 @@ that handle memory, monitoring, and context management out-of-band.
 |------|---------|
 | 8000 | FastAPI backend |
 | 9997 | IPC monitor dashboard |
-| 9998 | Sage Daemon TCP |
+| 9998 | Toga Daemon TCP |
 | 9999 | Browser IPC |
 | 11434 | Ollama Oracle tier |
-| 11435 | llama-server Sage tier |
+| 11435 | llama-server Toga tier |
 | 11436 | llama-server Daemon tier |
 | 11437 | nomic-embed tier |
 
-# Tool Tags — What Sage Can Do
-Sage interprets special tags in your messages and executes them as tools. Always use square brackets [ ] for real invocations. Angle brackets ⟨ ⟩ are for documentation only.
+# Tool Tags — What Toga Can Do
+Toga interprets special tags in your messages and executes them as tools. Always use square brackets [ ] for real invocations. Angle brackets ⟨ ⟩ are for documentation only.
 
 # Research & Web
 Tag	Purpose
@@ -178,19 +178,19 @@ print(factorial(10))
 # Signal completion
 [TASK_DONE]
 Memory & Integrity Architecture
-Memory integrity is not a feature in OracleAI. It is a requirement.
+Memory integrity is not a feature in VeridianAI. It is a requirement.
 
 The Hash Chain
 Every conversation entry is Fernet-encrypted and SHA3 hash-chained. Any modification to any prior entry breaks the chain — tamper-evidence is structural, not bolted on.
 
 Procedural Memory
-Sage learns from what works and what does not:
+Toga learns from what works and what does not:
 
 On [TASK_DONE], the full tool sequence is auto-logged as a chain-witnessed successful procedure.
 Three identical tool failures in one turn are auto-logged as unsuccessful.
-Recent successful and unsuccessful procedures are silently injected into Sage's context each turn — she gets slightly better-informed with every session.
+Recent successful and unsuccessful procedures are silently injected into Toga's context each turn — she gets slightly better-informed with every session.
 The Compounding Loop
-Sage emits tool tags
+Toga emits tool tags
   → tools execute
     → results feed the next step
       → [TASK_DONE] logs the sequence
@@ -235,10 +235,10 @@ inference.n_ctx	        256000	*Context window size (adjust per harware/system s
 
 ## Model Tiers & Recommendations
 
-OracleAI routes queries automatically based on complexity. You can also
+VeridianAI routes queries automatically based on complexity. You can also
 override routing manually via Settings.
 
-| Profile | Oracle | Sage | Daemon |
+| Profile | Oracle | Toga | Daemon |
 |---------|--------|------|--------|
 | **Minimal** | qwen2.5:7b | llama3.1:8b | qwen2.5-coder:1.5b-base |
 | **Daily driver** | gemma4:31b | qwen3.5:latest | qwen2.5:7b |
@@ -250,7 +250,7 @@ slow prefill on large context loads.
 
 ### Model-Aware Prompt Tiers
 
-Sage automatically selects the right system prompt based on model size:
+Toga automatically selects the right system prompt based on model size:
 
 | Tier | Threshold | Prompt |
 |------|-----------|--------|
@@ -279,7 +279,7 @@ Default port `8000`. All endpoints are localhost-only.
 ### Config & Prompts
 - `GET/POST /api/config` — read/write configuration
 - `GET/POST /api/prompts/system` — read/write system prompt file
-- `GET/POST /api/sage/config` — Sage-mode toggles
+- `GET/POST /api/sage/config` — Toga-mode toggles
 
 ### Files & Archives
 - `POST /api/upload` — upload a file
@@ -305,7 +305,7 @@ Default port `8000`. All endpoints are localhost-only.
 ## Quick Commands
 
 ```powershell
-# Start OracleAI
+# Start VeridianAI
 .\start.bat
 
 # Stop a runaway turn
@@ -333,9 +333,9 @@ py verify_v215.py            # 6 tests — TASK_DONE autolog + daemon jobs
 # All three should be ALL GREEN after any structural edit.
 
 Accessibility
-OracleAI is WCAG 2.2 Level AA compliant as of v2.2, verified via live NVDA screen reader testing.
+VeridianAI is WCAG 2.2 Level AA compliant as of v2.2, verified via live NVDA screen reader testing.
 
-Audit results (v2.1.10, tested by Sage using nemotron-3-super:120b (Q4) — 4hr 4min 43sec):
+Audit results (v2.1.10, tested by Toga using nemotron-3-super:120b (Q4) — 4hr 4min 43sec):
 
 Result	Count
 Pass	28
@@ -356,7 +356,7 @@ IPC stall banner role=alert
 Command palette (2.4.5)
 Screen reader / NVDA E-02
 Error announcement (3.3.3)
-Accessibility is not an afterthought in OracleAI. The mission of dissolving barriers between AI and disabled users means compliance is load-bearing, not cosmetic.
+Accessibility is not an afterthought in VeridianAI. The mission of dissolving barriers between AI and disabled users means compliance is load-bearing, not cosmetic.
 
 Project Principles
 These are not guidelines. They are constraints.
@@ -366,18 +366,18 @@ Surgical, targeted edits only. No broad rewrites without explicit approval.
 Every change must be easily reversible. Backups, additive patterns, one change verified before the next begins.
 No new dependencies without explicit approval.
 Do NOT modify Fernet encryption or hash chain write paths under any circumstances. Resource arbitration is currently passive for exactly this reason.
-OracleAI is built for distribution. No user-specific hardcoded paths, keys, or filenames anywhere in the codebase.
+VeridianAI is built for distribution. No user-specific hardcoded paths, keys, or filenames anywhere in the codebase.
 max_tokens = -1 is the canonical unlimited sentinel. Sanitized at 5 layers. Do not change this behavior.
 During development: set limits stupid high. Correct lower as needed. Never speculatively restrict. Seriously.
 Version History (Mostly complete)
 Version	Date	Highlights
-v1.0    Apr 2026    SageBot chatbot project completion. OracleAI Platform created with full SageBot port.
+v1.0    Apr 2026    SageBot chatbot project completion. VeridianAI Platform created with full SageBot port.
 v2.1.1  Apr 2026    Platform upgrade. Bug squash and UI refinements.
 v2.1.2  Apr 2026    Bug hunt, squash. UI upgrades, refinement.
 v2.1.3  Apr 2026    Bug squash, UI refinements.
 v2.1.3.9Apr 2026    Bug squash, UI refinements, verbose logging.
 v2.1.4	Apr 2026	Fernet encryption, hash chain, procedural memory, REMEMBER/RECALL/TASK_DONE tags
-v2.1.5	Apr 2026	Sage Daemon, KB consolidation, chain digest, anomaly monitor, PRIORITISE tag, mLM module.
+v2.1.5	Apr 2026	Toga Daemon, KB consolidation, chain digest, anomaly monitor, PRIORITISE tag, mLM module.
 v2.1.6	May 2026	Browser tool, BROWSE/WEB_SEARCH tags, VERIFY_FILE tag, unified time source
 v2.1.7	May 2026	Bug fixes
 v2.1.8	May 2026	Overseer daemon, adaptive context sizing, max_tokens sentinel, stall detection, TaskP Phases 1-2
@@ -390,10 +390,10 @@ v2.5   June 2026    mLM data translation to OpsMan profile, CRAIID context manag
 v2.5.2 June 2026    redundancy logic. Author, Journalist, Archivist logic
 v2.6.2 June 2026    CRAIID 3rd Party verification/validation audit, CRAIID subsystem refinements, bugs squashed.
 v2.7.2 June 2026	Nomic-Embed layer activated. CRAIID fully live in real pipeline, MCP server (12 tools), OpenAI-compatible endpoint, nomic-embed tier, v2.8.8 June 2026    -metrics endpoint enabled, handoff security hardening (#69)
-v2.9.9 June 2026    Vision in/out added, Sage Network created/tested/verified, Aether Network created/minimal testing (still experimental)
+v2.9.9 June 2026    Vision in/out added, Toga Network created/tested/verified, Aether Network created/minimal testing (still experimental)
 v2.9.10June 2026	Symposium Mode integrated, bug squashings, UI improvements/additions, UX improvements.
 v2.10.11Jun 2026	Build Battle mode integrated, mor bug squashings, security gaps sealed.
-v2.11.11Jun 2026	Socials/BitChat integrated but still not fully tested and are experimental status. Sage browser_tool upgrade, UI/UX/Security sweep.
+v2.11.11Jun 2026	Socials/BitChat integrated but still not fully tested and are experimental status. Toga browser_tool upgrade, UI/UX/Security sweep.
 *What to Report Back to Todd*
 
 If something breaks, please send:
@@ -412,10 +412,10 @@ Your rough hardware specs (e.g., "16 GB RAM, NVIDIA 3060")
 The most useful feedback is the boring stuff Todd never thinks to ask about. If you wonder "is X supposed to work that way?" — he wants to hear it either way.
 
 About This Project:
-OracleAI started on April 2, 2026, with over 1100 hours into building, June 22nd, 2026 is the official beta pre-release date, on GitHub. It was built by one developer majoritively vibe-coded, from ground up, after a 30-year break from coding — driven by a clear mission and an unusually high tolerance for max-pain testing; and a small AI team.
+VeridianAI started on April 2, 2026, with over 1100 hours into building, June 22nd, 2026 is the official beta pre-release date, on GitHub. It was built by one developer majoritively vibe-coded, from ground up, after a 30-year break from coding — driven by a clear mission and an unusually high tolerance for max-pain testing; and a small AI team.
 
-It is proof that a fully local, cryptographically sound, tamper-evident, accessibility-first, agentic AI platform can be built without an expensive R&D Labs team, without cloud infrastructure, and without compromising on any of the things that actually matter. 1 Human: Conceptual Architect/Lead Developer/Founder/Ops Manager (Todd), 3 agentic AI assistants: Code Logic Architect: OracleAI's Sage (nemotron-3-super:120b {Q4}), Real-Time Troubleshooting/UI Refining: Brave Browser's Leo (Claude Sonnet/Opus 4.6-4.7), Systems Optimizations, Gap Filler & Buq Squasher: Claude for Windows 11 Desktop App (Claude Opus 4.6-4.8 Max) and one 3rd party Agentic AI Auditor: Hermes-3 for Windows Desktop App (Claude-Opus 4.8 - Max Reasoning - Max Effort - 2 audit passes).
+It is proof that a fully local, cryptographically sound, tamper-evident, accessibility-first, agentic AI platform can be built without an expensive R&D Labs team, without cloud infrastructure, and without compromising on any of the things that actually matter. 1 Human: Conceptual Architect/Lead Developer/Founder/Ops Manager (Todd), 3 agentic AI assistants: Code Logic Architect: VeridianAI's Toga (nemotron-3-super:120b {Q4}), Real-Time Troubleshooting/UI Refining: Brave Browser's Leo (Claude Sonnet/Opus 4.6-4.7), Systems Optimizations, Gap Filler & Buq Squasher: Claude for Windows 11 Desktop App (Claude Opus 4.6-4.8 Max) and one 3rd party Agentic AI Auditor: Hermes-3 for Windows Desktop App (Claude-Opus 4.8 - Max Reasoning - Max Effort - 2 audit passes).
 
 CRAIID is what makes it viable for the long work. The mission is what makes it worth building. 
 
-🌎  ✨OracleAI✨ a production of ♾️Electrum Consiliarius, Etc.♾️ 💯% MADE⚡IN 🫶 THE USA 🆒 — Built locally. Runs locally. Stays local. Verify, don't trust. Love well. ❤️🛠️🌿  🌎 * Read Me written by 🦁 Leo of Brave Browser*
+🌎  ✨VeridianAI✨ a production of ♾️MentiSphere Software♾️ 💯% MADE⚡IN 🫶 THE USA 🆒 — Built locally. Runs locally. Stays local. Verify, don't trust. Love well. ❤️🛠️🌿  🌎 * Read Me written by 🦁 Leo of Brave Browser*

@@ -1,5 +1,5 @@
 <#
-  setup_firewall.ps1  --  OracleAI / Aether inbound firewall rule for the API port
+  setup_firewall.ps1  --  VeridianAI -- Toga/Aether inbound firewall rule for the API port
 
   Configures the WINDOWS DEFENDER FIREWALL side only. This is INDEPENDENT of the
   port-forward on your ISP modem/router: for internet peers to reach you, BOTH
@@ -44,7 +44,7 @@ param(
     [ValidateSet("Show", "Open", "Scoped", "Remove")]
     [string]   $Mode           = "Show",
     [string[]] $TrustedRemotes = @(),
-    [string]   $RuleName       = "OracleAI Aether (inbound)"
+    [string]   $RuleName       = "VeridianAI Aether (inbound)"
 )
 
 $ErrorActionPreference = "Stop"

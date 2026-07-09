@@ -1,7 +1,7 @@
 {
-  "name": "OracleAI",
-  "short_name": "OracleAI",
-  "description": "Local multi-tier AI assistant (Sage) — runs entirely on your own machine.",
+  "name": "VeridianAI",
+  "short_name": "VeridianAI",
+  "description": "Local multi-tier AI assistant (Toga) — runs entirely on your own machine.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

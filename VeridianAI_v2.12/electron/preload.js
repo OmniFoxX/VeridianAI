@@ -1,5 +1,5 @@
 /**
- * OracleAI Electron Preload
+ * VeridianAI Electron Preload
  * Exposes a minimal, safe API to the renderer via contextBridge.
  *
  * Security model:

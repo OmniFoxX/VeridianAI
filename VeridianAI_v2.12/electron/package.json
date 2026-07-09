@@ -1,8 +1,8 @@
 {
-  "name": "oracleai",
-  "version": "2.11.11",
-  "description": "OracleAI — Local Multi-Tier Multi-AI Instance Training/Inference Interface",
-  "author": "OmniFoxX",
+  "name": "veridianai",
+  "version": "2.12.0",
+  "description": "VeridianAI — Local Multi-Tier Multi-AI Instance Training/Inference Interface",
+  "author": "MentiSphere Software",
   "homepage": "https://github.com/OmniFoxX",
   "repository": "https://github.com/OmniFoxX",
   "main": "main.js",
@@ -11,19 +11,32 @@
     "genmanifest": "py ../backend/build_integrity.py genmanifest",
     "pack-win": "npm run genmanifest && electron-builder --win --dir",
     "build-win": "npm run genmanifest && electron-builder --win",
+    "build-store": "npm run genmanifest && electron-builder --win appx",
     "build-linux": "python3 ../backend/build_integrity.py genmanifest && electron-builder --linux",
     "build-mac": "python3 ../backend/build_integrity.py genmanifest && electron-builder --mac"
   },
   "build": {
-    "appId": "ai.oracle.app",
-    "productName": "OracleAI",
+    "appId": "software.mentisphere.veridianai",
+    "productName": "VeridianAI",
     "artifactName": "${productName}-${version}-${arch}.${ext}",
     "directories": {
       "output": "../dist"
     },
     "win": {
-      "target": "nsis",
+      "target": ["nsis", "appx"],
       "icon": "assets/icon.ico"
+    },
+    "appx": {
+      "identityName": "MentiSphereSoftware.VeridianAI",
+      "publisher": "CN=46BD9046-C73A-4C1C-81C3-6702E8ABC061",
+      "publisherDisplayName": "MentiSphere Software",
+      "applicationId": "VeridianAI",
+      "displayName": "VeridianAI",
+      "capabilities": [
+        "runFullTrust",
+        "privateNetworkClientServer",
+        "broadFileSystemAccess"
+      ]
     },
     "linux": {
       "target": "AppImage",

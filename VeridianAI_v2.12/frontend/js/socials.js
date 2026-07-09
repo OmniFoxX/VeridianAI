@@ -309,9 +309,15 @@
   async function socialsDeleteAll() {
     var arm = $("socials-deleteall-arm");
     if (!arm || !arm.checked) { toast("Tick the box first to delete every channel"); return; }
-    if (!(await window.oracleConfirm("Delete recent messages from ALL Social channels?\n\n"
-        + "This clears every thread, not just the one you are viewing. It cannot be undone.\n"
-        + "(Nothing is saved to disk or shared across user profiles.)", { title: "Delete all channels", okLabel: "Delete all" }))) return;
+    // v2.12.1: type-to-confirm, mirroring the ZDR Burn button. Case-
+    // INSENSITIVE (accessibility) — "delete", "DELETE", "Delete" all pass.
+    var typed = (typeof window.oraclePrompt === "function")
+      ? await window.oraclePrompt(
+          "This clears EVERY Social thread (not just the one you're viewing) "
+          + "and cannot be undone.\n\nType delete to confirm:",
+          { title: "Delete all channels", okLabel: "Delete all" })
+      : window.prompt("Type delete to confirm clearing ALL Social threads:");
+    if (!typed || typed.trim().toLowerCase() !== "delete") { toast("Delete cancelled"); return; }
     var d = await jpost("/api/socials/clear", { all: true });
     if (d && d.ok) {
       _msgs = [];

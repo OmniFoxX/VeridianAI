@@ -1,11 +1,11 @@
 /**
- * OracleAI 2.9.10 — Electron Wrapper
+ * VeridianAI 2.9.10 — Electron Wrapper
  * ===========================
  *
  * v2.1.6 fix: previously this file spawned `python main.py` directly,
- * which started ONLY the FastAPI backend — NOT Ollama, NOT the Sage
- * llama-server tier, and NOT the Sage Daemon. That's why launching
- * Electron alone left Sage and the daemon dead, and why the manual
+ * which started ONLY the FastAPI backend — NOT Ollama, NOT the Toga
+ * llama-server tier, and NOT the Toga Daemon. That's why launching
+ * Electron alone left Toga and the daemon dead, and why the manual
  * dance was needed (open Ollama, run start.bat, close popup, then
  * Electron). Now we spawn start.bat which is the canonical launcher
  * for the entire stack — Electron just becomes a thin wrapper around
@@ -196,7 +196,7 @@ function createWindow() {
     height: 820,
     minWidth:  900,
     minHeight: 600,
-    title:     'OracleAI',
+    title:     'VeridianAI',
     backgroundColor: '#070b14',
     webPreferences: {
       nodeIntegration:    false,
@@ -277,7 +277,7 @@ function createWindow() {
 // --- Backend (full stack via start.bat) ------------------------
 // v2.1.6: replaces the old `python main.py` spawn. start.bat is the
 // canonical launcher and starts Ollama (Oracle tier), llama-server
-// (Sage tier), Sage Daemon, AND FastAPI in the right order. Spawning
+// (Toga tier), Toga Daemon, AND FastAPI in the right order. Spawning
 // start.bat means Electron's launch behaves identically to the
 // double-click-start.bat flow.
 function _devModeEnabled() {
@@ -306,8 +306,8 @@ function startBackend() {
 
   if (!fs.existsSync(resolvedBat)) {
     dialog.showErrorBox(
-      'OracleAI — startup error',
-      `Cannot find start.bat at:\n${resolvedBat}\n\nElectron cannot launch the backend.\n\nCheck that start.bat is in the same folder as OracleAI.exe`
+      'VeridianAI — startup error',
+      `Cannot find start.bat at:\n${resolvedBat}\n\nElectron cannot launch the backend.\n\nCheck that start.bat is in the same folder as VeridianAI.exe`
     );
     return;
   }
@@ -327,7 +327,7 @@ function startBackend() {
     });
   } else {
     // Non-Windows: there's no start.bat equivalent yet, so fall back
-    // to the old python main.py spawn. (OracleAI is Windows-first
+    // to the old python main.py spawn. (VeridianAI is Windows-first
     // for now.)
     const backendDir = path.join(__dirname, '..', 'backend');
     backendProc = spawn('python3', ['main.py'], {
@@ -420,10 +420,10 @@ function stopBackend() {
   // Step 2 — reap the orphaned tier processes via the PID ledger. Runs
   // even when backendProc is null: if Electron reused an already-running
   // backend (the "already healthy — skipping spawn" path), quitting
-  // OracleAI should still take the whole stack down.
+  // VeridianAI should still take the whole stack down.
   if (process.platform === 'win32') runCleanupSync('quit');
 
-  // Step 3 — failsafe against zombie OracleAI windows: if anything keeps
+  // Step 3 — failsafe against zombie VeridianAI windows: if anything keeps
   // the quit from completing (stuck renderer, pending dialog, hung IPC),
   // hard-exit after a grace period. A live timer does not block Electron
   // from exiting normally, so the happy path is unaffected.
@@ -558,7 +558,7 @@ async function ensureBackendAvailable() {
     const detail = pid
       ? `Found PID ${pid} listening on port ${APP_PORT} but it's not ` +
         `responding to /api/health. This is usually an orphan ` +
-        `process from a prior OracleAI launch that didn't shut ` +
+        `process from a prior VeridianAI launch that didn't shut ` +
         `down cleanly. Killing it is safe if you're not running ` +
         `another tool on port ${APP_PORT}.`
       : `Something is bound to port ${APP_PORT} but couldn't identify ` +
@@ -566,7 +566,7 @@ async function ensureBackendAvailable() {
         `(netstat -ano | findstr :${APP_PORT}).`;
     const choice = dialog.showMessageBoxSync({
       type: 'warning',
-      title: `OracleAI — port ${APP_PORT} in use`,
+      title: `VeridianAI — port ${APP_PORT} in use`,
       message: `Port ${APP_PORT} is occupied by another process.`,
       detail,
       buttons: pid
@@ -614,7 +614,7 @@ function onBackendModeSelected(mode) {
     writeBackendMode(mode);
   } catch (e) {
     dialog.showErrorBox(
-      'OracleAI — backend mode',
+      'VeridianAI — backend mode',
       `Could not save backend mode preference:\n${e.message}\n\n` +
       `The file ${BACKEND_MODE_FILE} may not be writable.`,
     );
@@ -622,10 +622,10 @@ function onBackendModeSelected(mode) {
   }
   const choice = dialog.showMessageBoxSync({
     type: 'question',
-    title: 'OracleAI — Backend mode changed',
+    title: 'VeridianAI — Backend mode changed',
     message:
       `Backend mode set to "${mode}". ` +
-      `Restart OracleAI now to apply it?`,
+      `Restart VeridianAI now to apply it?`,
     detail:
       `Vulkan = current default, fastest LLM. ` +
       `IPEX-LLM = slightly slower LLM but the rest of your PC stays ` +
@@ -647,9 +647,9 @@ function onBackendModeSelected(mode) {
 function buildMenu() {
   const template = [
     {
-      label: 'OracleAI',
+      label: 'VeridianAI',
       submenu: [
-        { label: 'About OracleAI', role: 'about' },
+        { label: 'About VeridianAI', role: 'about' },
 		{ label: 'Command Palette', accelerator: 'CmdOrCtrl+K', click: () => mainWindow?.webContents.send('open-command-palette') },
         { type: 'separator' },
         // v2.2 #74: Backend Mode submenu — radio items so the current
@@ -702,7 +702,7 @@ function buildMenu() {
 // next launch is clean (the startup cleanup reaps the rest).
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
 if (!gotSingleInstanceLock) {
-  console.log('[Electron] another OracleAI instance is running — exiting');
+  console.log('[Electron] another VeridianAI instance is running — exiting');
   app.exit(0);
 }
 app.on('second-instance', () => {
@@ -713,6 +713,16 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(async () => {
+  // v2.12.0 rebrand: the About dialog (menu role:'about') reads these —
+  // without them it falls back to the exe's embedded package name/version.
+  try {
+    app.setAboutPanelOptions({
+      applicationName: 'VeridianAI',
+      applicationVersion: app.getVersion(),
+      copyright: '© 2026 MentiSphere Software',
+    });
+  } catch (e) { /* older Electron on non-Windows — ignore */ }
+
   // First-run setup (Python deps + Ollama consent) BEFORE the backend launches,
   // so a fresh machine installs what start.bat needs. Run-once via a marker in
   // sage_data; fully defensive so a hiccup never blocks launch.
@@ -729,7 +739,7 @@ app.whenReady().then(async () => {
   if (!ready) {
     const choice = dialog.showMessageBoxSync({
       type: 'warning',
-      title: 'OracleAI startup',
+      title: 'VeridianAI startup',
       message: 'Backend is slow to come up.',
       detail:
         `Tried to reach ${HEALTH_URL} for ${HEALTH_TIMEOUT_MS}ms ` +
@@ -784,7 +794,7 @@ app.whenReady().then(async () => {
 });
 
 // v2.1.6: stopBackend() now does taskkill /T /F so the WHOLE process
-// tree dies — Ollama, llama-server, FastAPI, Sage Daemon, all the
+// tree dies — Ollama, llama-server, FastAPI, Toga Daemon, all the
 // children spawned by start.bat. Previously kill('SIGTERM') only
 // touched the start.bat shell and left orphans behind.
 app.on('window-all-closed', () => {

@@ -724,7 +724,7 @@ body::after {
 }
 
 .messages-container:empty::after {
-  content: '✦  Ask the Oracle  ✦';
+  content: '✦  Ask Toga  ✦';
   font-family: var(--font-display);
   font-size: 15px;
   letter-spacing: 0.2em;
@@ -1020,7 +1020,9 @@ pre:hover .copy-btn      { opacity: 1; }
 }
 
 .attach-btn {
-  width: 38px; height: 38px;
+  /* v2.12.1: 42px to match .send-btn so the left and right button columns
+     are identical in size and line up row-for-row. */
+  width: 42px; height: 42px;
   flex-shrink: 0;
   background: var(--surface-2);
   border: 1px solid var(--border);
@@ -1363,17 +1365,34 @@ pre:hover .copy-btn      { opacity: 1; }
   color: var(--gold);
   background: var(--gold-glow2);
 }
+/* v2.12.1: Vibe Coding is now a PROPER square button, same 42px footprint as
+   its column-mates, with a distinct violet accent so it reads as a creative
+   toggle rather than a primary action. Shares the .send-btn geometry. */
 .vibe-toggle {
-  font-size: 12px;
-  color: var(--text-faint);
-  cursor: pointer;
-  background: none;
+  width: 42px; height: 42px;
+  flex-shrink: 0;
+  background: linear-gradient(135deg, #7c5cff 0%, #5a3fd0 100%);
   border: none;
-  padding: 0 4px;
-  font-family: var(--font-body);
-  transition: color var(--t);
+  border-radius: var(--radius-sm);
+  color: #f4f1ff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--t) var(--ease);
+  box-shadow: 0 2px 12px rgba(124,92,255,0.32);
 }
-.vibe-toggle:hover { color: var(--gold); }
+.vibe-toggle:hover {
+  background: linear-gradient(135deg, #9578ff 0%, #6a4fe0 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 20px rgba(124,92,255,0.5);
+}
+.vibe-toggle:active { transform: scale(0.96); }
+.vibe-toggle.active {
+  outline: 2px solid #b9a6ff;
+  outline-offset: 1px;
+}
 
 /* ── Toolbar Row (archive, print, privacy) ---------------------- */
 .chat-toolbar {
@@ -1704,3 +1723,7 @@ button.oracle-eye {
 .user-input {
   resize: vertical;
 }
+
+/* v2.12.0 Burn button - danger accent on hover so it reads as destructive */
+.burn-btn:hover { background: rgba(224,83,61,0.22) !important; border-color: rgba(224,83,61,0.6) !important; }
+.burn-btn:focus-visible { outline: 2px solid #e0533d; }

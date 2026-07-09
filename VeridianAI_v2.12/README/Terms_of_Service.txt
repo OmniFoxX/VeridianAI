@@ -1,7 +1,7 @@
 DOCUMENT 2 OF 4: TERMS OF SERVICE
-ORACLEAI — ELECTRUM CONSILIARIUS, ETC.
+VERIDIANAI — MENTISPHERE SOFTWARE, ETC.
 ████████████████████████████████████████████████████████████████████████
-ORACLEAI TERMS OF SERVICE
+VERIDIANAI TERMS OF SERVICE
 Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
 
 ARTICLE I — AGREEMENT AND ACCEPTANCE
@@ -65,7 +65,7 @@ Use of VeridianAI by employees, contractors, or agents of a for-profit enterpris
 Deployment of VeridianAI on behalf of, or in service to, a commercial enterprise with annual revenues exceeding ten thousand dollars ($10,000 USD) per year;
 Resale, sublicensing, or redistribution of VeridianAI or its outputs as a commercial product or service; and
 Any use in connection with a for-profit entity's internal operations, even where the direct output of the AI is not itself sold.
-[COMMERCIAL LICENSING TERMS — FUTURE TERMS TO BE INSERTED HERE. COMMERCIAL LICENSING INQUIRIES SHOULD BE DIRECTED TO SILVERFOX4816@GMAIL.COM. COMMERCIAL USE WITHOUT A VALID LICENSE FROM ELECTRUM CONSILIARIUS, ETC. IS PROHIBITED AND CONSTITUTES GROUNDS FOR INJUNCTIVE RELIEF AND/OR DAMAGES.]
+[COMMERCIAL LICENSING TERMS — FUTURE TERMS TO BE INSERTED HERE. COMMERCIAL LICENSING INQUIRIES SHOULD BE DIRECTED TO SILVERFOX4816@GMAIL.COM. COMMERCIAL USE WITHOUT A VALID LICENSE FROM MENTISPHERE SOFTWARE, ETC. IS PROHIBITED AND CONSTITUTES GROUNDS FOR INJUNCTIVE RELIEF AND/OR DAMAGES.]
 
 4.3 License Inquiries
 Prospective commercial licensees should contact Publisher at silverfox4816@gmail.com to obtain current commercial licensing information, pricing, and terms.
@@ -150,7 +150,7 @@ Generate content that appears authoritative while being substantially incorrect.
 User expressly acknowledges these characteristics of AI systems and agrees not to rely on AI-generated content for any high-stakes decision — including medical, legal, financial, psychological, safety-critical, or life-affecting decisions — without independent professional verification.
 
 8.2 DISCLAIMER OF WARRANTIES
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, ORACLEAI AND ALL ASSOCIATED SOFTWARE, DOCUMENTATION, SERVICES, AND MATERIALS ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. PUBLISHER EXPRESSLY DISCLAIMS:
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, VERIDIANAI AND ALL ASSOCIATED SOFTWARE, DOCUMENTATION, SERVICES, AND MATERIALS ARE PROVIDED "AS IS" AND "AS AVAILABLE," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED. PUBLISHER EXPRESSLY DISCLAIMS:
 
 (A) ANY IMPLIED WARRANTY OF MERCHANTABILITY OR FITNESS FOR A PARTICULAR PURPOSE;
 

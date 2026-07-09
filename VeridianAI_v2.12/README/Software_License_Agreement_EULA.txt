@@ -1,7 +1,7 @@
 DOCUMENT 3 OF 4: SOFTWARE LICENSE AGREEMENT (EULA)
-ORACLEAI — ELECTRUM CONSILIARIUS, ETC.
+VERIDIAN — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
-ORACLEAI END-USER LICENSE AGREEMENT (EULA)
+VERIDIAN END-USER LICENSE AGREEMENT (EULA)
 Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -78,7 +78,7 @@ Publisher offers Licensee the entirely voluntary option to make a one-time perso
 2.3 Commercial License Required for Commercial Deployment
 Any Commercial Deployment of the Software requires a separate, valid, paid Commercial License from Publisher. Licensee may not use the Software for Commercial Deployment under the license granted in Section 2.1. Commercial Deployment without a valid Commercial License constitutes material breach of this Agreement, infringement of Publisher's intellectual property rights, and grounds for injunctive relief and damages.
 
-[COMMERCIAL LICENSE TERMS — FUTURE TERMS TO BE INSERTED HERE. TO OBTAIN A COMMERCIAL LICENSE, CONTACT SILVERFOX4816@GMAIL.COM. COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH ELECTRUM CONSILIARIUS, ETC.]
+[COMMERCIAL LICENSE TERMS — FUTURE TERMS TO BE INSERTED HERE. TO OBTAIN A COMMERCIAL LICENSE, CONTACT SILVERFOX4816@GMAIL.COM. COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH MENTISPHERE SOFTWARE]
 
 2.4 License Scope Limitations
 The licenses granted in Section 2.1 do not include the right to:

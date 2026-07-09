@@ -1,9 +1,9 @@
-/**
- * OracleAI — Setup Assistant (first-run bootstrap, Electron main process).
+ /**
+ * VeridianAI — Setup Assistant (first-run bootstrap, Electron main process).
  *
  * v2.11.15: rebuilt from the old silent first_run into a visible, guided
  * installer. Goal (Todd, 2026-07-04): download → unzip → double-click the
- * exe → watch a friendly progress window → UI pops up → ask Sage questions.
+ * exe → watch a friendly progress window → UI pops up → ask Toga questions.
  *
  * Steps (each independent, resumable, and recorded in the marker):
  *   1. Python       — detect; if missing, install via winget (user consent),
@@ -166,7 +166,7 @@ function run(cmd, args, onLine, opts) {
 // --- the Setup Assistant window --------------------------------------------
 const STEPS = [
   ['python', 'Python runtime'],
-  ['deps', 'OracleAI components'],
+  ['deps', 'VeridianAI components'],
   ['ollama', 'Ollama (local AI engine)'],
   ['model', 'Starter model'],
   ['data', 'Data folders'],
@@ -189,12 +189,12 @@ function makeSetupWindow() {
     const html =
       '<!doctype html><meta charset="utf-8"><body style="margin:0;height:100vh;box-sizing:border-box;' +
       'font-family:Segoe UI,system-ui,sans-serif;background:#0b1430;color:#e9edf6;padding:26px 30px;overflow:hidden">' +
-      '<div style="font-size:18px;letter-spacing:.16em;color:#f0a500;text-align:center;margin-bottom:4px">O R A C L E&nbsp;&nbsp;A I</div>' +
+      '<div style="font-size:18px;letter-spacing:.16em;color:#f0a500;text-align:center;margin-bottom:4px">V E R I D I A N&nbsp;&nbsp;A I</div>' +
       '<div style="font-size:12px;opacity:.75;text-align:center;margin-bottom:16px">Setting things up — first run only</div>' +
       `<div style="font-size:13px">${rows}</div>` +
       '<div id="live" style="margin-top:12px;font-size:11px;opacity:.65;height:30px;line-height:1.4;overflow:hidden"></div>' +
       '<div style="position:fixed;bottom:12px;left:0;right:0;text-align:center;font-size:10px;opacity:.45">' +
-      'You can keep using your computer — OracleAI will open when everything is ready.</div>' +
+      'You can keep using your computer — VeridianAI will open when everything is ready.</div>' +
       '<script>function setStep(id,icon,txt,color){' +
       'var i=document.getElementById("ic-"+id),s=document.getElementById("st-"+id);' +
       'if(i){i.textContent=icon;i.style.opacity=1;i.style.color=color||"";}' +
@@ -230,9 +230,9 @@ async function stepPython(win) {
   if (!hasWinget()) {
     stepState(win, 'python', 'warn', 'not found — see python.org');
     dialog.showMessageBoxSync({
-      type: 'warning', title: 'OracleAI — Python needed',
+      type: 'warning', title: 'VeridianAI — Python needed',
       message: 'Python 3.10+ was not found and automatic install is unavailable.',
-      detail: 'Please install Python from python.org (tick "Add python.exe to PATH"), then relaunch OracleAI.',
+      detail: 'Please install Python from python.org (tick "Add python.exe to PATH"), then relaunch VeridianAI.',
       buttons: ['Open python.org', 'Continue anyway'], defaultId: 0, cancelId: 1,
     });
     try { shell.openExternal('https://www.python.org/downloads/'); } catch { /* ignore */ }
@@ -240,8 +240,8 @@ async function stepPython(win) {
   }
 
   const res = dialog.showMessageBoxSync({
-    type: 'question', title: 'OracleAI — install Python?',
-    message: 'OracleAI needs Python (free, from the Python Software Foundation).',
+    type: 'question', title: 'VeridianAI — install Python?',
+    message: 'VeridianAI needs Python (free, from the Python Software Foundation).',
     detail: 'It can be installed automatically now — no clicks needed, no admin required.',
     buttons: ['Install automatically', 'I\'ll install it myself'], defaultId: 0, cancelId: 1,
   });
@@ -287,8 +287,8 @@ async function stepOllama(win, firstRun) {
   if (!firstRun) { stepState(win, 'ollama', 'skip', 'not installed'); return null; }
 
   const res = dialog.showMessageBoxSync({
-    type: 'question', title: 'OracleAI — Ollama required',
-    message: 'OracleAI needs Ollama to run its main reasoning model.',
+    type: 'question', title: 'VeridianAI — Ollama required',
+    message: 'VeridianAI needs Ollama to run its main reasoning model.',
     detail: 'Ollama is a free, local AI runtime — nothing leaves your machine. Install it now?',
     buttons: ['Install automatically', 'Open download page', 'Skip for now'],
     defaultId: 0, cancelId: 2,
@@ -329,9 +329,9 @@ async function stepStarterModel(win, ollama) {
   if (hasModels) { stepState(win, 'model', 'ok', 'models found'); return 'present'; }
 
   const res = dialog.showMessageBoxSync({
-    type: 'question', title: 'OracleAI — download a starter model?',
+    type: 'question', title: 'VeridianAI — download a starter model?',
     message: 'No AI models are installed yet.',
-    detail: 'OracleAI can download a small starter model now (Llama 3.2 3B, ' +
+    detail: 'VeridianAI can download a small starter model now (Llama 3.2 3B, ' +
             'about 2 GB) so you can chat immediately. You can add bigger or ' +
             'different models any time from the Models menu.',
     buttons: ['Download starter model (~2 GB)', 'Skip — I\'ll add models myself'],

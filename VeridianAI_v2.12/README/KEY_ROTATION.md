@@ -1,4 +1,4 @@
-# OracleAI — Signing-Key Rotation
+# VeridianAI — Signing-Key Rotation
 
 The build-provenance system signs `build_manifest.json` with an Ed25519 **private
 key** held only by the maintainer. This doc is the exact procedure to rotate that
