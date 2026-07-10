@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "0fea6ef9fa504509af92a5f3608daa8c",
-    "built_utc": "2026-07-10T04:19:03.041719+00:00",
+    "build_id": "81d81879c0934a3daccbe856f59c0964",
+    "built_utc": "2026-07-10T18:40:30.241607+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -163,12 +163,12 @@
       "electron/preload.js": "88dc1cd8c9d336da917a902fece697f438fac18415f33c1c4a436cbf13155173",
       "frontend/css/comfyui-wizard.css": "18eae3602295eaf3bbd5bd5307a2a5d3d383aa6e3ce6ddcb41e4b70b4d129e22",
       "frontend/css/command-palette.css": "5d533601126f352d6ef25ffdb9ec9a42c9f97d978268d312cff9f2854ba54381",
-      "frontend/css/styles.css": "ddfde40441347105d613377af4b0674ba6a954dafde65b11600d3c576e610cd6",
-      "frontend/index.html": "0efde8cb04683cceed246e5aa7fe70e3155b13b2896ff5123d2b8e9d909172fe",
+      "frontend/css/styles.css": "519441143521d4f445ab4239da2f1b7c90b3af2bf6563689f30eb7007411cafb",
+      "frontend/index.html": "cf9ef460524e43d45f378b948ac20ee6e03926e65bafbb977c2803e3e81c93a3",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/app.js": "f9c8a1cfef33f009401deee2b7c78502595eeffa33f33625a8336aa30eec350f",
       "frontend/js/auth.js": "168aabef7bd336b83942e9e20eda7161d726f5f123b4c9d8aa75eceb50d90738",
-      "frontend/js/chat.js": "57fc80ed1cd1c6c65593f6866b89f38fea690a59f03192aefcf3401fce1cf91a",
+      "frontend/js/chat.js": "e3be968287604c9f58fbf80e915e5a74233eb76f9210d269fb7ecf330f39a2e4",
       "frontend/js/comfyui-wizard.js": "3487cad8a55cb6fa85f04d68ad2ab17a4cd3132f8503a414c97c2d40493d6835",
       "frontend/js/command-palette.js": "11763c09c615f57164ead04975b893b595ec5baef1abd5dd1b4431da8e968aee",
       "frontend/js/games.js": "0dc13afd67f69d1d7380c95c0b3d89dda3b8ece7e42d990dabca02dc488dbf30",
@@ -176,7 +176,7 @@
       "frontend/js/hardware.js": "3e7c7e76f46bac70fa852cebfb72be7c860746912c36f748c9b8339232d48b6f",
       "frontend/js/highlight.min.js": "837a6fa5b0c736b52bbde2b2b6190f305da3fc9ed41681db5321507057b5c846",
       "frontend/js/marked.min.js": "6002af63485b043fa60ddaba1b34363b98d2a8b2c63b607004f3a2405a8a053a",
-      "frontend/js/settings.js": "7b8e388f5816ba38228a6a50f8b1ab69cbe4b52a1c152f71fa3a04801e0fb750",
+      "frontend/js/settings.js": "44cdd6daa768fac40e1bf6151943c44e69c7192adba3451589498e3c5c5a5a31",
       "frontend/js/skills.js": "04cbd944f196d87c59db3d0d4d92b186cbbc8117d73ce0320bbebc48a06659a3",
       "frontend/js/socials.js": "e554f5f4ce3f3c6da318b3f79ad1eedcee54963b7c056244d0432bf3156744fd",
       "frontend/js/ui-unstick.js": "619fefbb917da5fdf2ce387b7f0139bd02c349c8967182cacb75dde42dca8164",
@@ -194,5 +194,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "ihrQf0oA92APFcGPb6q7cpc97pgF1o3i2uUPlpsZxZ/9VMQF1Ctl4HmBAgAxK6MaU9j6nZ9w6aKlkvXJY1RSCg=="
+  "signature_b64": "zpHPVBQ4UrwzuB6adut1Z22oTV0yl8c9UbzCynkooLCCy0pG3ay4SEzYko/Oe8jCNuaZ8Ec2oU3DrWK6f6xFAQ=="
 }
