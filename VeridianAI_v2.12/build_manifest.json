@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "3f2c918fcda24ba4a23063e304898e0b",
-    "built_utc": "2026-07-09T06:48:25.746041+00:00",
+    "build_id": "0fea6ef9fa504509af92a5f3608daa8c",
+    "built_utc": "2026-07-10T04:19:03.041719+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -164,7 +164,7 @@
       "frontend/css/comfyui-wizard.css": "18eae3602295eaf3bbd5bd5307a2a5d3d383aa6e3ce6ddcb41e4b70b4d129e22",
       "frontend/css/command-palette.css": "5d533601126f352d6ef25ffdb9ec9a42c9f97d978268d312cff9f2854ba54381",
       "frontend/css/styles.css": "ddfde40441347105d613377af4b0674ba6a954dafde65b11600d3c576e610cd6",
-      "frontend/index.html": "866359cf1f1b183516adb7dbc06cc7e6671740b9089b08df672e220fdd68c657",
+      "frontend/index.html": "0efde8cb04683cceed246e5aa7fe70e3155b13b2896ff5123d2b8e9d909172fe",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/app.js": "f9c8a1cfef33f009401deee2b7c78502595eeffa33f33625a8336aa30eec350f",
       "frontend/js/auth.js": "168aabef7bd336b83942e9e20eda7161d726f5f123b4c9d8aa75eceb50d90738",
@@ -194,5 +194,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "nUmiPWeK8kZe8uPJ2uASajXVCkUC6XZ7y77lz4YINL280gv5H/o0LyqfIbfUDM1UNV6J5SW7EzophHPjCHcgDQ=="
+  "signature_b64": "ihrQf0oA92APFcGPb6q7cpc97pgF1o3i2uUPlpsZxZ/9VMQF1Ctl4HmBAgAxK6MaU9j6nZ9w6aKlkvXJY1RSCg=="
 }

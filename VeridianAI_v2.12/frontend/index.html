@@ -46,10 +46,10 @@
 <option value="">— Select Model —</option>
 </select>
 <div class="header-toggles">
-<button class="icon-btn" id="privacy-btn" aria-label="Privacy Mode" onclick="togglePrivacy()" data-tip="Privacy Mode">🔒</button>
-<button class="icon-btn" id="haptic-btn" aria-label="Haptic feedback" onclick="toggleHaptic()" data-tip="Haptic feedback">📳</button>
-<button class="icon-btn" id="theme-btn" aria-label="Toggle light/dark theme" onclick="toggleTheme()" data-tip="Toggle light/dark">○</button>
-<button class="icon-btn" id="sidebar-btn" aria-label="Toggle sidebar" onclick="toggleSidebar()" data-tip="Toggle sidebar">≡</button>
+<button class="icon-btn" id="privacy-btn" aria-label="🔒 Privacy Mode" onclick="togglePrivacy()" data-tip="Privacy Mode">🔒</button>
+<button class="icon-btn" id="haptic-btn" aria-label="📳 Haptic feedback" onclick="toggleHaptic()" data-tip="Haptic feedback">📳</button>
+<button class="icon-btn" id="theme-btn" aria-label="○ Toggle light/dark theme" onclick="toggleTheme()" data-tip="Toggle light/dark">○</button>
+<button class="icon-btn" id="sidebar-btn" aria-label="≡ Toggle sidebar" onclick="toggleSidebar()" data-tip="Toggle sidebar">≡</button>
 </div>
 </div>
 </header>
@@ -110,7 +110,8 @@
 </div>
 <div class="setting-group">
 <label class="setting-label" data-tip="Auto-Re-Prompt: how many times to auto-send the continue message before stopping (your infinite-loop guard). Only used when the Auto-Re-Prompt toggle is on.">Auto-Continue Max</label>
-<input aria-label="Auto-Continue Max" class="setting-input" id="setting-auto-reprompt-max" max="50" min="1" step="1" data-tip="Maximum automatic continue messages per chain." type="number" value="3"/>
+<input aria-label="Auto-Continue Max" class="setting-input" id="setting-auto-reprompt-max" max="50" min="1" step="1" data-tip="Maximum automatic continue messages per chain." type="number" value="3" aria-describedby="setting-auto-reprompt-max-hint"/>
+<span id="setting-auto-reprompt-max-hint" class="input-hint">Enter a whole number of reprompts (e.g. 3)</span>
 </div>
 <div class="setting-group">
 <label class="setting-label" data-tip="The exact message Auto-Re-Prompt sends to continue a task or debate.">Auto-Continue Text</label>
@@ -127,15 +128,18 @@
              the meaning, default rendering is controlled by settings.js
              (blank = use backend default). Users who want a cap type a positive
              integer; users who want unlimited leave it blank. -->
-<input aria-label="Max Tokens" class="setting-input" id="setting-max-tokens" max="131072" min="-1" onchange="updateSetting('max_tokens', sanitizeMaxTokensInput(this.value))" placeholder="blank = unlimited" step="64" data-tip="Blank or -1 = unlimited. Set a positive integer to cap the response length." type="number"/>
+<input aria-label="Max Tokens" class="setting-input" id="setting-max-tokens" max="131072" min="-1" onchange="updateSetting('max_tokens', sanitizeMaxTokensInput(this.value))" placeholder="blank = unlimited" step="64" data-tip="Blank or -1 = unlimited. Set a positive integer to cap the response length." type="number" aria-describedby="setting-max-tokens-hint"/>
+<span id="setting-max-tokens-hint" class="input-hint">Enter a whole number of tokens (e.g. 4096)</span>
 </div>
 <div class="setting-group">
 <label class="setting-label">Context Window (n_ctx)</label>
-<input aria-label="Context Window (n_ctx)" class="setting-input" id="setting-n-ctx" max="131072" min="512" onchange="updateSetting('n_ctx', parseInt(this.value))" step="512" type="number" value="4096"/>
+<input aria-label="Context Window (n_ctx)" class="setting-input" id="setting-n-ctx" max="131072" min="512" onchange="updateSetting('n_ctx', parseInt(this.value))" step="512" type="number" value="4096" aria-describedby="setting-n-ctx-hint"/>
+<span id="setting-n-ctx-hint" class="input-hint">Enter the context window size in tokens (e.g. 8192)</span>
 </div>
 <div class="setting-group">
 <label class="setting-label" data-tip="How many model layers to offload to the GPU. -1 = all (fastest if they fit in VRAM); lower keeps more on the CPU to save VRAM.">GPU Layers <span style="color:var(--text-faint)">(-1 = all)</span></label>
-<input aria-label="GPU Layers (-1 = all)" class="setting-input" id="setting-gpu-layers" max="256" min="-1" onchange="updateSetting('n_gpu_layers', parseInt(this.value))" type="number" value="-1"/>
+<input aria-label="GPU Layers (-1 = all)" class="setting-input" id="setting-gpu-layers" max="256" min="-1" onchange="updateSetting('n_gpu_layers', parseInt(this.value))" type="number" value="-1" aria-describedby="setting-gpu-layers-hint"/>
+<span id="setting-gpu-layers-hint" class="input-hint">Enter the number of layers to offload to GPU (e.g. 32)</span>
 </div>
 <div class="setting-group">
 <label class="setting-label" data-tip="Extra instructions appended to Toga's built-in system prompt (it adds to it, never replaces it). Use it for a persistent persona or standing rules.">System Prompt</label>
@@ -147,7 +151,7 @@
 <!-- v2.12.1: personalization — rename the assistant + set the voice wake word -->
 <div class="setting-group" style="margin-bottom:12px">
 <label class="setting-label" data-tip="What the assistant calls itself and answers to. Default 'Toga'. This changes the persona name only — menus and labels stay the same. Per-profile: each user can pick their own.">Assistant Name</label>
-<input class="setting-input" id="setting-assistant-name" aria-label="Assistant name" placeholder="Toga" maxlength="24" onchange="updateSetting('assistant_name', this.value.trim() || 'Toga')" type="text"/>
+<input autocomplete="name" class="setting-input" id="setting-assistant-name" aria-label="Assistant name" placeholder="Toga" maxlength="24" onchange="updateSetting('assistant_name', this.value.trim() || 'Toga')" type="text"/>
 </div>
 <div class="setting-group" id="wake-word-group" style="margin-bottom:14px">
 <label class="setting-label" data-tip="The spoken/typed word that wakes hands-free voice and triggers social auto-replies. Default 'Toga'. Owner-level (one microphone per machine). Restart voice listening after changing.">Wake Word</label>
@@ -252,11 +256,12 @@
 <div class="settings-section">
 <div class="settings-section-title">Tavily API Key</div>
 <div class="api-key-display" id="tavily-status" role="status" aria-live="polite">
-<span class="key-status none">No key set</span>
+<span id="live-status-region" role="status" aria-live="polite" class="key-status none">No key set</span>
 </div>
 <div class="setting-group" style="margin-top:6px">
 <label class="sr-only" for="tavily-input">Tavily API Key</label>
-<input aria-label="Tavily API Key" class="setting-input" id="tavily-input" data-tip="Your Tavily API key for web search. Stored locally and never shown again after saving." placeholder="Enter Tavily API key…" type="password"/>
+<input aria-label="Tavily API Key" class="setting-input" id="tavily-input" data-tip="Your Tavily API key for web search. Stored locally and never shown again after saving." placeholder="Enter Tavily API key…" type="password" aria-describedby="tavily-input-hint"/>
+<span id="tavily-input-hint" class="input-hint">Paste your Tavily API key (starts with tvly-)</span>
 <div style="display:flex;gap:4px;margin-top:4px">
 <button class="toolbar-btn" aria-label="Save Tavily key" data-tip="Save the Tavily key" onclick="saveTavilyKey()" style="flex:1">Save</button>
 <button class="toolbar-btn" aria-label="Clear Tavily key field" data-tip="Clear the input field (does not delete the saved key)" onclick="document.getElementById('tavily-input').value=''" style="flex:1">Clear</button>
@@ -314,7 +319,7 @@
 </div>
 <div class="setting-group">
 <label class="setting-label">Device name (used by Toga Network + relay)</label>
-<input aria-label="Device name (used by Toga Network + relay)" class="setting-select" id="setting-node-name" onchange="updateSetting('node_name', this.value)" placeholder="e.g. desktop" type="text"/>
+<input autocomplete="name" aria-label="Device name (used by Toga Network + relay)" class="setting-select" id="setting-node-name" onchange="updateSetting('node_name', this.value)" placeholder="e.g. desktop" type="text"/>
 </div>
 <div class="setting-group">
 <label class="setting-label" data-tip="A non-secret fingerprint of this node's home token. Two nodes are paired when their fingerprints match.">Toga Network token fingerprint: <span id="sn-fingerprint">-</span></label>
@@ -401,7 +406,7 @@
 <label class="toggle-switch"><input aria-label="Enable Relay Source" id="toggle-relay-source" onchange="updateSetting('relay_source_enabled', this.checked)" type="checkbox"/><span class="toggle-track"></span></label>
 </div>
 <input aria-label="Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)" class="setting-select" id="sk-relay-url" onchange="updateSetting('relay_url', this.value)" placeholder="relay URL (e.g. http://desktop-ip:8000)" type="text"/>
-<input aria-label="Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)" class="setting-select" id="sk-relay-target" placeholder="browse: target device name" type="text"/>
+<input autocomplete="name" aria-label="Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)" class="setting-select" id="sk-relay-target" placeholder="browse: target device name" type="text"/>
 <button class="toolbar-btn" onclick="skBrowseRelay()">Browse via relay</button>
 <div style="font-size:0.8em;opacity:0.7;margin-top:3px">Toggles take effect on restart. Your device name is set in the Toga Network section above.</div>
 </div>
@@ -484,18 +489,18 @@
 <div class="input-row">
 <div style="display:flex;flex-direction:column;gap:4px">
 <button aria-label="&#127908; Voice input, push to talk" class="attach-btn" id="voice-mic-btn" onclick="voicePushToTalk()" data-tip="Voice input — push to talk: click, speak, and it types your words and sends" type="button">🎤</button>
-<label class="attach-btn" for="file-input" aria-label="Attach file" data-tip="Attach file">📎</label>
+<label class="attach-btn" for="file-input" aria-label="📎 Attach file" data-tip="Attach file">📎</label>
 <input aria-label="📎" id="file-input" multiple="" onchange="handleFileAttach(event)" style="display:none" type="file"/>
-<button class="attach-btn" id="gen-image-btn" aria-label="Generate image" onclick="generateImageManual()" data-tip="Generate an image from the prompt in the box" type="button">🎨</button>
-<button class="attach-btn burn-btn" id="burn-btn" aria-label="Burn all my data" onclick="burnAllData()" data-tip="Burn — permanently erase ALL your data (chats, archives, memory). Zero Data Retention. Cannot be undone." type="button">🔥</button>
+<button class="attach-btn" id="gen-image-btn" aria-label="🎨 Generate image" onclick="generateImageManual()" data-tip="Generate an image from the prompt in the box" type="button">🎨</button>
+<button class="attach-btn burn-btn" id="burn-btn" aria-label="🔥 Burn all my data" onclick="burnAllData()" data-tip="Burn — permanently erase ALL your data (chats, archives, memory). Zero Data Retention. Cannot be undone." type="button">🔥</button>
 </div>
 <label class="sr-only" for="user-input">Ask Toga</label>
 <textarea class="user-input" id="user-input" aria-label="Message to Toga" data-tip="Type your message here. Enter to send, Shift+Enter for a new line." oninput="autoResize(this)" onkeydown="handleInputKey(event)" placeholder="Ask Toga…" rows="4"></textarea>
 <div style="display:flex;flex-direction:column;gap:4px">
-<button class="send-btn nudge-btn" id="urgent-btn" aria-label="Mark next message urgent" onclick="toggleUrgent()" data-tip="Urgent — your next message jumps ahead of queued work on this machine (and keeps its urgency if offloaded to a network node, within that node's budget). One-shot: resets after sending.">⚡</button>
-<button class="send-btn nudge-btn" id="nudge-btn" aria-label="Send nudge to Toga" onclick="handleNudgeClick()" data-tip="AI QNudge — send Toga a steering nudge mid-task (no interruption)">👋</button>
-<button class="send-btn" id="send-btn" aria-label="Send message" onclick="handleSendClick()" data-tip="Send  (Enter)">▶</button>
-<button class="vibe-toggle" id="vibe-toggle" aria-label="Vibe Coding prompts" onclick="toggleVibeBar()" data-tip="Vibe Coding prompts">✨</button>
+<button class="send-btn nudge-btn" id="urgent-btn" aria-label="⚡ Mark next message urgent" onclick="toggleUrgent()" data-tip="Urgent — your next message jumps ahead of queued work on this machine (and keeps its urgency if offloaded to a network node, within that node's budget). One-shot: resets after sending.">⚡</button>
+<button class="send-btn nudge-btn" id="nudge-btn" aria-label="👋 Send nudge to Toga" onclick="handleNudgeClick()" data-tip="AI QNudge — send Toga a steering nudge mid-task (no interruption)">👋</button>
+<button class="send-btn" id="send-btn" aria-label="▶ Send message" onclick="handleSendClick()" data-tip="Send  (Enter)">▶</button>
+<button class="vibe-toggle" id="vibe-toggle" aria-label="✨ Vibe Coding prompts" onclick="toggleVibeBar()" data-tip="Vibe Coding prompts">✨</button>
 </div>
 </div>
 <div class="input-footer">
@@ -508,13 +513,13 @@
 <!-- ── Oracle panel (games) ---------------------------------- -->
 <aside class="oracle-panel" id="oracle-panel">
 <div class="oracle-panel-header">
-<button class="game-close-btn" aria-label="Close games" onclick="closeGamePanel()" data-tip="Close">✕</button>
+<button class="game-close-btn" aria-label="✕ Close games" onclick="closeGamePanel()" data-tip="Close">✕</button>
 <span class="panel-title">Toga is thinking…</span>
 <div class="game-selector">
-<button class="game-tab active" aria-label="Asteroids" onclick="switchGame('asteroids', this)" data-tip="Asteroids">☄</button>
-<button class="game-tab" aria-label="Snake" onclick="switchGame('snake', this)" data-tip="Snake">🐍</button>
-<button class="game-tab" aria-label="Tic-Tac-Toe" onclick="switchGame('tictactoe', this)" data-tip="Tic-Tac-Toe">✕○</button>
-<button class="game-tab" aria-label="Socials" onclick="switchGame('socials', this)" data-tip="Socials">📡</button>
+<button class="game-tab active" aria-label="☄ Asteroids" onclick="switchGame('asteroids', this)" data-tip="Asteroids">☄</button>
+<button class="game-tab" aria-label="🐍 Snake" onclick="switchGame('snake', this)" data-tip="Snake">🐍</button>
+<button class="game-tab" aria-label="✕○ Tic-Tac-Toe" onclick="switchGame('tictactoe', this)" data-tip="Tic-Tac-Toe">✕○</button>
+<button class="game-tab" aria-label="📡 Socials" onclick="switchGame('socials', this)" data-tip="Socials">📡</button>
 </div>
 </div>
 <canvas height="320" id="game-canvas" width="300"></canvas>
@@ -526,7 +531,7 @@
 </div>
 <div id="scoreboard-entries"></div>
 </div>
-<div class="game-info" role="status" aria-live="polite">
+<div id="global-status-region" class="game-info" role="status" aria-live="polite">
 <span id="game-score">Score: 0</span>
 <span class="game-hint">Play while Toga thinks…</span>
 </div>
