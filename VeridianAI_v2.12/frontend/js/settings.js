@@ -539,9 +539,10 @@ async function loadPlugins() {
         (p) => `
       <div class="plugin-card">
         <div class="plugin-header">
-          <span class="plugin-name">${p.name}</span>
+          <span class="plugin-name" id="plugin-label-${p.id}">${p.name}</span>
           <label class="toggle-switch">
             <input type="checkbox" ${p.enabled ? "checked" : ""}
+                   aria-labelledby="plugin-label-${p.id}" role="switch"
                    onchange="togglePlugin('${p.id}', this)">
             <span class="toggle-track"></span>
           </label>
@@ -598,15 +599,29 @@ function toggleSidebar() {
 
 function switchPanel(name, btn) {
   document.title = `${name.charAt(0).toUpperCase() + name.slice(1)} - VeridianAI`;
-  document
-    .querySelectorAll(".nav-tab")
-    .forEach((b) => b.classList.remove("active"));
-  document
-    .querySelectorAll(".panel")
-    .forEach((p) => p.classList.remove("active"));
-  if (btn) btn.classList.add("active");
+
+  document.querySelectorAll(".nav-tab").forEach((b) => {
+    b.classList.remove("active");
+    b.setAttribute("aria-selected", "false");
+    b.setAttribute("tabindex", "-1");
+  });
+
+  document.querySelectorAll(".panel").forEach((p) => {
+    p.classList.remove("active");
+    p.setAttribute("hidden", "hidden");
+  });
+
+  if (btn) {
+    btn.classList.add("active");
+    btn.setAttribute("aria-selected", "true");
+    btn.setAttribute("tabindex", "0");
+  }
+
   const panel = document.getElementById(`panel-${name}`);
-  if (panel) panel.classList.add("active");
+  if (panel) {
+    panel.classList.add("active");
+    panel.removeAttribute("hidden");
+  }
 }
 
 /* --- Tavily Key ----------------------------------------------- */
@@ -671,7 +686,14 @@ function renderVibeBar() {
 
 function toggleVibeBar() {
   const bar = document.getElementById("vibe-bar");
-  if (bar) bar.classList.toggle("open");
+  const toggle = document.getElementById("vibe-toggle");
+  if (bar) {
+    const isOpen = bar.classList.toggle("open");
+    if (toggle) {
+      toggle.classList.toggle("active", isOpen);
+      toggle.setAttribute("aria-pressed", String(isOpen));
+    }
+  }
 }
 
 function useVibePrompt(key) {

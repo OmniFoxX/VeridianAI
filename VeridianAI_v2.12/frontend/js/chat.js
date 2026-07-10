@@ -1414,10 +1414,16 @@ function togglePrivacy() {
   if (chatArea) chatArea.classList.toggle("privacy-active", privacyMode);
 
   const btn = document.getElementById("privacy-btn");
-  if (btn) btn.classList.toggle("active", privacyMode);
+  if (btn) {
+    btn.classList.toggle("active", privacyMode);
+    btn.setAttribute("aria-pressed", String(privacyMode));
+  }
 
   const tbBtn = document.getElementById("privacy-toolbar-btn");
-  if (tbBtn) tbBtn.classList.toggle("active", privacyMode);
+  if (tbBtn) {
+    tbBtn.classList.toggle("active", privacyMode);
+    tbBtn.setAttribute("aria-pressed", String(privacyMode));
+  }
 }
 
 /* --- Print Chat ----------------------------------------------- */

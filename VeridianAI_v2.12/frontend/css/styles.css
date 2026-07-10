@@ -179,6 +179,28 @@
 /* ── Reset ----------------------------------------------------- */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+button,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"],
+[tabindex]:not([tabindex="-1"]) {
+  outline: none;
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--gold-glow);
+}
+
 html { height: 100%; }
 
 body {
@@ -554,6 +576,16 @@ body::after {
   background: var(--text-faint);
   border-radius: 50%;
   transition: transform var(--t) var(--ease), background var(--t);
+}
+
+.toggle-switch input:focus-visible + .toggle-track {
+  border-color: #00A86B; /* jade, for OFF state */
+  box-shadow: 0 0 0 3px rgba(0, 168, 107, 0.25);
+}
+
+.toggle-switch input:checked:focus-visible + .toggle-track {
+  border-color: #1A1A2E; /* near-black, for ON/amber state */
+  box-shadow: 0 0 0 3px rgba(26, 26, 46, 0.25);
 }
 
 .toggle-switch input:checked + .toggle-track {
@@ -1258,7 +1290,7 @@ pre:hover .copy-btn      { opacity: 1; }
 }
 
 .hidden { display: none !important; }
-
+.panel[hidden] { display: none !important; }
 
 /* ── Privacy Mode ------------------------------------------------ */
 .privacy-active .messages-container .message-bubble {
@@ -1389,6 +1421,11 @@ pre:hover .copy-btn      { opacity: 1; }
   box-shadow: 0 4px 20px rgba(124,92,255,0.5);
 }
 .vibe-toggle:active { transform: scale(0.96); }
+.vibe-toggle:focus-visible {
+  outline: 2px solid #b9a6ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(124,92,255,0.25);
+}
 .vibe-toggle.active {
   outline: 2px solid #b9a6ff;
   outline-offset: 1px;
@@ -1418,6 +1455,11 @@ pre:hover .copy-btn      { opacity: 1; }
 .toolbar-btn:hover {
   border-color: var(--gold);
   color: var(--gold);
+}
+.toolbar-btn:focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px var(--gold-glow);
 }
 .toolbar-btn.active {
   background: var(--gold-glow);
