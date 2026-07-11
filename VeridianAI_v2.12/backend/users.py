@@ -113,8 +113,40 @@ def user_exists(username):
 
 def list_users():
     return [{"username": x.get("username"), "is_owner": x.get("is_owner", False),
-             "created": x.get("created"), "ns": x.get("ns")}
+             "created": x.get("created"), "ns": x.get("ns"),
+             # v2.13 Access Controls: surfaced so the owner panel can render
+             # lock state / restrictions at a glance. {} = unrestricted.
+             "access": dict(x["access"]) if isinstance(x.get("access"), dict) else {}}
             for x in _load().get("users", [])]
+
+
+# --- v2.13 Access Controls (parental / manager) --------------------------------
+# users.py owns the FILE; access_policy.py owns the SEMANTICS (defaults,
+# validation, login gating). These two accessors are the only bridge.
+
+def get_access(username):
+    """The raw stored access record ({} if none). None = no such user."""
+    x = _find(_load(), username)
+    if x is None:
+        return None
+    a = x.get("access")
+    return dict(a) if isinstance(a, dict) else {}
+
+
+def set_access(username, access):
+    """Persist an access record. Refuses owner accounts -- the owner is never
+    restricted (same protection stance as delete_user)."""
+    if not isinstance(access, dict):
+        return {"success": False, "error": "access must be an object"}
+    store = _load()
+    x = _find(store, username)
+    if x is None:
+        return {"success": False, "error": "no such user"}
+    if x.get("is_owner"):
+        return {"success": False, "error": "access controls do not apply to the owner account"}
+    x["access"] = dict(access)
+    _save(store)
+    return {"success": True, "username": x.get("username")}
 
 
 def create_user(username, password, *, is_owner=False):

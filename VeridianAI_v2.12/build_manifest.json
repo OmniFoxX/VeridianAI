@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "81d81879c0934a3daccbe856f59c0964",
-    "built_utc": "2026-07-10T18:40:30.241607+00:00",
+    "build_id": "ce0d3654516c4b0eb91ec61c86aee91c",
+    "built_utc": "2026-07-11T14:42:30.938797+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -35,6 +35,7 @@
       "backend/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "backend/_tier_config_reader.py": "447325cb35d2e0ebb228d3da2818b2f69033738bb2b40229deee779ba1ba73d1",
       "backend/_ws_bridge.py": "d7d4f9ce72132c413a463843fa6c96006c69ce23492eb77f56bc0f03eaeeaf02",
+      "backend/access_policy.py": "ef1d90eb0ae7ccd1d6ff77c0b91a1241565a4d18d5abf0144ff7669d907d0b56",
       "backend/aiq_nudge.py": "3aaed5f006f83e85979625a0ba505b0786d4293bbd6101c376e7463426eabf39",
       "backend/atrest.py": "f1acaddee0085f463dbe082e7239e0bd6bd2909ca36a3fd266276aa794607152",
       "backend/auth.py": "2d6ec92c400f41ee42a82d8c78d314829e45b257097788ed115cfaae8c01beff",
@@ -87,7 +88,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "90825bdf051ceb37b6298c028dd1481ce5542f64f16c7151bf680764d157c3fa",
+      "backend/main.py": "da47473d0f24b68e576e6c3f743538a1c093f69a46f5a37f8873647e0a479627",
       "backend/mcp_handlers.py": "ed36501c18c4426bab3e40214af39f5233730ebc7bf26c7ba860353e9fdb657c",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -146,7 +147,8 @@
       "backend/train_plm_daemon_v2.py": "f4a3dd40f1f5a87c78ab57062fd9109d2cbce4afed034ebf5d1e71bbf500c725",
       "backend/ui_prefs.py": "2434c64713332763b4fd75108827f6fb540166ecef25dead343c6cea306fa77c",
       "backend/urgent_quota.py": "0676b038d12bc0d494d00e7037ed144b6791dfec347f3549e7974f87a6a47178",
-      "backend/users.py": "de65ca59788b85201804f342e9811ce55e3bede2e73c6a97ea55b4a46f8379da",
+      "backend/usage_meter.py": "ae9bd911a2144c4c1ddf6dc928e2a20c481db67baddf620fb8daed2a19d73703",
+      "backend/users.py": "8bbda4fab69492d70387522c0f78a633d9918b7dc7ae8c376c4be35b32f8e75a",
       "backend/verify_procedural_wiring.py": "306ac8688e1da573a97c517a7b1401b107909d5797cb417fe691cba78ae96701",
       "backend/verify_v214.py": "f8ecd9c6c2c71ef043a6b5b7f2406c18da8c2a08a9b70bb0e7cc7076194dcb77",
       "backend/verify_v215.py": "fc83c8068f5f3f3dd89b7e9347cd99b36e67b9f8d611c83b1c7fc7e27ec7131e",
@@ -167,7 +169,7 @@
       "frontend/index.html": "cf9ef460524e43d45f378b948ac20ee6e03926e65bafbb977c2803e3e81c93a3",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/app.js": "f9c8a1cfef33f009401deee2b7c78502595eeffa33f33625a8336aa30eec350f",
-      "frontend/js/auth.js": "168aabef7bd336b83942e9e20eda7161d726f5f123b4c9d8aa75eceb50d90738",
+      "frontend/js/auth.js": "9ffe4ebf0ec9076305828a18d87862b06d67be7d30c2ed6a92110adcda2652d0",
       "frontend/js/chat.js": "e3be968287604c9f58fbf80e915e5a74233eb76f9210d269fb7ecf330f39a2e4",
       "frontend/js/comfyui-wizard.js": "3487cad8a55cb6fa85f04d68ad2ab17a4cd3132f8503a414c97c2d40493d6835",
       "frontend/js/command-palette.js": "11763c09c615f57164ead04975b893b595ec5baef1abd5dd1b4431da8e968aee",
@@ -194,5 +196,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "zpHPVBQ4UrwzuB6adut1Z22oTV0yl8c9UbzCynkooLCCy0pG3ay4SEzYko/Oe8jCNuaZ8Ec2oU3DrWK6f6xFAQ=="
+  "signature_b64": "zDb7eBug8Y2kL8i6nSRkdgrbUJ7IrmZ4NOTsLFqeVNa6JSSP5pQFqbQuCDQAPfEQIrqSCxienyDEFFSO5gFfCQ=="
 }

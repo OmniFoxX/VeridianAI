@@ -1238,10 +1238,31 @@ async def api_voice_poll(request: Request):
 # _socials_router_for(request). Isolation is per profile: person A can never
 # read person B's socials. BitChat (this machine's BLE radio) stays with the
 # owner profile — one radio, one bridge.
+def _socials_denied_for(request: Request) -> bool:
+    """v2.13 Access Controls: True when the signed-in NON-owner profile's
+    policy turns socials off. Owner / single-user / no policy -> False.
+    Fail-open on internal errors so a broken store can't brick the owner."""
+    try:
+        if not config.get("multiuser_enabled", False):
+            return False
+        import session as _session
+        s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
+        if not s or s.get("is_owner"):
+            return False
+        import access_policy as _ap
+        return not _ap.socials_allowed(s.get("username"))
+    except Exception:
+        return False
+
+
 def _socials_router_for(request: Request):
     """The caller's per-profile socials router. Owner / single-user -> the
     boot router; signed-in child -> lazily built + cached per namespace.
-    None when socials are disabled entirely."""
+    None when socials are disabled entirely. Raises 403 when the profile's
+    access policy disables socials (single choke point: EVERY /api/socials/*
+    route obtains its router here)."""
+    if _socials_denied_for(request):
+        raise HTTPException(403, "Socials are turned off for this profile by the owner.")
     if socials_router is None:
         return None
     ns = _session_ns(request)
@@ -1260,7 +1281,14 @@ def _socials_router_for(request: Request):
 async def api_socials_status(request: Request):
     if not _is_local_client(request):
         raise HTTPException(404)
-    router = _socials_router_for(request)
+    try:
+        router = _socials_router_for(request)
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            # Access-controlled profile: the panel gets a clean "off" state
+            # with the reason, instead of an error toast.
+            return {"available": False, "blocked": True, "reason": exc.detail}
+        raise
     if router is None:
         return {"available": False}
     return {"available": True, **router.status()}
@@ -3139,6 +3167,17 @@ async def api_auth_status(request: Request):
     s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
     _mu = bool(config.get("multiuser_enabled", False))
     if s:
+        # v2.13.1: this endpoint doubles as the Access Controls HEARTBEAT --
+        # the frontend watchdog polls it every ~30s, so it's the metronome
+        # for daily screen-time metering. Budget spent -> end the session
+        # here; the watchdog sees authenticated:false and returns the UI to
+        # the login screen, where check_login explains "used up for today".
+        if _mu and not s.get("is_owner"):
+            import access_policy as _ap
+            if _ap.tick_usage(s["username"]):
+                _session.destroy_user_sessions(s["username"])
+                return {"authenticated": False, "needs_setup": False,
+                        "multiuser": _mu}
         return {"authenticated": True, "username": s["username"],
                 "is_owner": s["is_owner"], "needs_setup": False, "multiuser": _mu}
     return {"authenticated": False, "needs_setup": not _users.any_users(),
@@ -3175,7 +3214,20 @@ async def api_auth_login(payload: dict, request: Request):
         _auth_guard.record_failure(_ip)
         raise HTTPException(401, "invalid credentials")
     _auth_guard.record_success(_ip)
-    tok = _session.create_session(r, ttl=_AUTH_TTL)
+    # v2.13 Access Controls: gate NON-owner logins against the profile's policy
+    # (temp ban / "See Manager" lock, allowed-hours window) and cap the session
+    # TTL so timed sessions ride the existing expiry mechanism. Credentials were
+    # verified ABOVE, so a lock message here leaks nothing to a guesser -- and
+    # deliberately does not count as an abuse-guard failure.
+    _ttl = _AUTH_TTL
+    if not r.get("is_owner"):
+        import access_policy as _ap
+        _chk = _ap.check_login(r["username"])
+        if not _chk.get("allowed"):
+            raise HTTPException(403, _chk.get("reason") or "access is currently restricted")
+        if _chk.get("ttl_cap"):
+            _ttl = min(_AUTH_TTL, int(_chk["ttl_cap"]))
+    tok = _session.create_session(r, ttl=_ttl)
     resp = JSONResponse({"success": True, "username": r["username"],
                          "is_owner": r["is_owner"]})
     # Session cookie (NO max_age) so it's discarded when the browser/app closes
@@ -3251,6 +3303,12 @@ async def api_auth_users_create(request: Request, payload: dict):
     r = _users.create_user((payload.get("username") or ""), (payload.get("password") or ""))
     if not r.get("success"):
         raise HTTPException(400, r.get("error", "could not create user"))
+    # v2.13: "restricted profile" checkbox -> socials OFF from the very first
+    # sign-in (no window where a child profile could connect a channel before
+    # the owner finds the toggle). Everything else stays at defaults.
+    if payload.get("restricted"):
+        import access_policy as _ap
+        _ap.set_policy(r["username"], {"socials_allowed": False})
     return {"ok": True, "users": _users.list_users()}
 
 
@@ -3280,6 +3338,58 @@ async def api_auth_users_delete(request: Request, payload: dict):
         except Exception as _wipe_err:
             print(f"[USERS] data wipe failed for {target}: {_wipe_err}")
     return {"ok": True, "wiped": wiped, "users": _users.list_users()}
+
+
+# --- v2.13 Access Controls (owner-only): parental / manager restrictions ------
+# One policy engine for both stories: parental controls on the personal tier,
+# "See Manager" access controls on a commercial one. Policy semantics live in
+# access_policy.py; these routes are just the owner's pen.
+
+@app.get("/api/auth/users/access")
+async def api_auth_users_access_get(request: Request, username: str = ""):
+    _require_owner(request)
+    import users as _users
+    import access_policy as _ap
+    target = (username or "").strip()
+    if not target or not _users.user_exists(target):
+        raise HTTPException(404, "no such user")
+    resp = {"username": target, "access": _ap.get_policy(target)}
+    try:
+        import usage_meter as _um
+        resp["used_today_minutes"] = _um.used_today(target) // 60
+    except Exception:
+        resp["used_today_minutes"] = 0
+    return resp
+
+
+@app.post("/api/auth/users/access")
+async def api_auth_users_access_set(request: Request, payload: dict):
+    s = _require_owner(request)
+    import users as _users
+    import session as _session
+    import access_policy as _ap
+    target = (payload.get("username") or "").strip()
+    if not target or not _users.user_exists(target):
+        raise HTTPException(404, "no such user")
+    patch = payload.get("access")
+    if not isinstance(patch, dict):
+        raise HTTPException(400, "access object required")
+    r = _ap.set_policy(target, patch)
+    if not r.get("success"):
+        raise HTTPException(400, r.get("error", "could not update access controls"))
+    pol = r["access"]
+    # v2.13.1: EVERY access-controls save revokes the target's live sessions,
+    # not just locks. Field report (Todd): setting a 5-minute cap on an
+    # already-signed-in profile looked like it "didn't work" -- the old
+    # session carried its old 7-day TTL. Predictability beats politeness
+    # here: save = applies now; the profile just signs in again under the
+    # new rules. (Their drafts/conversations persist server-side per-ns.)
+    _session.destroy_user_sessions(target)
+    if pol.get("locked"):
+        print(f"[ACCESS] {s.get('username')} locked profile '{target}'"
+              + (f" until {pol.get('lock_until')}" if pol.get("lock_until") else ""))
+    return {"ok": True, "username": target, "access": pol,
+            "users": _users.list_users()}
 
 
 @app.middleware("http")
