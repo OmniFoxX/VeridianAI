@@ -15,7 +15,10 @@
   var V = function (name, fb) {
     try {
       var v = getComputedStyle(document.documentElement).getPropertyValue(name);
-      return (v && v.trim()) || fb;
+      // v2.12.2: values are injected into style="..." attributes; a font list
+      // like "Cinzel", "Palatino" contains double quotes that would terminate
+      // the attribute early (logo lost text-align:center + its display font).
+      return String((v && v.trim()) || fb).replace(/"/g, "'");
     } catch (e) { return fb; }
   };
 
@@ -35,6 +38,7 @@
     ov.id = "auth-overlay";
     ov.setAttribute("role", "dialog");
     ov.setAttribute("aria-modal", "true");
+    ov.setAttribute("aria-labelledby", "auth-overlay-title");
     ov.setAttribute("aria-label", needsSetup ? "VeridianAI account setup" : "VeridianAI sign in");
     ov.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;" +
       "align-items:center;justify-content:center;background:" + V("--bg", "#060a14");
@@ -42,10 +46,10 @@
       '<div style="width:min(92vw,380px);padding:32px 28px;border-radius:16px;' +
       'background:' + V("--surface", "#0a1020") + ';border:1px solid ' + V("--border", "#2a3a5a") +
       ';box-shadow:0 20px 60px rgba(0,0,0,0.5)">' +
-      '<div style="font-family:' + V("--font-display", "serif") + ';font-size:22px;' +
-      'letter-spacing:0.04em;text-align:center">' +
+      '<h1 id="auth-overlay-title" style="margin:0 0 12px;font-family:' + V("--font-display", "serif") + ';font-size:42px;line-height:1.05;font-weight:700;' +
+      'letter-spacing:0.04em;text-align:center;color:' + V("--text", "#e2e8f8") + '">' +
       '<span style="color:' + V("--text", "#e2e8f8") + '">Veridian</span>' +
-      '<span style="color:' + V("--gold", "#f0a500") + '">AI</span></div>' +
+      '<span style="color:' + V("--gold", "#f0a500") + '">AI</span></h1>' +
       '<div style="text-align:center;font-size:13px;margin:6px 0 18px;color:' +
       V("--text-muted", "#7890b8") + '">' + subtitle + '</div>' +
       '<input id="auth-username" aria-label="Username" placeholder="Username" autocomplete="username" style="' + inputStyle() + '">' +

@@ -111,7 +111,40 @@
       + '<div style="display:flex;gap:4px;margin-top:2px">'
       + '<input id="cfg-bitchat-host" class="setting-select" type="text" placeholder="host" value="' + esc(b.host || "localhost") + '" style="flex:1">'
       + '<input id="cfg-bitchat-port" class="setting-select" type="number" placeholder="port" value="' + esc(b.port || 8080) + '" style="width:80px"></div>'
-      + '<button class="toolbar-btn" style="margin-top:3px" onclick="socialsSaveBitchat()">Save</button></div>';
+      + '<div style="display:flex;gap:4px;margin-top:3px">'
+      + '<button class="toolbar-btn" onclick="socialsSaveBitchat()">Save</button>'
+      + '<button class="toolbar-btn" onclick="socialsVerifyIdentity()" data-tip="Show Toga\'s and peers\' security fingerprints to verify out-of-band">Verify identity</button></div>'
+      + '<div id="socials-identity" style="margin-top:4px;font-size:11px"></div></div>';
+  }
+
+  async function socialsVerifyIdentity() {
+    var box = $("socials-identity"); if (box) box.innerHTML = "Reading fingerprints…";
+    var d = await jget("/api/socials/identity?channel=bitchat");
+    if (!box) return;
+    if (!d || d.available === false) {
+      box.innerHTML = "<i>BitChat gateway not reachable — connect BitChat first.</i>"; return;
+    }
+    var rows = ['<div style="margin-top:4px;padding:6px;border:1px solid var(--border,#2a3a5a);border-radius:6px">'
+      + '<div><b>' + esc(d.nickname || "Toga") + '</b> (you) — read this aloud to verify:</div>'
+      + '<div style="font-family:monospace;letter-spacing:0.5px;color:var(--gold,#f0a500)">' + esc(d.fingerprint || "(none)") + '</div></div>'];
+    var peers = d.peers || [];
+    if (!peers.length) {
+      rows.push('<div style="margin-top:4px;opacity:0.7">No peers handshaken yet. A peer\'s fingerprint appears once they connect and complete the encrypted handshake.</div>');
+    } else {
+      for (var i = 0; i < peers.length; i++) {
+        var p = peers[i];
+        var fp = p.verified
+          ? '<span style="font-family:monospace;letter-spacing:0.5px">' + esc(p.fingerprint) + '</span>'
+          : '<span style="opacity:0.6">handshake pending — no fingerprint yet</span>';
+        rows.push('<div style="margin-top:3px;padding:5px;border:1px solid var(--border,#2a3a5a);border-radius:6px">'
+          + '<div><b>' + esc(p.nickname || p.peer_id) + '</b> ' + (p.verified
+            ? '<span style="color:var(--ok,#4ade80)">✓ encrypted</span>'
+            : '<span style="opacity:0.6">unverified</span>') + '</div>'
+          + '<div>' + fp + '</div></div>');
+      }
+    }
+    rows.push('<div style="margin-top:4px;opacity:0.7">Verify by comparing a peer\'s block here against what their own BitChat app shows. Matching = genuine; mismatch = possible impostor, do not trust.</div>');
+    box.innerHTML = rows.join("");
   }
 
   async function socialsRefresh() {
@@ -146,6 +179,31 @@
     if (d && d.channels) { _renderChannels(d); toast((d.ok ? (connect ? "Connected " : "Disconnected ") : "Could not reach ") + name); }
     else { toast("Socials error"); }
     socialsFeed();
+    // v2.12.2: the backend piggybacks a protocol-drift check on BitChat
+    // connect. Always-ask: show the exact old -> new diff, owner decides.
+    if (d && d.drift && d.drift.status === "drift") _handleDrift(d.drift);
+  }
+
+  async function _handleDrift(drift) {
+    var ch = drift.changes || {}; var lines = [];
+    for (var k in ch) {
+      lines.push(k.replace(/_/g, " ") + ":\n   ours:      " + ch[k].ours +
+        "\n   upstream:  " + ch[k].upstream);
+    }
+    var ok = await window.oracleConfirm(
+      "BitChat published new protocol constants upstream. Staying on the old " +
+      "values usually means phones and the gateway can no longer see each other.\n\n" +
+      lines.join("\n\n") +
+      "\n\nApply the new values and restart the BitChat gateway?",
+      { title: "BitChat protocol update", okLabel: "Apply & restart" });
+    var d = await jpost("/api/socials/bitchat/drift/apply",
+      ok ? { changes: ch, hash: drift.hash } : { decline: true, hash: drift.hash });
+    if (ok) {
+      toast(d && d.ok ? ("BitChat constants updated" + (d.restarted ? ", gateway restarted" : "")) : "Update failed");
+      socialsRefresh();
+    } else {
+      toast("Kept current values — won't ask again for this upstream change");
+    }
   }
 
   async function socialsSaveDiscord() {
@@ -344,6 +402,7 @@
   window.socialsSend = socialsSend; window.socialsAutoReply = socialsAutoReply; window.socialsFeed = socialsFeed;
   window.socialsSaveDiscord = socialsSaveDiscord; window.socialsSaveBitchat = socialsSaveBitchat; window.socialsClearToken = socialsClearToken;
   window.socialsSaveMastodon = socialsSaveMastodon; window.socialsSaveBluesky = socialsSaveBluesky;
+  window.socialsVerifyIdentity = socialsVerifyIdentity;
   window.socialsSelectThread = socialsSelectThread; window.socialsClearThread = socialsClearThread;
   window.socialsArmDeleteAll = socialsArmDeleteAll; window.socialsDeleteAll = socialsDeleteAll;
 })();

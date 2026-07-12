@@ -77,6 +77,7 @@ def _load_once() -> None:
                         "date": str(rec.get("date", "")),
                         "seconds": float(rec.get("seconds", 0) or 0),
                         "last_tick": 0.0,   # never resurrect a pre-restart gap
+                        "cooldown_until": float(rec.get("cooldown_until", 0) or 0),
                     }
     except Exception:
         pass  # missing/corrupt file = fresh meter; never blocks auth
@@ -86,8 +87,10 @@ def _save(now: float) -> None:
     global _LAST_SAVE
     _LAST_SAVE = now
     p = _store_path()
-    data = {u: {"date": r["date"], "seconds": int(r["seconds"])}
-            for u, r in _MEM.items() if r.get("seconds", 0) >= 1}
+    data = {u: {"date": r["date"], "seconds": int(r["seconds"]),
+                "cooldown_until": int(r.get("cooldown_until", 0) or 0)}
+            for u, r in _MEM.items()
+            if r.get("seconds", 0) >= 1 or r.get("cooldown_until", 0)}
     try:
         tmp = p + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
@@ -104,12 +107,15 @@ def _save(now: float) -> None:
 
 
 def _rec(username: str, now: float) -> dict:
-    """Today's record for the user, rolling over at local midnight."""
+    """Today's record for the user, rolling over at local midnight.
+    cooldown_until is date-INDEPENDENT (a break that spans midnight still
+    holds), so rollover preserves it while seconds reset."""
     u = (username or "").strip().lower()
     r = _MEM.get(u)
     d = _today(now)
     if r is None or r.get("date") != d:
-        r = {"date": d, "seconds": 0.0, "last_tick": 0.0}
+        r = {"date": d, "seconds": 0.0, "last_tick": 0.0,
+             "cooldown_until": float((r or {}).get("cooldown_until", 0) or 0)}
         _MEM[u] = r
     return r
 
@@ -141,6 +147,26 @@ def used_today(username: str, now: float | None = None) -> int:
     with _LOCK:
         _load_once()
         return int(_rec(username, t)["seconds"])
+
+
+def set_cooldown(username: str, until_ts: float) -> None:
+    """Arm the between-sessions break: sign-in denied until `until_ts`.
+    Persisted immediately -- a cooldown that evaporates on backend restart
+    would teach exactly the wrong lesson about restarting things."""
+    with _LOCK:
+        _load_once()
+        now = time.time()
+        _rec(username, now)["cooldown_until"] = float(until_ts)
+        _save(now)
+
+
+def cooldown_until(username: str) -> float:
+    """Epoch seconds until which sign-in is on a break; 0 = no cooldown."""
+    with _LOCK:
+        _load_once()
+        u = (username or "").strip().lower()
+        r = _MEM.get(u)
+        return float(r.get("cooldown_until", 0) or 0) if r else 0.0
 
 
 def reset_today(username: str) -> None:

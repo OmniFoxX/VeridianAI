@@ -47,7 +47,7 @@ class ChannelProfile:
     strip_markdown:  bool = False
     split_long:      bool = True     # chunk long replies instead of truncating
     chunk_separator: str  = "\n---\n"
-    sage_prefix:     str  = "Sage: "
+    sage_prefix:     str  = "Toga: "   # v2.12.0 rebrand (field name is internal)
 
 
 @dataclass
@@ -70,6 +70,12 @@ class SageMessagingAdapter(ABC):
     def __init__(self, config: dict):
         self.config   = dict(config or {})
         self._reply_fn = None          # async fn(text)->str, injected by the router
+        # v2.12.3: outbound-echo hook. The router injects this so that when
+        # Toga replies (auto-reply OR manual send) her message also lands in
+        # the feed buffer the UI reads. Before this, only INBOUND messages
+        # were buffered, so the BitChat sub-UI showed the phone's half of the
+        # conversation but never Toga's. Signature: fn(text, channel).
+        self._echo_fn  = None
         self._ready    = False
         # v2.11.15: adapters record their most recent failure here so the
         # UI can SHOW it. Before this, connect errors only reached the
@@ -102,6 +108,20 @@ class SageMessagingAdapter(ABC):
     # --- reply injection + formatting (provided by base) ---
     def _inject_reply(self, reply_fn) -> None:
         self._reply_fn = reply_fn
+
+    def _inject_echo(self, echo_fn) -> None:
+        """Router hands us a callable(text, channel) that records Toga's own
+        outbound message into the shared feed buffer."""
+        self._echo_fn = echo_fn
+
+    def _echo_outbound(self, text: str, channel: str) -> None:
+        """Best-effort local echo of Toga's reply to the feed. Never raises
+        into the send path — a feed hiccup must not fail a real send."""
+        if self._echo_fn and text:
+            try:
+                self._echo_fn(text, channel)
+            except Exception:
+                pass
 
     def update_config(self, cfg: dict) -> None:
         """Merge fresh settings (e.g. a token entered in the UI) before connect.
@@ -146,6 +166,7 @@ class SageMessagingAdapter(ABC):
             return False
         if not result:
             return False
+        self._echo_outbound(result, message.channel)   # show Toga's half in the feed
         ok_all = True
         for chunk in self._format_for_channel(result):
             if not await self.send(chunk, channel=message.channel):
@@ -157,19 +178,58 @@ class SageMessagingAdapter(ABC):
 # Router — registry, per-adapter poll loops, recent buffer, auto-reply flag
 # ---------------------------------------------------------------------------
 class SageChannelRouter:
-    def __init__(self, reply_fn=None, wake_word: str = "sage", recent_max: int = 60, store=None):
+    # Reserved store key for router-level settings (not a real channel).
+    _ROUTER_KEY = "__router__"
+
+    def __init__(self, reply_fn=None, wake_word: str = "toga", recent_max: int = 60,
+                 store=None, assistant_name: str = None):
         self._reply_fn  = reply_fn
-        self.wake_word  = (wake_word or "sage").strip().lower()
+        self.wake_word  = (wake_word or "toga").strip().lower()
+        # v2.12.3: display name for Toga's own outbound messages in the feed.
+        # Defaults to the wake word title-cased when not supplied.
+        self.assistant_name = (assistant_name or self.wake_word.title() or "Toga").strip()
         self.auto_reply = False                      # opt-in; OFF by default
         self._adapters  = {}                         # name -> adapter
         self._tasks     = {}                         # name -> asyncio.Task
         self._recent    = deque(maxlen=recent_max)
         self._store     = store                       # SocialsConfig (secret-aware) or None
+        # v2.12.3: per-peer auto-reply rate limit (mesh flood / abuse guard).
+        try:
+            from bitchat_guard import RateLimiter
+            self._reply_limiter = RateLimiter()
+        except Exception:
+            self._reply_limiter = None
+        # v2.12.4: auto_reply is now PERSISTED (per-profile, in the socials
+        # store), so it survives a backend restart. Before this it was an
+        # in-memory flag that silently reverted to OFF on every relaunch --
+        # you'd enable "Toga auto-reply", restart for any reason, and Toga
+        # would go quiet again with no clue why.
+        self._restored_from_notice = 0.0   # throttle for the wake-word hint
+        if store is not None:
+            try:
+                saved = store.get(self._ROUTER_KEY)
+                if isinstance(saved, dict) and "auto_reply" in saved:
+                    self.auto_reply = bool(saved["auto_reply"])
+            except Exception:
+                pass
 
     def register(self, adapter: SageMessagingAdapter) -> None:
         adapter._inject_reply(self._reply_fn)
-        self._adapters[adapter.PROFILE.name] = adapter
-        logger.info("[Router] registered: %s", adapter.PROFILE.name)
+        # v2.12.3: wire outbound echo so Toga's own replies show in the feed.
+        _plat = adapter.PROFILE.name
+        adapter._inject_echo(
+            lambda text, channel, _p=_plat: self._remember_outbound(text, channel, _p))
+        self._adapters[_plat] = adapter
+        logger.info("[Router] registered: %s", _plat)
+
+    def _remember_outbound(self, text: str, channel: str, platform: str) -> None:
+        """Append one of Toga's own messages to the feed buffer, so the UI
+        shows both halves of the conversation. sender = the assistant's name
+        so the frontend can style it as 'ours'."""
+        self._recent.append(ChannelMessage(
+            sender=self.assistant_name, channel=channel or "general",
+            content=text or "", timestamp=time.time(),
+            platform=platform, raw={"echo": True, "peer_id": "self"}))
 
     def names(self) -> list:
         return list(self._adapters.keys())
@@ -202,7 +262,14 @@ class SageChannelRouter:
 
     async def send(self, name: str, text: str, channel: str = "general") -> bool:
         a = self._adapters.get(name)
-        return bool(a and await a.send(text, channel=channel))
+        if not a:
+            return False
+        ok = await a.send(text, channel=channel)
+        if ok:
+            # v2.12.3: a manual send from the UI is still Toga's voice — echo
+            # it to the feed too, so the composer's message appears in-thread.
+            self._remember_outbound(text, channel, name)
+        return bool(ok)
 
     async def peers(self, name: str) -> list:
         a = self._adapters.get(name)
@@ -213,8 +280,25 @@ class SageChannelRouter:
         except Exception:
             return []
 
+    async def identity(self, name: str) -> dict:
+        """v2.12.3: identity fingerprints for a channel that supports them
+        (currently BitChat). {} for channels without an identity() method."""
+        a = self._adapters.get(name)
+        if not a or not hasattr(a, "identity"):
+            return {}
+        try:
+            return await a.identity()
+        except Exception:
+            return {}
+
     def set_auto_reply(self, on: bool) -> None:
         self.auto_reply = bool(on)
+        # v2.12.4: persist so it survives a restart.
+        if self._store is not None:
+            try:
+                self._store.set(self._ROUTER_KEY, {"auto_reply": bool(on)})
+            except Exception:
+                pass
 
     def set_config(self, name: str, settings: dict) -> None:
         if self._store is not None:
@@ -283,6 +367,50 @@ class SageChannelRouter:
             "python": sys.executable, "python_version": sys.version.split()[0],
         }
 
+    async def _dispatch_reply(self, adapter, m) -> None:
+        """Run the auto-reply and make FAILURES VISIBLE. Before v2.12.4 a
+        reply that came back empty (e.g. the configured model isn't loaded)
+        or a send that failed just vanished -- the phone got silence and the
+        UI showed nothing, indistinguishable from 'feature off'. Now a failed
+        reply drops a plain notice into the feed so you can see WHY."""
+        try:
+            ok = await adapter.sage_respond(m)
+        except Exception as exc:
+            logger.exception("[Router] reply dispatch error on %s: %s",
+                             adapter.PROFILE.name, exc)
+            self._notice(adapter.PROFILE.name,
+                         f"{self.assistant_name} hit an error replying: "
+                         f"{type(exc).__name__}. See the backend console.")
+            return
+        if not ok:
+            self._notice(adapter.PROFILE.name,
+                         f"{self.assistant_name} couldn't generate a reply — "
+                         "the model returned nothing or the send failed. Check "
+                         "that a model is loaded/selected and try again.")
+
+    def _notice(self, platform: str, text: str) -> None:
+        """Drop a local system notice into the feed (never sent to the mesh)."""
+        self._recent.append(ChannelMessage(
+            sender="system", channel="general", content=text,
+            timestamp=time.time(), platform=platform,
+            raw={"echo": True, "peer_id": "system", "notice": True}))
+
+    def _maybe_wake_hint(self, platform: str) -> None:
+        """Drop a throttled local notice when the wake word is heard but
+        auto-reply is off. At most once per 5 minutes so it never spams."""
+        now = time.time()
+        if now - self._restored_from_notice < 300:
+            return
+        self._restored_from_notice = now
+        self._recent.append(ChannelMessage(
+            sender="system", channel="general",
+            content=(f"Heard the wake word “{self.wake_word}”, but "
+                     f"auto-reply is OFF. Turn on “{self.assistant_name} "
+                     "auto-reply” in Socials settings to have "
+                     f"{self.assistant_name} respond on the mesh."),
+            timestamp=now, platform=platform,
+            raw={"echo": True, "peer_id": "system", "notice": True}))
+
     async def _poll(self, adapter: SageMessagingAdapter) -> None:
         """Buffer every inbound message; only auto-respond when opted in AND the
         wake word is present. Never dies on a transient error."""
@@ -301,9 +429,27 @@ class SageChannelRouter:
                         or (m.sender or "").strip().lower()
                             in ("system", (self.wake_word or "").strip().lower())
                     )
-                    if (self.auto_reply and self._reply_fn and not _is_self
-                            and self.wake_word in (m.content or "").lower()):
-                        asyncio.create_task(adapter.sage_respond(m))
+                    _has_wake = (not _is_self
+                                 and self.wake_word in (m.content or "").lower())
+                    if self.auto_reply and self._reply_fn and _has_wake:
+                        # v2.12.3: throttle per sender so one peer can't flood
+                        # the reply path (and the GPU). Over-limit = silent
+                        # drop; we don't announce the throttle to the sender.
+                        _key = (_raw.get("peer_id") or m.sender or "anon")
+                        if (self._reply_limiter is None
+                                or self._reply_limiter.allow(str(_key))):
+                            logger.info("[Router] wake word matched on %s from %s "
+                                        "-> dispatching reply",
+                                        adapter.PROFILE.name, m.sender)
+                            asyncio.create_task(self._dispatch_reply(adapter, m))
+                        else:
+                            logger.info("[Router] auto-reply rate-limited for %s", _key)
+                    elif _has_wake and not self.auto_reply:
+                        # v2.12.4: the wake word was heard but auto-reply is
+                        # OFF. Silence here is the #1 "why won't Toga answer"
+                        # confusion, so drop ONE throttled hint into the feed
+                        # (local notice, never sent to the mesh).
+                        self._maybe_wake_hint(adapter.PROFILE.name)
             except asyncio.CancelledError:
                 break
             except Exception as exc:
@@ -317,7 +463,7 @@ class SageChannelRouter:
 class DiscordAdapter(SageMessagingAdapter):
     PROFILE = ChannelProfile(
         name="discord", max_chars=2000, strip_markdown=False,
-        split_long=True, sage_prefix="🔮 **Sage:** ",
+        split_long=True, sage_prefix="🔮 **Toga:** ",
     )
 
     def __init__(self, config: dict):
@@ -326,7 +472,7 @@ class DiscordAdapter(SageMessagingAdapter):
         self._task     = None      # v2.11.15: gateway task, observed for errors
         self._token    = self.config.get("token", "")
         self._watched  = self.config.get("watched_channels", [])
-        self._nickname = self.config.get("nickname", "Sage")
+        self._nickname = self.config.get("nickname", "Toga")
         self._inbox    = asyncio.Queue()
 
     def update_config(self, cfg: dict) -> None:
@@ -495,7 +641,7 @@ def _strip_html(s: str) -> str:
 # ---------------------------------------------------------------------------
 class MastodonAdapter(SageMessagingAdapter):
     PROFILE = ChannelProfile(name="mastodon", max_chars=500, strip_markdown=True,
-                             split_long=True, sage_prefix="🔮 Sage: ")
+                             split_long=True, sage_prefix="🔮 Toga: ")
 
     def __init__(self, config: dict):
         super().__init__(config)
@@ -617,7 +763,7 @@ class MastodonAdapter(SageMessagingAdapter):
 # ---------------------------------------------------------------------------
 class BlueSkyAdapter(SageMessagingAdapter):
     PROFILE = ChannelProfile(name="bluesky", max_chars=300, strip_markdown=True,
-                             split_long=True, sage_prefix="🔮 Sage: ")
+                             split_long=True, sage_prefix="🔮 Toga: ")
 
     def __init__(self, config: dict):
         super().__init__(config)

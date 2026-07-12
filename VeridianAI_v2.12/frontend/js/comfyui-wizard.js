@@ -125,7 +125,7 @@ const ComfyUIWizard = (() => {
       <button class="wizard-close"
               onclick="ComfyUIWizard.dismiss()"
               aria-label="Close setup wizard"
-              title="Close">✕</button>
+              data-tip="Close" aria-label="Close">✕</button>
     </div>
 
     <div class="wizard-body">
@@ -174,7 +174,7 @@ const ComfyUIWizard = (() => {
       <div class="setting-group">
         <label class="setting-label"
                for="wiz-install-dir"
-               title="Where to install ComfyUI. Leave blank for the default location.">
+               data-tip="Where to install ComfyUI. Leave blank for the default location.">
           Install location
           <span style="color:var(--text-faint);font-size:0.8em">
             (blank = default)
@@ -402,7 +402,7 @@ const ComfyUIWizard = (() => {
         action = `<button class="wizard-btn-primary" type="button" onclick="ComfyUIWizard._pickModel('${m.key}')">Download</button>`;
       }
       const del = isInstalled
-        ? `<button class="wizard-model-del" type="button" title="Delete this model file to free disk space" onclick="ComfyUIWizard._deleteModel('${m.filename}')">Delete</button>`
+        ? `<button class="wizard-model-del" type="button" data-tip="Delete this model file to free disk space" onclick="ComfyUIWizard._deleteModel('${m.filename}')">Delete</button>`
         : '';
       const tag = isInstalled ? ' <span class="wizard-model-tag">installed</span>' : '';
       return `
@@ -419,7 +419,7 @@ const ComfyUIWizard = (() => {
       const action = isActive
         ? `<span class="wizard-badge headless">✓ Active</span>`
         : `<button class="wizard-btn-secondary" type="button" onclick="ComfyUIWizard._useModel('${f}')">Use this model</button>`;
-      const del = `<button class="wizard-model-del" type="button" title="Delete this model file to free disk space" onclick="ComfyUIWizard._deleteModel('${f}')">Delete</button>`;
+      const del = `<button class="wizard-model-del" type="button" data-tip="Delete this model file to free disk space" onclick="ComfyUIWizard._deleteModel('${f}')">Delete</button>`;
       return `
       <div class="wizard-model-card${isActive ? ' selected' : ''}">
         <div class="wizard-model-name">${f} <span class="wizard-model-tag">installed</span></div>
@@ -433,7 +433,7 @@ const ComfyUIWizard = (() => {
   <div class="comfyui-wizard">
     <div class="wizard-header">
       <h2 class="wizard-title" id="wiz-title">Image Models</h2>
-      <button class="wizard-close" onclick="ComfyUIWizard.dismiss()" aria-label="Close" title="Close">✕</button>
+      <button class="wizard-close" onclick="ComfyUIWizard.dismiss()" aria-label="Close" data-tip="Close" aria-label="Close">✕</button>
     </div>
     <div class="wizard-body">
       <p class="wizard-description">Choose which model to use, or download another. Your choice is remembered. Add your own in <code>models/checkpoints</code>.</p>

@@ -21,4 +21,3 @@ def append_fatigue(duration_sec=30, interval_sec=2):
 
 if __name__ == "__main__":
     append_fatigue()
-|

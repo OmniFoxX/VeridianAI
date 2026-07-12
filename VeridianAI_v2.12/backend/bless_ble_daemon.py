@@ -90,6 +90,24 @@ from bitchat import (  # noqa: E402
     BITCHAT_CHARACTERISTIC_UUID,
 )
 
+# v2.12.2: protocol constants come from bitchat_protocol_constants.json (the
+# drift checker's single source of truth); the vendored bitchat.py literals
+# remain the built-in fallback. Rebinds BOTH our local names and the bitchat
+# module attributes (bitchat.py reads them at call time).
+try:
+    from bitchat_drift import load_constants as _load_pc, \
+        active_service_uuid as _active_svc
+    import bitchat as _bc_mod
+    _pc = _load_pc()
+    BITCHAT_SERVICE_UUID = _active_svc(_pc)
+    BITCHAT_CHARACTERISTIC_UUID = _pc["characteristic_uuid"]
+    _bc_mod.BITCHAT_SERVICE_UUID = BITCHAT_SERVICE_UUID
+    _bc_mod.BITCHAT_CHARACTERISTIC_UUID = BITCHAT_CHARACTERISTIC_UUID
+    print(f"[BitChat-Daemon] protocol constants from JSON "
+          f"({_pc.get('active_network')}): svc={BITCHAT_SERVICE_UUID}")
+except Exception as _pc_err:
+    print(f"[BitChat-Daemon] constants JSON unavailable, using built-ins: {_pc_err}")
+
 from bless import (  # noqa: E402
     BlessServer,
     GATTCharacteristicProperties,
@@ -103,7 +121,19 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [BitChat-Daemon] %(levelname)s %(message)s")
 logger = logging.getLogger("bitchat.daemon")
 
-NICKNAME = "Sage"
+def _configured_nickname() -> str:
+    """v2.12.2: BLE announce name follows the owner's assistant_name (the
+    v2.12.1 socials-reply rename never reached the BLE announce path)."""
+    try:
+        with open(Path(__file__).resolve().parent.parent / "config.json",
+                  encoding="utf-8") as f:
+            return (json.load(f).get("sage", {}).get("assistant_name")
+                    or "Sage").strip() or "Sage"
+    except Exception:
+        return "Sage"
+
+
+NICKNAME = _configured_nickname()
 WS_HOST = os.environ.get("BITCHAT_WS_HOST", "0.0.0.0")
 WS_PORT = int(os.environ.get("BITCHAT_WS_PORT", "8080"))
 

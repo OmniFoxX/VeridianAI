@@ -64,6 +64,10 @@ class SocialsConfig:
         with self._lock:
             out = {}
             for chan, settings in self._data.items():
+                # Reserved router-level keys (e.g. "__router__") are not
+                # channels; keep them out of the per-channel snapshot.
+                if isinstance(chan, str) and chan.startswith("__"):
+                    continue
                 m = {}
                 for k, v in settings.items():
                     if k in _SECRET_KEYS:

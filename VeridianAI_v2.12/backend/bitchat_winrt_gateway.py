@@ -61,6 +61,24 @@ from bitchat import (  # noqa: E402
     BITCHAT_SERVICE_UUID, BITCHAT_CHARACTERISTIC_UUID,
 )
 
+# v2.12.2: protocol constants come from bitchat_protocol_constants.json (the
+# drift checker's single source of truth); the vendored bitchat.py literals
+# remain the built-in fallback. Rebinds BOTH our local names and the bitchat
+# module attributes (bitchat.py reads them at call time).
+try:
+    from bitchat_drift import load_constants as _load_pc, \
+        active_service_uuid as _active_svc
+    import bitchat as _bc_mod
+    _pc = _load_pc()
+    BITCHAT_SERVICE_UUID = _active_svc(_pc)
+    BITCHAT_CHARACTERISTIC_UUID = _pc["characteristic_uuid"]
+    _bc_mod.BITCHAT_SERVICE_UUID = BITCHAT_SERVICE_UUID
+    _bc_mod.BITCHAT_CHARACTERISTIC_UUID = BITCHAT_CHARACTERISTIC_UUID
+    print(f"[BitChat-WinRT] protocol constants from JSON "
+          f"({_pc.get('active_network')}): svc={BITCHAT_SERVICE_UUID}")
+except Exception as _pc_err:
+    print(f"[BitChat-WinRT] constants JSON unavailable, using built-ins: {_pc_err}")
+
 from winrt.windows.devices.bluetooth import BluetoothError  # noqa: E402
 from winrt.windows.devices.bluetooth.genericattributeprofile import (  # noqa: E402
     GattServiceProvider, GattLocalCharacteristicParameters,
@@ -78,9 +96,23 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [BitChat-WinRT] %(levelname)s %(message)s")
 logger = logging.getLogger("bitchat.winrt")
 
-NICKNAME = "Sage"
+def _configured_nickname() -> str:
+    """v2.12.2: BLE announce name follows the owner's assistant_name (the
+    v2.12.1 socials-reply rename never reached the BLE announce path -- this
+    closes that gap). Falls back to 'Sage' on any config trouble."""
+    try:
+        with open(Path(__file__).resolve().parent.parent / "config.json",
+                  encoding="utf-8") as f:
+            return (json.load(f).get("sage", {}).get("assistant_name")
+                    or "Sage").strip() or "Sage"
+    except Exception:
+        return "Sage"
+
+
+NICKNAME = _configured_nickname()
 WS_HOST = os.environ.get("BITCHAT_WS_HOST", "127.0.0.1")
 WS_PORT = int(os.environ.get("BITCHAT_WS_PORT", "8080"))
+_ble_error: Optional[str] = None   # set when peripheral advertising fails
 
 ws_clients: Set[WebSocket] = set()
 ws_nicknames: dict = {}
@@ -355,7 +387,18 @@ async def lifespan(app: FastAPI):
     try:
         await _start_peripheral(transport)
     except Exception as exc:
+        # v2.12.2: don't just log and play healthy -- remember the failure so
+        # /health and /api/info tell the truth. Field case (Todd's machine):
+        # the peripheral-capable Realtek adapter lost its driver, Windows fell
+        # back to a central-only Broadcom, and this error was the ONLY sign
+        # BitChat was down while everything else reported "ready".
+        global _ble_error
+        _ble_error = str(exc)
         logger.error("[BLE] peripheral start failed: %s", exc)
+        logger.error("[BLE] Sage will NOT be discoverable. If this adapter "
+                     "doesn't support the BLE peripheral role, the central-"
+                     "role fallback gateway can still reach phones "
+                     "(tier_lifecycle picks it automatically at next spawn).")
     relay = asyncio.create_task(_inbound_relay_loop())
     ann = asyncio.create_task(_periodic_announce())
     initk = asyncio.create_task(_initiate_pending())
@@ -381,17 +424,62 @@ async def api_info():
         "name": "OracleAI BitChat WinRT Gateway",
         "websocket_url": f"ws://localhost:{WS_PORT}/ws",
         "peers": peers,
-        "status": "ok" if connected else "advertising",
-        "bitchat_ready": True})
+        "status": "ble_failed" if _ble_error else ("ok" if connected else "advertising"),
+        "ble_error": _ble_error,
+        "bitchat_ready": _ble_error is None})
 
 
 @app.get("/health")
 async def health():
     return JSONResponse({
-        "status": "ok",
+        "status": "degraded" if _ble_error else "ok",
+        "ble_error": _ble_error,
         "ble_peers": len(_sage_client.peers) if _sage_client else 0,
         "advertising": bool(_provider),
         "subscribers": _sage_client.client.subscribers if _sage_client else 0})
+
+
+def _fmt_fp(hex_fp: str) -> str:
+    """Group a 64-hex-char SHA-256 fingerprint into readable 4-char blocks --
+    the shape humans actually compare out-of-band. Shortened to the first 32
+    hex (128 bits) which is plenty for eyeball verification."""
+    h = (hex_fp or "").replace(":", "").replace(" ", "").lower()
+    h = h[:32]
+    return " ".join(h[i:i + 4] for i in range(0, len(h), 4))
+
+
+@app.get("/api/identity")
+async def api_identity():
+    """v2.12.3: expose Toga's own identity fingerprint plus each connected
+    peer's, so a human can verify (read the block aloud, compare on the phone)
+    that the peer they're talking to is who they think -- the standard defense
+    against a man-in-the-middle on the mesh. Fingerprints are derived from the
+    Noise X25519 static public keys; nothing secret leaves the gateway."""
+    if not _sage_client:
+        return JSONResponse({"available": False})
+    es = _sage_client.encryption_service
+    try:
+        my_fp = es.get_identity_fingerprint()
+    except Exception:
+        my_fp = ""
+    peers = []
+    for pid, peer in list(_sage_client.peers.items()):
+        try:
+            pfp = es.get_peer_fingerprint(pid)
+        except Exception:
+            pfp = None
+        peers.append({
+            "peer_id": pid,
+            "nickname": getattr(peer, "nickname", None) or pid,
+            "fingerprint": _fmt_fp(pfp) if pfp else None,
+            "verified": bool(pfp),   # a fingerprint exists only post-handshake
+        })
+    return JSONResponse({
+        "available": True,
+        "nickname": NICKNAME,
+        "peer_id": _sage_client.my_peer_id,
+        "fingerprint": _fmt_fp(my_fp),
+        "peers": peers})
 
 
 @app.post("/shutdown")

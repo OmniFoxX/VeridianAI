@@ -14,7 +14,7 @@ overseer_daemon.py and reconstructs a context snapshot from:
   3. vlts_archives/          — [STUB] very long-term storage (Phase 2)
 
 Writes output to:
-  <OracleAI_root>/backend/craiid/reconstructs/
+  <VeridianAI_root>/backend/craiid/reconstructs/
     warm_instance_YYYYMMDD_HHMMSS.json
 
 Returns a status dict to overseer. Never touches the task file —
@@ -66,7 +66,7 @@ from typing import Any, Dict, List, Optional, Tuple
 #   _AUTHOR_DIR   = .../craiid/Author/
 #   _CRAIID_DIR   = .../craiid/
 #   _BACKEND_DIR  = .../backend/
-#   _ROOT_DIR     = .../OracleAI_vXX/   (version-agnostic)
+#   _ROOT_DIR     = .../VeridianAI_vXX/   (version-agnostic)
 
 # Robust self-location (#69 fix): anchor on the 'backend' ancestor rather than a
 # fixed parent-hop count, so paths resolve correctly whether this file lives at

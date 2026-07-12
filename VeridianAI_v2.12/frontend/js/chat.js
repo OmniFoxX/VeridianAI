@@ -1391,7 +1391,7 @@ function oraclePrompt(message, opts) {
       '<div style="font-size:13px;color:var(--text);line-height:1.5;white-space:pre-wrap;margin-bottom:10px">' +
       escapeHtml(message) +
       "</div>" +
-      '<input id="oracle-prompt-input" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid var(--border,#2a3550);background:var(--panel,#0e1730);color:var(--text,#e9edf6);font-size:14px" />' +
+      '<input id="oracle-prompt-input" type="text" autocomplete="off" style="width:100%;box-sizing:border-box;padding:9px;border-radius:8px;border:1px solid var(--border,#2a3550);background:var(--surface-2,#0e1730);color:var(--text,#e9edf6);caret-color:var(--text,#e9edf6);font-size:14px" />' +
       '<div class="modal-actions">' +
       '<button class="modal-btn" id="oracle-prompt-cancel">' +
       escapeHtml(opts.cancelLabel || "Cancel") +

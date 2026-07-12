@@ -417,20 +417,70 @@ def _gateway_python() -> list:
     return _GATEWAY_PY
 
 
+_PERIPH_SUPPORTED: "bool | None" = None
+
+
+def _peripheral_role_supported() -> "bool | None":
+    """Probe whether the CURRENT default Bluetooth adapter supports the BLE
+    peripheral role (WinRT advertising). Cached per process.
+
+    Returns True/False, or None when the probe itself can't run (no winrt in
+    the gateway interpreter, timeout, etc.) -- None keeps today's behavior.
+
+    v2.12.2, field-driven: Todd's peripheral-capable Realtek lost its driver
+    (Code 31 after a Windows update); Windows fell back to a central-only
+    Broadcom BCM20702 and the WinRT gateway started 'healthy' with dead
+    advertising. Probing FIRST lets us pick the central-role gateway that
+    the surviving adapter can actually drive."""
+    global _PERIPH_SUPPORTED
+    if _PERIPH_SUPPORTED is not None:
+        return _PERIPH_SUPPORTED
+    probe = (
+        "import asyncio\n"
+        "from winrt.windows.devices.bluetooth import BluetoothAdapter\n"
+        "a = asyncio.run(BluetoothAdapter.get_default_async())\n"
+        "raise SystemExit(0 if (a and a.is_peripheral_role_supported) else 3)\n"
+    )
+    hidden = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    try:
+        r = subprocess.run(_gateway_python() + ["-c", probe],
+                           capture_output=True, timeout=25,
+                           creationflags=hidden)
+        if r.returncode == 0:
+            _PERIPH_SUPPORTED = True
+        elif r.returncode == 3:
+            _PERIPH_SUPPORTED = False
+        else:
+            return None   # probe crashed: unknown, don't cache
+    except Exception:
+        return None
+    return _PERIPH_SUPPORTED
+
+
 def spawn_bitchat_gateway() -> subprocess.Popen:
     """Spawn the BitChat gateway. Console visibility follows Developer Mode.
 
-    Uses the WinRT peripheral gateway (Sage advertises as a real BLE peer that
-    the phones handshake with) and falls back to the legacy central-role BLE
-    gateway only if the WinRT script is missing. Both expose the identical
-    :8080 WS/HTTP contract, so ensure_/stop_bitchat_gateway are unaffected.
+    Prefers the WinRT peripheral gateway (Sage advertises as a real BLE peer
+    that the phones handshake with). Falls back to the legacy central-role
+    BLE gateway when the WinRT script is missing OR when the adapter simply
+    cannot advertise (peripheral role unsupported) -- a central-only adapter
+    can still SCAN for and connect to phones, which beats being invisible.
+    Both expose the identical :8080 WS/HTTP contract, so ensure_/
+    stop_bitchat_gateway are unaffected.
     Runs under an interpreter that actually has the BLE deps (see
     _gateway_python) — NOT necessarily the app's own Python. This is what lets
     BitChat auto-start from the UI toggle instead of a manual terminal launch."""
     here = pathlib.Path(__file__).parent
     gateway = here / "bitchat_winrt_gateway.py"
+    legacy = here / "bitchat_ble_gateway.py"
     if not gateway.exists():
-        gateway = here / "bitchat_ble_gateway.py"
+        gateway = legacy
+    elif legacy.exists() and _peripheral_role_supported() is False:
+        print("[tier] bitchat: adapter has NO peripheral role -> using "
+              "central-role fallback gateway (Sage scans for phones instead "
+              "of advertising). Fix the peripheral-capable adapter's driver "
+              "to restore the preferred WinRT gateway.")
+        gateway = legacy
     return subprocess.Popen(
         _gateway_python() + [str(gateway)],
         creationflags=_dm_creationflags(),

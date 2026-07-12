@@ -1,0 +1,12 @@
+{
+  "active_network": "mainnet",
+  "service_uuid_mainnet": "f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5c",
+  "service_uuid_testnet": "f47b5e2d-4a9e-4c5a-9b3f-8e1d2c3a4b5a",
+  "characteristic_uuid": "a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d",
+  "upstream": {
+    "tracked_file": "https://raw.githubusercontent.com/permissionlesstech/bitchat/main/bitchat/Services/BLE/BLEService.swift",
+    "last_checked": "2026-07-11T19:03:57",
+    "last_hash": "4a61d9d151bde93f557a32720042fe3b7388d71a8133d90e80b9522d23d92456",
+    "declined_hash": null
+  }
+}

@@ -194,7 +194,7 @@
     title.style.padding = '0.5rem 1rem';
     title.style.borderBottom = '1px solid var(--border, #333)';
     title.style.background = 'var(--bg, #060a14)';
-    title.style.color = 'var(--fg, #fff)';
+    title.style.color = 'var(--text, #fff)';
 
     // v2.1.11 fix: input is a combobox-pattern searchbox. The aria-controls
     // points at the listbox so screen readers announce options as the user
@@ -219,7 +219,7 @@
     input.style.boxSizing = 'border-box';
     input.style.border = 'none';
     input.style.background = 'var(--bg, #060a14)';
-    input.style.color = 'var(--fg, #fff)';
+    input.style.color = 'var(--text, #fff)';
     input.style.fontSize = '1rem';
 
     const listbox = document.createElement('div');
@@ -260,10 +260,10 @@
         .command-palette-option[aria-selected="true"],
         .command-palette-option:hover {
             background: var(--accent, #0066ff);
-            color: var(--fg, #fff);
+            color: var(--text, #fff);
         }
         .command-palette-option[aria-selected="false"] {
-            color: var(--fg, #fff);
+            color: var(--text, #fff);
         }
     `;
     document.head.appendChild(style);
@@ -286,7 +286,7 @@
             empty.id = 'command-palette-option-empty';
             empty.textContent = 'No matches';
             empty.style.padding = '0.5rem 1rem';
-            empty.style.color = 'var(--fg-muted, #888)';
+            empty.style.color = 'var(--text-muted, #888)';
             listbox.appendChild(empty);
             activeIndex = -1;
             input.removeAttribute('aria-activedescendant');

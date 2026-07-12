@@ -84,6 +84,23 @@ except ImportError as _e:
     _BITCHAT_AVAILABLE    = False
     _BITCHAT_IMPORT_ERROR = str(_e)
 
+# v2.12.2: protocol constants come from bitchat_protocol_constants.json (the
+# drift checker's single source of truth); the vendored bitchat.py literals
+# remain the built-in fallback. Overriding the MODULE attributes matters:
+# bitchat.py reads them at call time (scan filter, characteristic match).
+if _BITCHAT_AVAILABLE:
+    try:
+        from bitchat_drift import load_constants as _load_pc, \
+            active_service_uuid as _active_svc
+        import bitchat as _bc_mod
+        _pc = _load_pc()
+        _bc_mod.BITCHAT_SERVICE_UUID = _active_svc(_pc)
+        _bc_mod.BITCHAT_CHARACTERISTIC_UUID = _pc["characteristic_uuid"]
+        print(f"[BitChat-GW] protocol constants from JSON "
+              f"({_pc.get('active_network')}): svc={_bc_mod.BITCHAT_SERVICE_UUID}")
+    except Exception as _pc_err:
+        print(f"[BitChat-GW] constants JSON unavailable, using built-ins: {_pc_err}")
+
 
 # ── FastAPI / uvicorn ──────────────────────────────────────────────────────────
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -105,7 +122,21 @@ ws_nicknames:  dict[WebSocket, str] = {}
 inbound_queue: asyncio.Queue        = asyncio.Queue(maxsize=500)
 
 PEER_ID  = str(uuid.uuid4())[:8]
-NICKNAME = "Sage"
+
+
+def _configured_nickname() -> str:
+    """v2.12.2: BLE announce name follows the owner's assistant_name (the
+    v2.12.1 socials-reply rename never reached the BLE announce path)."""
+    try:
+        with open(Path(__file__).resolve().parent.parent / "config.json",
+                  encoding="utf-8") as f:
+            return (json.load(f).get("sage", {}).get("assistant_name")
+                    or "Sage").strip() or "Sage"
+    except Exception:
+        return "Sage"
+
+
+NICKNAME = _configured_nickname()
 
 # The single shared BitchatClient instance (set at startup)
 _sage_client: Optional["SageBitchatClient"] = None
@@ -291,6 +322,49 @@ async def health():
         "secure_sessions": sessions,
         "bitchat_ready":   _BITCHAT_AVAILABLE,
     })
+
+
+def _fmt_fp(hex_fp: str) -> str:
+    """Group a SHA-256 fingerprint into readable 4-char blocks (first 128
+    bits), matching the WinRT gateway's formatting so the UI is identical
+    whichever gateway is live."""
+    h = (hex_fp or "").replace(":", "").replace(" ", "").lower()[:32]
+    return " ".join(h[i:i + 4] for i in range(0, len(h), 4))
+
+
+@app.get("/api/identity")
+async def api_identity():
+    """v2.12.3: identity fingerprints for out-of-band verification. Parity
+    with the WinRT gateway -- WITHOUT this, the central-role fallback (the
+    gateway that runs when the adapter can't advertise) returned 404 and the
+    UI's Verify button just showed 'none'. Public mesh chat needs no Noise
+    handshake, so peer fingerprints only appear once an ENCRYPTED session
+    exists; Toga's own fingerprint always shows."""
+    if not _sage_client:
+        return JSONResponse({"available": False})
+    es = _sage_client.encryption_service
+    try:
+        my_fp = es.get_identity_fingerprint()
+    except Exception:
+        my_fp = ""
+    peers = []
+    for pid, peer in list(getattr(_sage_client, "peers", {}).items()):
+        try:
+            pfp = es.get_peer_fingerprint(pid)
+        except Exception:
+            pfp = None
+        peers.append({
+            "peer_id": pid,
+            "nickname": getattr(peer, "nickname", None) or pid,
+            "fingerprint": _fmt_fp(pfp) if pfp else None,
+            "verified": bool(pfp),
+        })
+    return JSONResponse({
+        "available": True,
+        "nickname": NICKNAME,
+        "peer_id": getattr(_sage_client, "my_peer_id", PEER_ID),
+        "fingerprint": _fmt_fp(my_fp),
+        "peers": peers})
 
 
 @app.post("/shutdown")

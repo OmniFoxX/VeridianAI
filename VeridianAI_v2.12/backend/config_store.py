@@ -147,6 +147,13 @@ class InferenceSection:
     vulkan_enabled: bool = True
     openvino_enabled: bool = True
     xe_cores_enabled: bool = True
+    # v2.12.2 scaling: aging-fair request scheduler (request_scheduler.py).
+    # aging_rate 0.05 == 40s provable max-wait ceiling ((3-1)/rate) — the
+    # value the starvation sim validated (observed 22s max under sustained
+    # over-capacity). queue_limit 24 ~= 3x the ~8-concurrent latency knee.
+    scheduler_enabled: bool = True
+    scheduler_aging_rate: float = 0.05
+    scheduler_queue_limit: int = 24
     npu_enabled: bool = True
     n_gpu_layers: int = -1
     temperature: float = 0.5
@@ -381,6 +388,10 @@ class OracleConfig:
             "max_images_per_turn": self.inference.max_images_per_turn,
             "build_battle_rounds": self.inference.build_battle_rounds,
             "auto_route":         self.inference.auto_route,
+            # v2.12.2 aging-fair scheduler knobs
+            "scheduler_enabled":  self.inference.scheduler_enabled,
+            "scheduler_aging_rate": self.inference.scheduler_aging_rate,
+            "scheduler_queue_limit": self.inference.scheduler_queue_limit,
             "gpu_acceleration":   self.inference.gpu_acceleration,
             # v2.11.12 hardware-acceleration toggles (see InferenceSection)
             "cuda_enabled":       self.inference.cuda_enabled,
@@ -494,6 +505,18 @@ class OracleConfig:
         cfg.inference.max_images_per_turn = int(_g("max_images_per_turn", cfg.inference.max_images_per_turn))
         cfg.inference.build_battle_rounds = int(_g("build_battle_rounds", cfg.inference.build_battle_rounds))
         cfg.inference.auto_route       = bool(_g("auto_route", cfg.inference.auto_route))
+        # v2.12.2 aging-fair scheduler knobs
+        cfg.inference.scheduler_enabled = bool(_g("scheduler_enabled", cfg.inference.scheduler_enabled))
+        try:
+            cfg.inference.scheduler_aging_rate = max(
+                0.001, float(_g("scheduler_aging_rate", cfg.inference.scheduler_aging_rate)))
+        except (TypeError, ValueError):
+            pass
+        try:
+            cfg.inference.scheduler_queue_limit = max(
+                1, int(_g("scheduler_queue_limit", cfg.inference.scheduler_queue_limit)))
+        except (TypeError, ValueError):
+            pass
         cfg.inference.gpu_acceleration = bool(_g("gpu_acceleration", cfg.inference.gpu_acceleration))
         # v2.11.12 hardware-acceleration toggles
         cfg.inference.cuda_enabled     = bool(_g("cuda_enabled", cfg.inference.cuda_enabled))

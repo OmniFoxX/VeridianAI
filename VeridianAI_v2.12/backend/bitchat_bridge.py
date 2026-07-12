@@ -33,6 +33,20 @@ except Exception:                       # aiohttp optional — adapter degrades 
 logger = logging.getLogger("sage.bitchat")
 
 
+def _default_assistant_name() -> str:
+    """v2.12.1: the owner's configured assistant name (default 'Toga'),
+    read fresh from config.json so the BitChat mesh handle tracks a rename.
+    Best-effort — any failure falls back to 'Toga'."""
+    try:
+        from config_store import OracleConfig
+        from config import PROJECT_DIR
+        name = str(OracleConfig.load(PROJECT_DIR / "config.json")
+                   .sage.assistant_name or "").strip()
+        return name or "Toga"
+    except Exception:
+        return "Toga"
+
+
 class BitChatConnectionError(Exception):
     pass
 
@@ -53,7 +67,10 @@ class BitChatBridge(SageMessagingAdapter):
         super().__init__(config)
         self._host      = self.config.get("host", "localhost")
         self._port      = int(self.config.get("port", 8080))
-        self._nickname  = self.config.get("nickname", "Sage")
+        # v2.12.1: the BitChat mesh handle follows the configured assistant
+        # name (default "Toga"), so peers on phones see the right sender. An
+        # explicit "nickname" in the channel config still wins if set.
+        self._nickname  = self.config.get("nickname") or _default_assistant_name()
         self._session   = None
         self._ws        = None
         self._connected = False
@@ -65,7 +82,9 @@ class BitChatBridge(SageMessagingAdapter):
         self.config.update(cfg)
         self._host     = cfg.get("host", self._host)
         self._port     = int(cfg.get("port", self._port))
-        self._nickname = cfg.get("nickname", self._nickname)
+        # v2.12.1: honor an explicit nickname; otherwise re-resolve from the
+        # current assistant name so a rename propagates to the mesh handle.
+        self._nickname = cfg.get("nickname") or _default_assistant_name()
 
     # --- availability ---
     def available(self) -> bool:
@@ -87,6 +106,25 @@ class BitChatBridge(SageMessagingAdapter):
     @property
     def _base_url(self) -> str:
         return f"http://{self._host}:{self._port}"
+
+    async def identity(self) -> dict:
+        """v2.12.3: fetch Toga's + peers' Noise fingerprints from the gateway
+        for out-of-band verification. Best-effort: returns {} when the gateway
+        is unreachable or too old to expose /api/identity."""
+        if aiohttp is None:
+            return {}
+        try:
+            await self._ensure_session()
+            async with self._session.get(
+                f"{self._base_url}/api/identity",
+                timeout=aiohttp.ClientTimeout(total=4)
+            ) as resp:
+                if resp.status != 200:
+                    return {}
+                return await resp.json()
+        except Exception as exc:
+            logger.debug("[BitChat] identity fetch failed: %s", exc)
+            return {}
 
     async def _ensure_session(self) -> None:
         if self._session is None or self._session.closed:
@@ -196,6 +234,7 @@ class BitChatBridge(SageMessagingAdapter):
             return False
         if not result:
             return False
+        self._echo_outbound(result, message.channel)   # show Toga's half in the feed
 
         raw       = getattr(message, "raw", None) or {}
         is_private = bool(raw.get("private"))

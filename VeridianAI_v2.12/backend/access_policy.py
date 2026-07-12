@@ -24,6 +24,15 @@ RECORD (all keys optional; defaults = unrestricted)
                             login (remaining budget also caps the session TTL)
                             and mid-session (budget exhaustion ends the
                             session on the next heartbeat).
+    cooldown_minutes: int   0 = none, else 1..1440. Mandatory BREAK after a
+                            timed session: when a session_minutes-capped
+                            session is granted, the next sign-in unlocks at
+                            (grant + granted_ttl + cooldown). Field-requested
+                            (Todd, v2.13.1 testing): "5-minute session, then
+                            an hour before they can come back." Ignored when
+                            session_minutes is 0 -- a break needs a session
+                            end to break FROM. The deadline lives in
+                            usage_meter (survives restarts AND midnight).
     allowed_hours   : str   "" = anytime, else "HH:MM-HH:MM" local time.
                             Overnight windows ("20:00-06:00") are supported.
                             Enforced at login; when inside the window the
@@ -57,6 +66,7 @@ from typing import Optional, Tuple
 DEFAULTS = {
     "session_minutes": 0,
     "daily_minutes": 0,
+    "cooldown_minutes": 0,
     "allowed_hours": "",
     "locked": False,
     "lock_reason": "",
@@ -121,7 +131,7 @@ def validate_patch(patch: dict) -> Tuple[dict, Optional[str]]:
     for k, v in patch.items():
         if k not in DEFAULTS:
             continue  # unknown keys are dropped, never stored
-        if k in ("session_minutes", "daily_minutes"):
+        if k in ("session_minutes", "daily_minutes", "cooldown_minutes"):
             try:
                 m = int(v)
             except (TypeError, ValueError):
@@ -233,6 +243,17 @@ def check_login(username: str, now: Optional[float] = None) -> dict:
                     "%b %d, %H:%M", time.localtime(int(until))) + ")"
             return {"allowed": False, "reason": reason}
 
+    # --- between-sessions cooldown -------------------------------------------
+    # Checked only while the policy HAS a cooldown, so an owner clearing the
+    # field instantly forgives any armed break.
+    if pol["cooldown_minutes"] and pol["session_minutes"]:
+        import usage_meter
+        cu = usage_meter.cooldown_until(username)
+        if t < cu:
+            return {"allowed": False,
+                    "reason": "Time for a break. Next sign-in at "
+                              + time.strftime("%H:%M", time.localtime(cu)) + "."}
+
     ttl_cap: Optional[int] = None
 
     # --- allowed hours -------------------------------------------------------
@@ -263,6 +284,38 @@ def check_login(username: str, now: Optional[float] = None) -> dict:
         ttl_cap = remaining if ttl_cap is None else min(ttl_cap, remaining)
 
     return {"allowed": True, "ttl_cap": ttl_cap}
+
+
+def note_login(username: str, granted_ttl: int, now: Optional[float] = None) -> None:
+    """Called by the login route AFTER a session is granted. Arms the
+    between-sessions cooldown: next sign-in at session-end + cooldown.
+    Counted from the scheduled end (grant + ttl) even if the user leaves
+    early -- predictable for the parent, never punitive for the kid."""
+    try:
+        pol = get_policy(username)
+        if not (pol["cooldown_minutes"] and pol["session_minutes"]):
+            return
+        t = time.time() if now is None else now
+        import usage_meter
+        usage_meter.set_cooldown(
+            username, t + int(granted_ttl) + int(pol["cooldown_minutes"]) * 60)
+    except Exception as exc:
+        print(f"[ACCESS] cooldown arm failed for {username}: {exc}")
+
+
+def remaining_today(username: str, now: Optional[float] = None) -> Optional[int]:
+    """Seconds left in today's daily budget; None when the profile has no
+    daily cap. Read-only (no heartbeat charge) -- feeds the soft-warning
+    countdown in /api/auth/status."""
+    try:
+        pol = get_policy(username)
+        if not pol["daily_minutes"]:
+            return None
+        import usage_meter
+        return max(0, int(pol["daily_minutes"]) * 60
+                   - usage_meter.used_today(username, now=now))
+    except Exception:
+        return None
 
 
 def tick_usage(username: str, now: Optional[float] = None) -> bool:

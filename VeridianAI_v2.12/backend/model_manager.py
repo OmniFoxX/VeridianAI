@@ -640,6 +640,26 @@ class ModelManager:
         FIFO within each level (arrival sequence breaks ties), local always
         outranks remote, and a RUNNING generation is never preempted —
         priority only reorders who goes NEXT."""
+        # v2.12.2: aging-fair gate (request_scheduler.AsyncAgingGate) is the
+        # default. scheduler_enabled=False falls back to the strict
+        # _PriorityGate above (kept as the escape hatch, not deleted).
+        cfg = self.config if isinstance(self.config, dict) else {}
+        if bool(cfg.get("scheduler_enabled", True)):
+            import request_scheduler
+            gate = self._gen_locks.get(base_url)
+            if gate is None or not isinstance(gate, request_scheduler.AsyncAgingGate):
+                try:
+                    _rate = max(0.001, float(cfg.get("scheduler_aging_rate", 0.05) or 0.05))
+                except (TypeError, ValueError):
+                    _rate = 0.05
+                try:
+                    _limit = max(1, int(cfg.get("scheduler_queue_limit", 24) or 24))
+                except (TypeError, ValueError):
+                    _limit = 24
+                gate = request_scheduler.AsyncAgingGate(aging_rate=_rate,
+                                                        queue_limit=_limit)
+                self._gen_locks[base_url] = gate
+            return gate
         gate = self._gen_locks.get(base_url)
         if gate is None or not isinstance(gate, _PriorityGate):
             gate = _PriorityGate()
@@ -703,7 +723,32 @@ class ModelManager:
             _prio = PRIORITY_LOCAL_NORMAL
         _prio = max(PRIORITY_LOCAL_URGENT, min(PRIORITY_REMOTE_NORMAL, _prio))
         _gate = self._gen_lock_for(base_url)
-        await _gate.acquire(_prio)
+        # v2.12.2: aging-fair scheduling. _priority still authorizes URGENCY
+        # (0/2 = urgent, granted server-side only), but ORDER among normal
+        # waiters is now the aging score, so peers age up instead of starving
+        # behind an endless local stream. Tier comes from the same server-set
+        # seam: ws-chat = hyperlocal, node endpoints set _tier explicitly.
+        import request_scheduler as _rs
+        if isinstance(_gate, _rs.AsyncAgingGate):
+            if _prio in (PRIORITY_LOCAL_URGENT, PRIORITY_LOCAL_NORMAL):
+                _tier = "hyperlocal"
+            else:
+                _tier = str(options.get("_tier") or "remote")
+            _urgent = _prio in (PRIORITY_LOCAL_URGENT, PRIORITY_REMOTE_URGENT)
+            _adm = _gate.should_admit(_tier, urgent=_urgent)
+            if not _adm["admit"]:
+                # Same bracketed-error convention as the rest of this file:
+                # main._is_gen_error() recognizes it, so the node path tries
+                # its next candidate model/tier and local users get a clear,
+                # non-fatal message instead of an unbounded queue.
+                yield ("[Error: busy — " + _adm["reason"] + ". "
+                       + ("Try a lighter model or retry shortly."
+                          if _adm["suggest_downshift"] else "Please retry shortly.") + "]")
+                return
+            await _gate.acquire(_tier, urgent=_urgent,
+                                ident=str(options.get("_ident") or ""))
+        else:
+            await _gate.acquire(_prio)
         try:
             async for token in gen:
                 if self._abort:
