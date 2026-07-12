@@ -11,11 +11,11 @@ deserve real scrutiny.
 This is an actively developed, single-maintainer project. Only the latest
 release receives security fixes.
 
-| Version         | Supported           |
-| ----------------|---------------------|
-| v2.13+ (future+)| ✅ release+        |
-| v2.12 (current) | ✅ release         |
-| v2.11.11        | ❌                 |
+| Version          | Supported   |
+| ---------------- | ----------- |
+| v2.13+ (future+) | ✅ release+ |
+| v2.12 (current)  | ✅ release  |
+| v2.11.11         | ❌          |
 
 ## Scope
 
@@ -23,32 +23,29 @@ The following components handle untrusted or network-facing input and are
 considered in-scope for security reports:
 
 - **Aether Network**-**Experimental** — Opt-in peer mesh network (with
- optional WAN relay). Loud warnings exist by design; any bypass of those
- warnings or the opt-in gate is a valid report.
- 
+  optional WAN relay). Includes the skill-share HTTP surface (skill_api.py),
+  which can relay requests through peer-supplied or relay-supplied URLs —
+  validated against SSRF as of 07/11/26.
+
 - **MCP server** (HTTP + stdio) — Exposes Toga as a tool to external clients
-(e.g. VS Code, Continue.dev). /metrics and /health are intended for
-localhost-only access (127.0.0.1/::1); any exposure beyond loopback is a
-valid report.
-  
+  (e.g. VS Code, Continue.dev). /metrics and /health are intended for
+  localhost-only access (127.0.0.1/::1); any exposure beyond loopback is a
+  valid report.
 - **BitChat BLE gateway** (`bitchat_ble_gateway.py`, localhost:8080) — Bridges
- BLE peer messages into Toga. Malformed or malicious BLE payloads causing crashes,
- memory issues, or fragmentation exploits are in scope. BitChat peer identity
- verification—flaws allowing spoofed fingerprints (16-block SHA-256) or bypass
- of manual verification step—are also in-scope.
-  
+  BLE peer messages into Toga. Malformed or malicious BLE payloads causing crashes,
+  memory issues, or fragmentation exploits are in scope. BitChat peer identity
+  verification—flaws allowing spoofed fingerprints (16-block SHA-256) or bypass
+  of manual verification step—are also in-scope.
 - **ComfyUI integration** — Runs with security mitigations in place; gaps in
   those mitigations are in scope.
-  
 - **Fernet encryption / hash-chain log** -any flaw that weakens integrity or
- confidentiality guarantees of stored data or the audit log is in scope. (Note:
- Fernet provides AES-128-CBC+HMAC confidentiality; the hash-chain log provides
- tamper evidence for integrity.)
-  
+  confidentiality guarantees of stored data or the audit log is in scope. (Note:
+  Fernet provides AES-128-CBC+HMAC confidentiality; the hash-chain log provides
+  tamper evidence for integrity.)
 - **Dependency vulnerabilities** (Dependabot alerts) — see triage note below.
 
-- *Out of scope* - Issues requiring physical access to an already-compromised
-machine, or social engineering.
+- _Out of scope_ - Issues requiring physical access to an already-compromised
+  machine, or social engineering.
 
 ## Reporting a Vulnerability
 
@@ -58,9 +55,10 @@ Instead:
 
 1. Use GitHub's **private vulnerability reporting** feature on this repo
    (Security tab → "Report a vulnerability"), **or**
-2. Email: "Todd"  @  "silverfox4816@gmail.com"  Re:  "VeridianAI Security Inquiry"
+2. Email: "Todd" @ "silverfox4816@gmail.com" Re: "VeridianAI Security Inquiry"
 
 Include:
+
 - A description of the vulnerability and its potential impact.
 - Steps to reproduce (a minimal repro is hugely appreciated).
 - Affected version(s).
