@@ -36,9 +36,9 @@ considered in-scope for security reports:
   
 - **BitChat BLE gateway** (`bitchat_ble_gateway.py`, localhost:8080) — Bridges
   BLE peer messages into Toga. Malformed or malicious BLE payloads causing
-  crashes, memory issues, or fragmentation exploits are in scope. itChat peer
+  crashes, memory issues, or fragmentation exploits are in scope. BitChat peer
   identity verification — flaws allowing spoofed fingerprints (16-block SHA-256)
-  or bypass of manual verification step are in-scope. Why: This is BitChat’s 
+  or bypass of manual verification step are in-scope - this is BitChat’s 
   actual security layer—we spent time today ensuring per-peer trust survives ID 
   rotations via Noise static pubkey hashes. Calling it out directs effort where
   it counts.
