@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "5733810bd29f47baa8993ca226340c55",
-    "built_utc": "2026-07-12T21:24:02.171051+00:00",
+    "build_id": "0134ae9567dd4a1e9d94ac2fbb8f2d90",
+    "built_utc": "2026-07-12T21:48:53.065464+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -201,5 +201,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "YEbi8GMj+x/1rIQ4sSZitqa+l/4p1w0Ij/GAXiPZUzWISIlNHqlBUnxf6xgHMgxh7jKRJZGRUX1Mp2MDImBTDg=="
+  "signature_b64": "YaKy9ysUXXYO1W2mJ7wejxokdZ5Z2n4hdwsLJ9C+Pm6/G6Jo69/Am6SR2m5DH8Oi9UIurjwDiVxeWbufVLsFBw=="
 }

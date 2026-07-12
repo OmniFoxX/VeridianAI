@@ -22,21 +22,42 @@ release receives security fixes.
 The following components handle untrusted or network-facing input and are
 considered in-scope for security reports:
 
-- **Aether Network** — opt-in, gated internet gateway. Loud warnings exist by
-  design; any bypass of those warnings or the opt-in gate is a valid report.
+- **Aether Network** — opt-in peer mesh network (with optional WAN relay),
+ Aether is fundamentally a P2P mesh—it only becomes an "internet gateway" 
+ if a node opts into relaying. The threat model differs slightly (mesh
+ routing vs. direct egress) Loud warnings exist by design; any bypass of
+ those warnings or the opt-in gate is a valid report.
+ 
 - **MCP server** (HTTP + stdio) — exposes Toga as a tool to external clients
   (e.g. VS Code, Continue.dev). `/metrics` and `/health` are intended for
-  localhost-only access; any exposure beyond localhost is a valid report.
-- **BitChat BLE gateway** (`bitchat_ble_gateway.py`, localhost:8080) — bridges
+  localhost-only loopback access only; any exposure beyond 127.0.0.1/::1 is 
+  a valid report." Why: We saw in logs that accidental 0.0.0.0 binding was a
+  past risk—this makes the localhost intent unmistakable for testers.
+  
+- **BitChat BLE gateway** (`bitchat_ble_gateway.py`, localhost:8080) — Bridges
   BLE peer messages into Toga. Malformed or malicious BLE payloads causing
-  crashes, memory issues, or fragmentation exploits are in scope.
-- **ComfyUI integration** — runs with security mitigations in place; gaps in
+  crashes, memory issues, or fragmentation exploits are in scope. itChat peer
+  identity verification — flaws allowing spoofed fingerprints (16-block SHA-256)
+  or bypass of manual verification step are in-scope. Why: This is BitChat’s 
+  actual security layer—we spent time today ensuring per-peer trust survives ID 
+  rotations via Noise static pubkey hashes. Calling it out directs effort where
+  it counts.
+  
+- **ComfyUI integration** — Runs with security mitigations in place; gaps in
   those mitigations are in scope.
-- **Fernet encryption / hash-chain log** — any flaw that weakens integrity or
-  confidentiality guarantees of stored data or the audit log.
-- **Dependency vulnerabilities** (Dependabot alerts) — see triage note below.
+  
+- **Fernet encryption / hash-chain log** -Fernet encryption 
+  (confidentiality of stored data) and hash-chain audit log 
+  (tamper evidence/integrity). Technically distinct guarantees—AES-128-CBC+HMAC 
+  for confidentiality vs. Merkle-tree style chaining for integrity—but current 
+  phrasing isn’t wrong, just slightly vague — any flaw that weakens integrity or
+  confidentiality guarantees of stored data or the audit log is in scope.
+  
+- **Dependency vulnerabilities** (Dependabot alerts) — Many Dependabot alerts
+ affect Electron’s build tooling only; triage confirms whether the vulnerable
+ code path is reachable in VeridianAI’s runtime execution.
 
-Out of scope: issues requiring physical access to an already-compromised
+- **Out of scope** - Issues requiring physical access to an already-compromised
 machine, or social engineering.
 
 ## Reporting a Vulnerability
