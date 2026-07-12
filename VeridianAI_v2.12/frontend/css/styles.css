@@ -129,10 +129,17 @@
   --border-hi: rgba(138, 85, 0, 0.35);
 
   --text: #1e180e;
-  --text-muted: #5a4d3e;
+  /* v2.12.7 WCAG 2.2 AA: darkened so muted text clears 4.5:1 on both --bg
+     (4.64:1) and --surface (4.99:1) in the parchment theme. */
+  --text-muted: #403528;
   --text-faint: #857562;
 
-  --gold: #7a4800;
+  /* v2.12.7 WCAG: --gold does double duty (accent TEXT + button background).
+     On parchment it must be dark enough to read as text on the light surface,
+     so it clears 4.5:1 on --bg (4.58:1) and --surface (4.92:1). The few gold
+     BUTTONS flip to cream ink in the light-theme overrides below so they still
+     pass. (Dark theme keeps bright gold — see :root.) */
+  --gold: #523000;
   --gold-dim: #5e3600;
   --gold-glow: rgba(138, 85, 0, 0.12);
   --gold-glow2: rgba(138, 85, 0, 0.05);
@@ -141,7 +148,8 @@
   --teal-dim: #0a4a44;
   --teal-glow: rgba(20, 102, 95, 0.1);
 
-  --error: #8c2020;
+  /* v2.12.7 WCAG: 5.02:1 on --surface, 4.67:1 on --bg */
+  --error: #6e1010;
   --success: #1e5c36;
   --warning: #a07018;
 }
@@ -199,6 +207,17 @@
 [data-theme="light"] .message-bubble pre {
   background: rgba(148, 142, 133, 0.9);
   border-color: rgba(120, 100, 72, 0.25);
+}
+
+/* v2.12.7 WCAG 2.2 AA: on parchment, --gold is a dark amber (so it reads as
+   accent TEXT). The few gold-BACKGROUND buttons therefore need cream ink
+   instead of the dark ink they use on the dark theme, or it's dark-on-dark.
+   #f5efe0 on #523000 = 9.5:1. Decorative gold (slider thumb, toggle dot) has
+   no text, so it's untouched. */
+[data-theme="light"] .action-btn:hover,
+[data-theme="light"] .modal-btn.primary,
+[data-theme="light"] .modal-btn.primary:hover {
+  color: #f5efe0;
 }
 
 /* ── Reset ----------------------------------------------------- */
@@ -1147,7 +1166,12 @@ body::after {
   border-radius: 4px;
   color: var(--text-muted);
   font-size: 11px;
+  /* v2.12.7 WCAG 2.2 SC 2.5.8: 24px minimum target. */
   padding: 2px 9px;
+  min-height: 24px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
   cursor: pointer;
   font-family: var(--font-body);
   opacity: 0;
@@ -1715,7 +1739,12 @@ pre:hover .copy-btn {
   cursor: pointer;
   border: none;
   background: none;
+  /* v2.12.7 WCAG 2.2 SC 2.5.8: 24px minimum target. */
   padding: 2px 6px;
+  min-height: 24px;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
 }
 .scoreboard-clear:hover {
   color: var(--error);
@@ -1814,7 +1843,10 @@ pre:hover .copy-btn {
   flex-wrap: wrap;
 }
 .toolbar-btn {
+  /* v2.12.7 WCAG 2.2 SC 2.5.8: 24px minimum target height. */
   padding: 3px 10px;
+  min-height: 24px;
+  box-sizing: border-box;
   background: var(--surface-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);

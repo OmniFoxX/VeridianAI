@@ -361,6 +361,67 @@ async def _initiate_pending():
                 logger.warning("[GW] initiate handshake failed for %s: %s", pid, exc)
 
 
+async def _advertising_watchdog():
+    """v2.12.6: keep Toga DISCOVERABLE while phones are connected.
+
+    Field observation (Todd, 2 iPhones + S22): the first phone to connect
+    got exclusive access -- everyone else stopped seeing Toga until a
+    gateway restart, which then flipped exclusivity to whoever connected
+    next. Root cause: many BLE adapters PAUSE advertising while a central
+    connection is active, and Windows does not always resume it. This
+    watchdog polls the advertisement status and re-asserts advertising so
+    additional phones can still discover and connect (true mesh behaviour).
+    If the adapter genuinely cannot advertise during a connection, the log
+    says so explicitly instead of leaving a silent one-phone limit."""
+    global _ble_error
+    _last_status = None
+    _fail_streak = 0
+    while True:
+        await asyncio.sleep(10)
+        if not _provider:
+            continue
+        try:
+            status = int(_provider.advertisement_status)
+        except Exception:
+            continue
+        if status != _last_status:
+            logger.info("[BLE] advertisement status -> %s (2=Started)", status)
+            _last_status = status
+        if status == 2:                       # advertising fine
+            _fail_streak = 0
+            continue
+        # Not advertising. Try to re-assert (stop is best-effort; a provider
+        # that was never started tolerates it).
+        try:
+            try:
+                _provider.stop_advertising()
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+            adv = GattServiceProviderAdvertisingParameters()
+            adv.is_connectable = True
+            adv.is_discoverable = True
+            _provider.start_advertising_with_parameters(adv)
+            await asyncio.sleep(1.5)
+            new_status = int(_provider.advertisement_status)
+            if new_status == 2:
+                logger.info("[BLE] watchdog RESTARTED advertising -- Toga is "
+                            "discoverable again (subscribers: %s)",
+                            _sage_client.client.subscribers if _sage_client else "?")
+                _fail_streak = 0
+            else:
+                _fail_streak += 1
+                logger.warning("[BLE] watchdog could not restart advertising "
+                               "(status=%s, attempt %d)", new_status, _fail_streak)
+                if _fail_streak == 3:
+                    logger.error("[BLE] adapter appears UNABLE to advertise while "
+                                 "a central is connected -- that means ONE phone "
+                                 "at a time. A dongle with concurrent-advertising "
+                                 "support (or a second dongle) lifts the limit.")
+        except Exception as exc:
+            logger.warning("[BLE] watchdog error: %s", exc)
+
+
 async def _periodic_announce():
     last = 0
     while True:
@@ -402,9 +463,10 @@ async def lifespan(app: FastAPI):
     relay = asyncio.create_task(_inbound_relay_loop())
     ann = asyncio.create_task(_periodic_announce())
     initk = asyncio.create_task(_initiate_pending())
+    advw = asyncio.create_task(_advertising_watchdog())
     logger.info("[GW] ready - WS on ws://%s:%d/ws", WS_HOST, WS_PORT)
     yield
-    for t in (relay, ann, initk):
+    for t in (relay, ann, initk, advw):
         t.cancel()
     try:
         if _provider:
@@ -436,15 +498,18 @@ async def health():
         "ble_error": _ble_error,
         "ble_peers": len(_sage_client.peers) if _sage_client else 0,
         "advertising": bool(_provider),
+        "advertisement_status": (int(_provider.advertisement_status)
+                                 if _provider else None),
         "subscribers": _sage_client.client.subscribers if _sage_client else 0})
 
 
 def _fmt_fp(hex_fp: str) -> str:
     """Group a 64-hex-char SHA-256 fingerprint into readable 4-char blocks --
-    the shape humans actually compare out-of-band. Shortened to the first 32
-    hex (128 bits) which is plenty for eyeball verification."""
+    the shape humans actually compare out-of-band. v2.12.5: show ALL 64 hex
+    (16 blocks). The phone's BitChat app displays the full fingerprint; our
+    old 32-hex cut meant the two sides could never be compared block-by-block
+    ("16 groups on the phone, 8 in the app")."""
     h = (hex_fp or "").replace(":", "").replace(" ", "").lower()
-    h = h[:32]
     return " ".join(h[i:i + 4] for i in range(0, len(h), 4))
 
 

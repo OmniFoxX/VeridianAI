@@ -61,8 +61,13 @@
       '<div id="auth-error" role="alert" style="min-height:16px;margin:4px 2px;font-size:12px;color:' +
       V("--error", "#ff6b6b") + '"></div>' +
       '<button id="auth-submit" style="width:100%;padding:11px;margin-top:8px;border:none;' +
+      // v2.12.7 WCAG: the login button is a branded moment -- pin it to the
+      // BRIGHT brand gold with dark ink (9.3:1) regardless of the saved theme.
+      // (In the parchment theme V("--gold") resolves to a dark amber, which
+      // with dark ink would be dark-on-dark; hardcoding the brand gold here
+      // keeps the sign-in button readable in both themes.)
       'border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;background:' +
-      V("--gold", "#f0a500") + ';color:#1a1206">' + action + '</button>' +
+      '#f0a500;color:#1a1206">' + action + '</button>' +
       '</div>';
     document.body.appendChild(ov);
     var submit = function () { submitAuth(needsSetup); };

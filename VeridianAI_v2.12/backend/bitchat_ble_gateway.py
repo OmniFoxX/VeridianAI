@@ -325,10 +325,10 @@ async def health():
 
 
 def _fmt_fp(hex_fp: str) -> str:
-    """Group a SHA-256 fingerprint into readable 4-char blocks (first 128
-    bits), matching the WinRT gateway's formatting so the UI is identical
-    whichever gateway is live."""
-    h = (hex_fp or "").replace(":", "").replace(" ", "").lower()[:32]
+    """Group a SHA-256 fingerprint into readable 4-char blocks -- ALL 64 hex
+    (v2.12.5, matches the WinRT gateway and the phone's full display so
+    block-by-block comparison works)."""
+    h = (hex_fp or "").replace(":", "").replace(" ", "").lower()
     return " ".join(h[i:i + 4] for i in range(0, len(h), 4))
 
 

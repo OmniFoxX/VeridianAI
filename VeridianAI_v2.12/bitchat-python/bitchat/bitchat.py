@@ -444,6 +444,30 @@ def parse_announce(payload: bytes) -> dict:
     return out
 
 
+def _wire_id_str(b8: bytes) -> str:
+    """8-byte wire ID -> stable 16-hex string.
+
+    v2.12.5 FIX: this used to be b8.rstrip(b'\x00').hex(), which CORRUPTS any
+    modern binary peer ID whose last byte(s) happen to be 0x00 (~3%% of IDs
+    have at least one trailing zero byte). The trimmed hex then fails the
+    `recipient_id_str == my_peer_id` checks, so handshakes and DMs for us get
+    silently ignored -- the "handshake stuck at pending" heisenbug. Peer IDs
+    are FIXED 8 bytes in the current protocol; never trim them.
+
+    Narrow legacy path kept: very old builds sent the ID as NUL-padded ASCII
+    hex text; when the field decodes as short printable ASCII hex, keep the
+    old behavior so those peers stay stable."""
+    stripped = b8.rstrip(b'\x00')
+    if 0 < len(stripped) < 8:
+        try:
+            txt = stripped.decode('ascii')
+            if all(c in '0123456789abcdefABCDEF' for c in txt):
+                return stripped.hex()
+        except (UnicodeDecodeError, ValueError):
+            pass
+    return b8.hex()
+
+
 def parse_bitchat_packet(data: bytes) -> BitchatPacket:
     """Parse a BitChat packet (iOS/Android-compatible v1 wire format).
 
@@ -482,16 +506,16 @@ def parse_bitchat_packet(data: bytes) -> BitchatPacket:
     else:
         payload_len = struct.unpack('>H', data[offset:offset + 2])[0]; offset += 2
 
-    # Sender ID (trailing NULs trimmed so the hex id is stable)
-    sender_id     = data[offset:offset + SENDER_ID_SIZE].rstrip(b'\x00')
-    sender_id_str = sender_id.hex()
+    # Sender ID -- FIXED 8 bytes (v2.12.5: no NUL trim; see _wire_id_str)
+    sender_id     = data[offset:offset + SENDER_ID_SIZE]
+    sender_id_str = _wire_id_str(sender_id)
     offset += SENDER_ID_SIZE
 
     recipient_id = None
     recipient_id_str = None
     if has_recipient:
-        recipient_id     = data[offset:offset + RECIPIENT_ID_SIZE].rstrip(b'\x00')
-        recipient_id_str = recipient_id.hex()
+        recipient_id     = data[offset:offset + RECIPIENT_ID_SIZE]
+        recipient_id_str = _wire_id_str(recipient_id)
         offset += RECIPIENT_ID_SIZE
 
     # v2 source route: [hopCount:1][hopCount x 8-byte peer IDs]. Sage is the
@@ -1840,6 +1864,16 @@ class BitchatClient:
     async def handle_noise_handshake(self, packet: BitchatPacket):
         if (packet.recipient_id_str
                 and packet.recipient_id_str != self.my_peer_id):
+            # v2.12.5: never ignore silently -- a recipient mismatch here is
+            # exactly how the NUL-trim bug hid for months.
+            try:
+                if packet.recipient_id != BROADCAST_RECIPIENT:
+                    print(f"[NOISE] handshake addressed to "
+                          f"{packet.recipient_id_str}, I am {self.my_peer_id}"
+                          f" -- ignoring (peer has a stale ID for us?)",
+                          flush=True)
+            except Exception:
+                pass
             return
         try:
             payload_bytes = (bytes(packet.payload)
@@ -1915,7 +1949,13 @@ class BitchatClient:
             packet.recipient_id_str
             and packet.recipient_id_str != self.my_peer_id
         ):
-            debug_println("[NOISE] Handshake not for us, ignoring")
+            try:
+                if packet.recipient_id != BROADCAST_RECIPIENT:
+                    print(f"[NOISE] handshake INIT addressed to "
+                          f"{packet.recipient_id_str}, I am {self.my_peer_id}"
+                          f" -- ignoring", flush=True)
+            except Exception:
+                pass
             return
 
         # Handshake collision: we initiated AND the phone also sent an INIT.

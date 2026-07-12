@@ -395,6 +395,27 @@ class SageChannelRouter:
             timestamp=time.time(), platform=platform,
             raw={"echo": True, "peer_id": "system", "notice": True}))
 
+    _limiter_notice_ts = 0.0
+
+    def _maybe_limiter_notice(self, platform: str, sender: str) -> None:
+        """Local-feed notice when the per-peer reply limiter drops a
+        wake-worded message. Throttled to once per 2 minutes. The notice is
+        NEVER sent to the mesh -- only the owner's own feed sees it, so an
+        attacker still gets pure silence."""
+        now = time.time()
+        if now - self._limiter_notice_ts < 120:
+            return
+        self._limiter_notice_ts = now
+        self._recent.append(ChannelMessage(
+            sender="system", channel="general",
+            content=(f"{self.assistant_name} heard the wake word from "
+                     f"{sender or 'a peer'} but the per-peer reply limit "
+                     "kicked in (5 replies/min, 2s gap — flood protection). "
+                     "This notice is local-only; the mesh sees nothing. "
+                     "Wait a few seconds between test messages."),
+            timestamp=now, platform=platform,
+            raw={"echo": True, "peer_id": "system", "notice": True}))
+
     def _maybe_wake_hint(self, platform: str) -> None:
         """Drop a throttled local notice when the wake word is heard but
         auto-reply is off. At most once per 5 minutes so it never spams."""
@@ -443,7 +464,12 @@ class SageChannelRouter:
                                         adapter.PROFILE.name, m.sender)
                             asyncio.create_task(self._dispatch_reply(adapter, m))
                         else:
+                            # v2.12.6: still SILENT toward the mesh (never
+                            # coach an attacker), but LOUD locally -- the
+                            # owner's own rapid-fire testing tripped this and
+                            # looked exactly like "Toga ignores public chat".
                             logger.info("[Router] auto-reply rate-limited for %s", _key)
+                            self._maybe_limiter_notice(adapter.PROFILE.name, m.sender)
                     elif _has_wake and not self.auto_reply:
                         # v2.12.4: the wake word was heard but auto-reply is
                         # OFF. Silence here is the #1 "why won't Toga answer"

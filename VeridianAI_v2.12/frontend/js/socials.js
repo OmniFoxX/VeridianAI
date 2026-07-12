@@ -136,16 +136,55 @@
         var fp = p.verified
           ? '<span style="font-family:monospace;letter-spacing:0.5px">' + esc(p.fingerprint) + '</span>'
           : '<span style="opacity:0.6">handshake pending — no fingerprint yet</span>';
+        // v2.12.5: per-peer verification. "encrypted" = session established;
+        // "verified" = the OWNER compared this peer's fingerprint out-of-band
+        // and marked THIS peer trusted (never a blanket verify-all).
+        var badge = p.verified
+          ? (p.trusted
+              ? '<span style="color:var(--ok,#4ade80)">✓ encrypted · verified by you</span>'
+              : '<span style="color:var(--ok,#4ade80)">✓ encrypted</span> <span style="opacity:0.6">· not yet verified</span>')
+          : '<span style="opacity:0.6">unverified</span>';
+        var btn = "";
+        if (p.verified && p.fingerprint) {
+          btn = '<button class="toolbar-btn" style="margin-top:3px" '
+            + 'data-fp="' + esc(p.fingerprint) + '" data-nick="' + esc(p.nickname || p.peer_id) + '" '
+            + 'data-on="' + (p.trusted ? "0" : "1") + '" '
+            + 'onclick="socialsMarkVerified(this)" '
+            + 'data-tip="' + (p.trusted
+                ? 'Withdraw your out-of-band verification of this peer'
+                : 'Confirm you compared every block of this fingerprint against the peer\'s own device') + '">'
+            + (p.trusted ? 'Unverify' : 'Mark verified') + '</button>';
+        }
         rows.push('<div style="margin-top:3px;padding:5px;border:1px solid var(--border,#2a3a5a);border-radius:6px">'
-          + '<div><b>' + esc(p.nickname || p.peer_id) + '</b> ' + (p.verified
-            ? '<span style="color:var(--ok,#4ade80)">✓ encrypted</span>'
-            : '<span style="opacity:0.6">unverified</span>') + '</div>'
-          + '<div>' + fp + '</div></div>');
+          + '<div><b>' + esc(p.nickname || p.peer_id) + '</b> ' + badge + '</div>'
+          + '<div>' + fp + '</div>' + btn + '</div>');
       }
     }
     rows.push('<div style="margin-top:4px;opacity:0.7">Verify by comparing a peer\'s block here against what their own BitChat app shows. Matching = genuine; mismatch = possible impostor, do not trust.</div>');
     box.innerHTML = rows.join("");
   }
+
+  async function socialsMarkVerified(el) {
+    // Per-peer by design: each peer is verified one at a time, after the
+    // human has actually compared fingerprint blocks out-of-band.
+    var fp = el.dataset.fp, nick = el.dataset.nick, on = el.dataset.on === "1";
+    if (on) {
+      var sure = await (window.oracleConfirm
+        ? window.oracleConfirm(
+            "Did you compare ALL 16 blocks of " + nick + "'s fingerprint "
+            + "against their own device (read aloud or side-by-side)?\n\n"
+            + "Only mark verified if every block matched.",
+            { title: "Verify " + nick, okLabel: "They match \u2014 verify" })
+        : Promise.resolve(window.confirm("Verify " + nick + "?")));
+      if (!sure) return;
+    }
+    var r = await jpost("/api/socials/verify",
+                        { fingerprint: fp, nickname: nick, verified: on });
+    if (r && r.ok) { toast(on ? ("Verified " + nick) : ("Unverified " + nick)); }
+    else { toast("Could not update verification"); }
+    socialsVerifyIdentity();   // re-render with the new state
+  }
+  window.socialsMarkVerified = socialsMarkVerified;
 
   async function socialsRefresh() {
     try {

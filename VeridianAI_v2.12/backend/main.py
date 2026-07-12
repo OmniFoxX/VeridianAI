@@ -1441,7 +1441,79 @@ async def api_socials_identity(request: Request, channel: str = "bitchat"):
     router = _socials_router_for(request)
     if router is None:
         return {"available": False}
-    return await router.identity((channel or "bitchat").strip().lower())
+    d = await router.identity((channel or "bitchat").strip().lower())
+    # v2.12.5: overlay HUMAN verification. The gateway's "verified" flag only
+    # means "encrypted session established"; "trusted" below means the OWNER
+    # compared fingerprints out-of-band and marked THIS peer verified.
+    try:
+        trust = _socials_trust_load()
+        for _p in (d.get("peers") or []):
+            _fpn = _socials_fp_norm(_p.get("fingerprint") or "")
+            _p["trusted"] = bool(_fpn) and _fpn in trust
+    except Exception:
+        pass
+    return d
+
+
+# --- v2.12.5: per-peer out-of-band verification (BitChat trust store) --------
+# Keyed by the FULL Noise-static fingerprint (not the rotating peer_id), so a
+# verification survives BitChat's peer-ID rotation and gateway restarts.
+# Stored in sage_data (outside the project, like every other secret-adjacent
+# artifact). Atomic write, same pattern as usage_meter.
+
+def _socials_fp_norm(fp: str) -> str:
+    return "".join((fp or "").lower().split()).replace(":", "")
+
+
+def _socials_trust_path():
+    return Path(str(DATA_DIR)) / "socials_trust.json"
+
+
+def _socials_trust_load() -> dict:
+    try:
+        with open(_socials_trust_path(), "r", encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _socials_trust_save(d: dict) -> None:
+    p = _socials_trust_path()
+    tmp = str(p) + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=2)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, p)
+    try:
+        os.chmod(p, 0o600)
+    except Exception:
+        pass
+
+
+@app.post("/api/socials/verify")
+async def api_socials_verify(request: Request, payload: dict):
+    """Mark ONE peer as human-verified (or unmark it). Localhost-only.
+    Body: {fingerprint, nickname?, verified?: bool (default true)}.
+    Per-peer by design: a blanket verify-all would defeat the entire point
+    of out-of-band fingerprint comparison."""
+    if not _is_local_client(request):
+        raise HTTPException(404)
+    fpn = _socials_fp_norm(payload.get("fingerprint") or "")
+    if not fpn or len(fpn) < 32:
+        raise HTTPException(400, "full fingerprint required")
+    trust = _socials_trust_load()
+    if payload.get("verified", True):
+        trust[fpn] = {"nickname": str(payload.get("nickname") or "")[:64],
+                      "verified_at": int(time.time())}
+    else:
+        trust.pop(fpn, None)
+    try:
+        _socials_trust_save(trust)
+    except Exception as exc:
+        raise HTTPException(500, f"could not persist trust store: {exc}")
+    return {"ok": True, "trusted_count": len(trust)}
 
 
 @app.get("/api/socials/config")
