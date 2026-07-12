@@ -93,7 +93,9 @@
     "agentic_mode": true,
     "web_search_enabled": true,
     "code_exec_enabled": true,
-    "privacy_mode": false
+    "privacy_mode": false,
+    "assistant_name": "Toga",
+    "voice_wake_word": "Toga"
   },
   "handoff_security": {
     "cadence_max": 5,

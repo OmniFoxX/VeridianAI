@@ -206,6 +206,13 @@ class SageSection:
     # voice_wake_word stays owner-level — there's one microphone.
     assistant_name: str = "Toga"
     voice_wake_word: str = "Toga"
+    # v2.12.8 session provenance: when True, loading an archived chat appends
+    # a persistent "=== SESSION BOUNDARY ===" system marker to the restored
+    # history so the model can distinguish a reloaded prior session from a
+    # live continuous one (fixes source-misattribution after restarts).
+    # The marker text is fixed at load time and persisted with the history,
+    # so it is KV-cache-stable (never regenerated per turn).
+    session_boundary_markers: bool = True
 
 
 @dataclass
@@ -433,6 +440,8 @@ class OracleConfig:
             # v2.12.1 personalization
             "assistant_name":          self.sage.assistant_name,
             "voice_wake_word":         self.sage.voice_wake_word,
+            # v2.12.8 session provenance
+            "session_boundary_markers": self.sage.session_boundary_markers,
         }
 
     @classmethod
@@ -582,6 +591,9 @@ class OracleConfig:
                 return fallback
         cfg.sage.assistant_name  = _clean_name(_g("assistant_name",  cfg.sage.assistant_name), "Toga")
         cfg.sage.voice_wake_word = _clean_name(_g("voice_wake_word", cfg.sage.voice_wake_word), "Toga")
+        # v2.12.8 session provenance
+        cfg.sage.session_boundary_markers = bool(
+            _g("session_boundary_markers", cfg.sage.session_boundary_markers))
 
         return cfg
 

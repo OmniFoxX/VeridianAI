@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f38f7790a6624395847c021ffae5c687",
-    "built_utc": "2026-07-12T07:17:44.783821+00:00",
+    "build_id": "d07bc72add714f74ab872b29fea634df",
+    "built_utc": "2026-07-12T18:22:49.859226+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -58,7 +58,7 @@
       "backend/comfyui_models.py": "3101004ff143272d97a5ee0fd9e76c422d4501cdacc11d9b8a6641a8c8d1042f",
       "backend/comfyui_setup.py": "95feedac26c0cb062d69f64e85ebb4c3ee2cfc647336b2f2e47ba2ead76c5515",
       "backend/config.py": "b8f539bcf839914783ced8deed65b9506ac7f96e51745757b62355708ace6a29",
-      "backend/config_store.py": "14ac4059b767b3c404d5b762d289f6723e868a47c59ec7d584881c9442d60f7f",
+      "backend/config_store.py": "587fcf030caaa555f20f61bb160c62e15b5c6abd9e3d07648c8b86a0a32ea65f",
       "backend/context_fatigue_detector.py": "0e8bbbcc283b2f98c676b540dd1476e6bf6673291caa2bdf3499fe24aa6c8471",
       "backend/coordinator_signal.py": "c56fcabbd2a0d195a02aa4b9b142e9727bdd39dd0a49cdb836878fb6019c6319",
       "backend/craiid/archivist_compression_worker.py": "7f2e7554c48aeaccff69bdaa48151459e8b4501ee51368c114c8c3a80ac2287f",
@@ -113,7 +113,7 @@
       "backend/request_scheduler.py": "1ae318e130d4c7330dbd631f6619337f71e26d68f398b1c9fd591fc9803e9f82",
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
       "backend/sage_daemon_client.py": "2ec56533c7e00a0022c046b3936626e5a63532931b5d6f6076275f6d1005be6b",
-      "backend/sage_engine.py": "3b16214699dae9acf9607c8da82f643a03415ebafb4109d87d08fd1c72b5ac05",
+      "backend/sage_engine.py": "8e8c152e20bfab9e976dc9c334afb5a6b487d7f807b081c1c791407bdab56506",
       "backend/sage_messaging_adapter.py": "b73ab78b01bdb8967e1f19125038d2f1ceb9ef1cc0c38bdff5c050ea16f995e8",
       "backend/sage_rag.py": "b6c08d57909851e7488c154c8aecc543f82943435cd2e17b8c0acf007e4ba56d",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
@@ -201,5 +201,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "AT9stvSAWBJbJWoufxUfzYkaE/ele94WPNiQb1BHrOkhySyQv+r9+5+LWmI8NXFRCWNW0dO/endHhZ3vI0hrAA=="
+  "signature_b64": "eMS2J6lzTOCkVM4TrYszVY0yUg8+CfjqBsYbzLbJ4hMMUy48XUNyWY5+uUf1rzIoAjph215ClJJojddCTSfUBA=="
 }

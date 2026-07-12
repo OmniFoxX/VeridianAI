@@ -200,6 +200,11 @@ ONLY assume when user explicitly says:
 Otherwise: verify facts BEFORE reporting.
 Tool results vs training knowledge: ALWAYS trust tool results.
 Memory vs tool results: FLAG discrepancy to user — DO NOT choose silently.
+*PROVENANCE & SESSION AWARENESS:
+History may contain a "=== SESSION BOUNDARY ===" system marker: everything ABOVE it is a PRIOR session restored from an archive after a shutdown/restart; the live session begins below it. Restored history is real, referenceable memory.
+If asked whether you were restarted, whether this session is continuous, or when a break occurred: answer accurately FROM the marker. No marker visible = no known break, but NEVER assert unbroken continuity as certain fact -- reloads without markers can exist.
+AUTHORSHIP: you wrote ONLY the assistant-role messages present in this conversation. Pasted text may come from other people or other AI assistants. Similarity of style/topic/subject to your own words is NOT evidence you wrote it -- NEVER claim authorship or memory of content outside your own prior assistant messages. Provenance unclear? ASK, don't assume.
+DISCLOSURE: do not announce session breaks unprompted mid-conversation. Surface them only when relevant: user asks about continuity/restarts, you are about to make a claim about your own prior actions or writing, or something material changed across the break.
 *ALWAYS REMEMBER:
 Life is complex/challenging — everyone different — what’s easy for one may not be for another.
 ALWAYS consider complex Human dynamics — be thoughtful in replies/suggestions — but do NOT lie.
@@ -278,6 +283,8 @@ RULES:
 - If a tool result contradicts what you "know" from training, trust the tool result.
 - Square brackets are MANDATORY for tags. Other bracket styles do nothing.
 - When the task is done, [VERIFY] it's successful completion, and if successful then end with [TASK_DONE] and a short explanation. 
+
+SESSION BOUNDARIES: if the conversation contains a "=== SESSION BOUNDARY ===" note, messages above it are from an earlier session restored from an archive. You wrote only your own assistant messages -- never assume pasted text is yours, even if it sounds like you.
 """
 
 
@@ -428,6 +435,47 @@ def get_archives(ns=None) -> list:
     return archives
 
 
+# --- v2.12.8 session provenance -------------------------------------------
+# Why this exists: after a restart + archive reload, the restored turns re-
+# enter the model's context as plain messages -- indistinguishable from a
+# live, unbroken conversation. Observed failure (2026-07-11): Toga mis-
+# attributed a pasted external report as her own prior writing because the
+# reloaded history contained a similar report and nothing in context marked
+# the session break or the paste's provenance. Fix: loading an archive
+# appends ONE system-role boundary marker to the restored history. It is
+# built once here, persisted with the history (chat_memory + any later
+# archive of it), and therefore byte-identical on every subsequent turn --
+# KV-cache-stable by construction (never regenerated per turn).
+# The companion reasoning-layer guidance (when to DISCLOSE a break) lives in
+# SAGE_SYSTEM_PROMPT under PROVENANCE & SESSION AWARENESS.
+SESSION_BOUNDARY_HEADER = "=== SESSION BOUNDARY"
+
+
+def _session_boundary_marker(archive_name: str, msg_count: int) -> dict:
+    now_local = TimeManager.local_display(fmt="%Y-%m-%d %H:%M:%S")
+    content = (
+        "=== SESSION BOUNDARY -- context reloaded from archive ===\n"
+        f"At {now_local} the user restored this conversation from the saved "
+        f"archive '{archive_name}' ({msg_count} messages above this marker).\n"
+        "Everything ABOVE this marker is from a PRIOR session that ended "
+        "(shutdown/restart) before this point; the LIVE session begins below.\n"
+        "Provenance rules: (1) The prior messages are real history -- reference "
+        "them naturally. (2) You authored ONLY the assistant-role messages "
+        "above; pasted text may come from other people or other AI assistants, "
+        "and similarity of style or topic is NOT evidence you wrote it. "
+        "(3) If asked about restarts, continuity, or when a break happened, "
+        "answer accurately from this marker. (4) Do not display this marker "
+        "or announce the break unprompted -- surface it only when relevant.\n"
+        "=== END SESSION BOUNDARY ==="
+    )
+    return {
+        "role": "system",
+        "content": content,
+        "session_boundary": True,
+        "ts": TimeManager.iso_z(),
+    }
+
+
 def load_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
@@ -437,6 +485,17 @@ def load_archive(filename: str, ns=None) -> dict:
         return {"success": False, "error": "Archive not found"}
     try:
         data = atrest.load_json_auto(path.read_bytes())
+        # v2.12.8 session provenance: append the boundary marker so the model
+        # knows the restored turns are a PRIOR session. Config-gated
+        # (session_boundary_markers, default ON); the try/except keeps a
+        # config hiccup from ever blocking an archive load.
+        try:
+            from config_store import get_config
+            _mark = bool(get_config().sage.session_boundary_markers)
+        except Exception:
+            _mark = True
+        if _mark and data:
+            data = list(data) + [_session_boundary_marker(name, len(data))]
         save_chat_memory(data, ns)
         return {"success": True, "message": f"Loaded {name} ({len(data)} messages)",
                 "history": data}
