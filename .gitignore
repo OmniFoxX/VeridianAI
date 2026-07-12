@@ -22,7 +22,7 @@ sage_data/downloads/
 .oai_signing_key.pem
 **/.oai_signing_key.pem
 
-# OracleAI specific
+# VeridianAI specific
 sage_plm.pt
 mlm_training_data/
 *.gguf
