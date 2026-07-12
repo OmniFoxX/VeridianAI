@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- skill-share HTTP surface (Layers 4-5 wiring).
+VeridianAI / Aether -- skill-share HTTP surface (Layers 4-5 wiring).
 
 An APIRouter exposing the SkillService over HTTP. The whole feature is gated by
 config.skill_share_enabled (OFF by default).
@@ -26,6 +26,10 @@ from pathlib import Path
 
 import httpx
 from fastapi import APIRouter, HTTPException, Request
+
+import ipaddress
+import socket
+from urllib.parse import urlparse
 
 import skill_keys
 from wan_guard import AbuseGuard
@@ -95,6 +99,24 @@ def _guard():
     return s
 
 
+def _validate_external_url(url: str) -> None:
+    """Reject URLs pointing at loopback, private, or link-local addresses.
+    Prevents SSRF via user-supplied base_url/relay targets."""
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(400, "url must be http or https")
+    host = parsed.hostname
+    if not host:
+        raise HTTPException(400, "url missing host")
+    try:
+        resolved = socket.gethostbyname(host)
+        ip = ipaddress.ip_address(resolved)
+    except (socket.gaierror, ValueError):
+        raise HTTPException(400, "could not resolve host")
+    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        raise HTTPException(400, "target address not allowed")
+
+
 def _ratelimit(request):
     ip = (request.client.host if request and request.client else "?")
     rl = _rl.check(ip)
@@ -148,6 +170,7 @@ async def skills_browse(payload: dict):
     relay = (payload.get("relay") or "").strip().rstrip("/")
     target = (payload.get("target") or "").strip()
     if relay and target:
+        _validate_external_url(relay)
         from relay_client import RelayClient
         res = await RelayClient(relay).request(target, {"path": "catalog"}, timeout=30.0)
         if not res.get("ok"):
@@ -158,6 +181,7 @@ async def skills_browse(payload: dict):
     base = (payload.get("base_url") or "").strip().rstrip("/")
     if not base:
         raise HTTPException(400, "base_url required")
+    _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=20.0) as c:
             r = await c.get(base + "/api/skills/catalog")
@@ -179,6 +203,7 @@ async def skills_fetch(payload: dict):
     relay = (payload.get("relay") or "").strip().rstrip("/")
     target = (payload.get("target") or "").strip()
     if relay and target and hid:
+        _validate_external_url(relay)
         from relay_client import RelayClient
         res = await RelayClient(relay).request(target, {"path": "object", "id": hid}, timeout=30.0)
         if not res.get("ok"):
@@ -188,6 +213,7 @@ async def skills_fetch(payload: dict):
     base = (payload.get("base_url") or "").strip().rstrip("/")
     if not base or not hid:
         raise HTTPException(400, "base_url and id required")
+    _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
             r = await c.get(base + "/api/skills/object/" + hid)

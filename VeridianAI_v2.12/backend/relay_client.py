@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- relay client + source.
+VeridianAI / Aether -- relay client + source.
 
 RelayClient: submit a request for a target peer, then await the brokered response.
 RelaySource: poll the relay for requests addressed to me, dispatch each to a local

@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "e4bf48a7ae234e41bdf1f0fc68f2bc6e",
-    "built_utc": "2026-07-12T20:27:33.774925+00:00",
+    "build_id": "5733810bd29f47baa8993ca226340c55",
+    "built_utc": "2026-07-12T21:24:02.171051+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/procedural_memory.py": "e4cec929b03cb0a1c58e93fb72380a426fd43297e3a1a469a3b952a08fbdc8f9",
       "backend/prompt_cache_manager.py": "815f7530d02232e314d450d76d2c612d99e5c0b9fdbd2a8fbb237b04cde5c2ba",
       "backend/relay_api.py": "184aca336fd0044851e4f3d9ec4df000bcd07eaa3315e1e739113545368d61a6",
-      "backend/relay_client.py": "585eeef27996be4669319e9178bca71a5dd65303532f6f7251303557a2730155",
+      "backend/relay_client.py": "39522463e2ee976ee24b0979351f780ea9cba4667b912c1542954325618b66a5",
       "backend/relay_core.py": "ff3841c165bfa19d6776009468089fa8fde3b084499bafb8278c8673a8f5105b",
       "backend/request_scheduler.py": "1ae318e130d4c7330dbd631f6619337f71e26d68f398b1c9fd591fc9803e9f82",
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
@@ -119,7 +119,7 @@
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
       "backend/session.py": "10c430b1e469c0a4190bc87d2d113580e9c675b1f5f72d906bbfc3b9c1d51d5b",
       "backend/shutdown_cleanup.py": "19365ddefe69c1054444e58bccfb6651894ddccacf202a1f58a3bf0eae671f29",
-      "backend/skill_api.py": "29fde4ab4ee820302f7388df8796e40f9980e472a625cd1c83f3a978a1039daf",
+      "backend/skill_api.py": "edb8dca67682904eed1c568cc63be7d2a623ae9da5d53b22533b2caa3018025a",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
       "backend/skill_service.py": "024ad02189752d0f24bf12efb184ef3c8891f1b5bdf29dda4fc3e38b679af76d",
@@ -201,5 +201,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "5wQN+DTBk0Xzt6cJqvSI2R9KyW6emRVSYs0Mvr6uUBC5MeWGdK1mRwDJOheKmONj+fPXahCeHmKxc8rxai29Dg=="
+  "signature_b64": "YEbi8GMj+x/1rIQ4sSZitqa+l/4p1w0Ij/GAXiPZUzWISIlNHqlBUnxf6xgHMgxh7jKRJZGRUX1Mp2MDImBTDg=="
 }
