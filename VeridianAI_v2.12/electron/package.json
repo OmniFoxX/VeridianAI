@@ -12,8 +12,8 @@
     "pack-win": "npm run genmanifest && electron-builder --win --dir",
     "build-win": "npm run genmanifest && electron-builder --win",
     "build-store": "npm run genmanifest && electron-builder --win appx",
-    "build-linux": "python3 ../backend/build_integrity.py genmanifest && electron-builder --linux",
-    "build-mac": "python3 ../backend/build_integrity.py genmanifest && electron-builder --mac"
+    "build-linux": "py ../backend/build_integrity.py genmanifest && electron-builder --linux",
+    "build-mac": "py ../backend/build_integrity.py genmanifest && electron-builder --mac"
   },
   "build": {
     "appId": "software.mentisphere.veridianai",

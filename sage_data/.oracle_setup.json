@@ -1,0 +1,11 @@
+{
+  "deps_ok": true,
+  "req_hash": "2e1d0558f8236c98673259feeb7a2395cc3227d21f7e80df009b55ea57281c9e",
+  "python": "py",
+  "python_dir": null,
+  "ollama": "present",
+  "ollama_dir": null,
+  "starter_model": "present",
+  "version": "2.12.0",
+  "ts": "2026-07-12T19:23:36.998Z"
+}
