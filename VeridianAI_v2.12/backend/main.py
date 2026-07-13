@@ -786,7 +786,6 @@ feature_map = {
     "weather-tool": "weather",
     "semantic-search": "semantic_search",
     "exercise-tracker": "exercise_tracker",
-    "complexity-detector": "complexity_detector",
     "task-prioritiser": "task_prioritiser",
     "browser-plugin": "browser",
 }
@@ -3678,7 +3677,6 @@ async def api_toggle_plugin_v2(plugin_id: str, request: Request):
         "weather-tool": "weather",
         "semantic-search": "semantic_search",
         "exercise-tracker": "exercise_tracker",
-        "complexity-detector": "complexity_detector",
         "task-prioritiser": "task_prioritiser",
         "browser-plugin": "browser",
     }

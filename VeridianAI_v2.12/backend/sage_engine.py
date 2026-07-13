@@ -67,7 +67,6 @@ FEATURES_ENABLED = {
     "weather": True,
     "semantic_search": True,
     "exercise_tracker": True,
-    "complexity_detector": True,
     "task_prioritiser": True,
     "browser": True,  # headless web fetcher (browser_tool.py) — off by default
     "daemon": False,  # background mechanics daemon (sage_daemon.py)

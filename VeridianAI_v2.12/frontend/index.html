@@ -832,9 +832,9 @@
           <!-- Multi-Model -->
           <div class="settings-section">
             <div class="settings-section-title">Multi-Model Routing</div>
-            <div class="hw-toggle-row" style="margin-bottom: 6px">
+            <div class="hw-toggle-row" style="margin-bottom: 2px">
               <span class="hw-toggle-label" id="autoroute-label"
-                >Auto-Route by Complexity</span
+                >Smart Auto-Route</span
               >
               <label class="toggle-switch">
                 <input
@@ -846,6 +846,14 @@
                 />
                 <span class="toggle-track"></span>
               </label>
+            </div>
+            <div
+              class="setting-hint"
+              style="font-size: 11px; opacity: 0.7; margin-bottom: 8px"
+            >
+              When on, each turn is scored for complexity and sent to the
+              best-fit model among your slots automatically. When off, every
+              turn uses your Primary model.
             </div>
             <div class="setting-group">
               <label
