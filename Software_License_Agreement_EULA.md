@@ -1,8 +1,8 @@
 DOCUMENT 3 OF 4: SOFTWARE LICENSE AGREEMENT (EULA)
-ORACLEAI — ELECTRUM CONSILIARIUS, ETC.
+VERIDIAN — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
-ORACLEAI END-USER LICENSE AGREEMENT (EULA)
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
+VERIDIAN END-USER LICENSE AGREEMENT (EULA)
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 2.0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PLAIN-ENGLISH SUMMARY — READ THIS FIRST
@@ -78,7 +78,27 @@ Publisher offers Licensee the entirely voluntary option to make a one-time perso
 2.3 Commercial License Required for Commercial Deployment
 Any Commercial Deployment of the Software requires a separate, valid, paid Commercial License from Publisher. Licensee may not use the Software for Commercial Deployment under the license granted in Section 2.1. Commercial Deployment without a valid Commercial License constitutes material breach of this Agreement, infringement of Publisher's intellectual property rights, and grounds for injunctive relief and damages.
 
-[COMMERCIAL LICENSE TERMS — FUTURE TERMS TO BE INSERTED HERE. TO OBTAIN A COMMERCIAL LICENSE, CONTACT SILVERFOX4816@GMAIL.COM. COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH ELECTRUM CONSILIARIUS, ETC.]
+-COMMERCIAL LICENSE TERMS — DEFINITIONS:
+-"Commercial use" means any use that generates revenue, is performed
+on behalf of a for-profit entity, or is integrated into a product
+or service offered for sale, license, or subscription.
+
+-COMMERCIAL, ENTERPRISE, GOVERNMENTAL, INSTITUTIONAL USE:
+Commercial, Enterprise, Governmental, Institutional, and any other
+deployment, integration, or redistribution requires a paid license
+agreement.
+
+-Contact: Todd Darimont, silverfox4816@gmail.com
+-RE: VeridianAI Licensing Inquiry
+
+-RESTRICTIONS:
+- Modifications to encryption, authentication, or hash-chain
+  integrity systems require explicit written permission.
+- Redistribution of modified versions must clearly identify
+  changes made and may not misrepresent the original software.
+  
+COMMERCIAL LICENSING FEE SCHEDULE AND DEPLOYMENT TERMS ARE SUBJECT
+TO SEPARATE NEGOTIATION AND WRITTEN AGREEMENT WITH MENTISPHERE SOFTWARE
 
 2.4 License Scope Limitations
 The licenses granted in Section 2.1 do not include the right to:
