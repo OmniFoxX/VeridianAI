@@ -21,6 +21,7 @@ sage_data/downloads/
 *.key
 *.fernet
 .env
+.pem
 .oai_signing_key.pem
 **/.oai_signing_key.pem
 
@@ -33,6 +34,8 @@ mlm_training_data/
 # OS junk
 .DS_Store
 Thumbs.db
+KEY_ROTATION.md
+BUILD.md
 
 # Editor junk
 .vscode/

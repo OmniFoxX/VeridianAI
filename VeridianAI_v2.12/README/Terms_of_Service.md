@@ -2,7 +2,7 @@ DOCUMENT 2 OF 4: TERMS OF SERVICE
 VERIDIANAI — MENTISPHERE SOFTWARE, ETC.
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI TERMS OF SERVICE
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 1.0
 
 ARTICLE I — AGREEMENT AND ACCEPTANCE
 1.1 Binding Agreement
@@ -65,7 +65,25 @@ Use of VeridianAI by employees, contractors, or agents of a for-profit enterpris
 Deployment of VeridianAI on behalf of, or in service to, a commercial enterprise with annual revenues exceeding ten thousand dollars ($10,000 USD) per year;
 Resale, sublicensing, or redistribution of VeridianAI or its outputs as a commercial product or service; and
 Any use in connection with a for-profit entity's internal operations, even where the direct output of the AI is not itself sold.
-[COMMERCIAL LICENSING TERMS — FUTURE TERMS TO BE INSERTED HERE. COMMERCIAL LICENSING INQUIRIES SHOULD BE DIRECTED TO SILVERFOX4816@GMAIL.COM. COMMERCIAL USE WITHOUT A VALID LICENSE FROM MENTISPHERE SOFTWARE, ETC. IS PROHIBITED AND CONSTITUTES GROUNDS FOR INJUNCTIVE RELIEF AND/OR DAMAGES.]
+-COMMERCIAL LICENSING TERMS- 
+DEFINITIONS:
+"Commercial use" means any use that generates revenue, is performed
+on behalf of a for-profit entity, or is integrated into a product
+or service offered for sale, license, or subscription.
+
+COMMERCIAL, ENTERPRISE, GOVERNMENTAL, INSTITUTIONAL USE:
+Commercial, Enterprise, Governmental, Institutional, and any other
+deployment, integration, or redistribution requires a paid license
+agreement.
+
+Contact: Todd Darimont, silverfox4816@gmail.com
+RE: VeridianAI Licensing Inquiry
+
+RESTRICTIONS:
+- Modifications to encryption, authentication, or hash-chain
+  integrity systems require explicit written permission.
+- Redistribution of modified versions must clearly identify
+  changes made and may not misrepresent the original software. COMMERCIAL USE WITHOUT A VALID LICENSE FROM MENTISPHERE SOFTWARE, ETC. IS PROHIBITED AND CONSTITUTES GROUNDS FOR INJUNCTIVE RELIEF AND/OR DAMAGES.]
 
 4.3 License Inquiries
 Prospective commercial licensees should contact Publisher at silverfox4816@gmail.com to obtain current commercial licensing information, pricing, and terms.

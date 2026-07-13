@@ -36,7 +36,7 @@ Copy the printed `fingerprint`.
 ### 3. Update the published fingerprint
 - `README\PROVENANCE.md` — new fingerprint + a **Revoked:** line for the old one.
 - `README\BUILD.md` — the "Current / Revoked" note.
-- github.com/OmniFoxX — publish the new fingerprint and state the old is revoked.
+- ex.- github.com/OmniFoxX — (canonical copy) Publish the new fingerprint and state the old is revoked.
 
 ### 4. Re-sign the manifest
 ```

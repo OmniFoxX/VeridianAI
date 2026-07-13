@@ -2,7 +2,7 @@ DOCUMENT 1 OF 4: PRIVACY POLICY
 VERIDIANAI — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI PRIVACY POLICY
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: [EFFECTIVE DATE] Version: 1.0
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: July 2026 Version: 1.0
 
 PREAMBLE: A PLAIN-LANGUAGE COMMITMENT
 Before the formal legal text begins, we want to say this plainly:
@@ -259,4 +259,4 @@ Your continued use of VeridianAI after the effective date of any updated Policy 
 SECTION 16 — HOW TO EXERCISE YOUR RIGHTS AND CONTACT US
 To exercise any privacy right described in this Policy, to submit a data subject access request, to request deletion, or to raise any privacy concern, contact Publisher directly:
 
-Email: silverfox4816@gmail.com Subject Line Recommended: "Privacy Rights Request — [Your Jurisdiction]" Response Commitment: Publisher will acknowledge receipt within five (5) business days and provide a substantive response within the applicable statutory deadline for your jurisdiction. Identity Verification: Publisher may request reasonable verification of your identity before fulfilling a rights request, in order to protect you from unauthorized access to your data. Appeals: If Publisher declines a rights request, you will receive a written explanation. You may appeal that decision by contacting Publisher with the word "APPEAL" in your subject line or by contacting the applicable regulatory authority for your jurisdiction.
+Email: silverfox4816@gmail.com Subject Line Recommended: "Privacy Rights Request — Washington State - King County" Response Commitment: Publisher will acknowledge receipt within five (5) business days and provide a substantive response within the applicable statutory deadline for your jurisdiction. Identity Verification: Publisher may request reasonable verification of your identity before fulfilling a rights request, in order to protect you from unauthorized access to your data. Appeals: If Publisher declines a rights request, you will receive a written explanation. You may appeal that decision by contacting Publisher with the word "APPEAL" in your subject line or by contacting the applicable regulatory authority for your jurisdiction.

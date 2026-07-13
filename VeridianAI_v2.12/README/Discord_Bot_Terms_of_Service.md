@@ -1,7 +1,7 @@
 VERIDIANAI — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI DISCORD BOT — SUPPLEMENTAL TERMS OF SERVICE
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: [EFFECTIVE DATE] Version: 1.0
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 1.0
 
 SECTION 1 — PURPOSE, SCOPE, AND RELATIONSHIP TO MAIN TERMS
 1.1 Supplement to Main Terms of Service
