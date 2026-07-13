@@ -848,6 +848,28 @@ function appendMessage(msg, isStreaming = false) {
   const container = document.getElementById("messages");
   if (!container) return null;
 
+  // v2.12.8 session provenance: a persisted "=== SESSION BOUNDARY ===" system
+  // marker (appended by the backend when an archive is reloaded) renders as a
+  // subtle divider, not a chat bubble. Display-only: the marker still rides
+  // in the model payload untouched (buildPayload keeps role/content).
+  if (
+    msg.role === "system" &&
+    (msg.session_boundary ||
+      String(msg.content || "").startsWith("=== SESSION BOUNDARY"))
+  ) {
+    const div = document.createElement("div");
+    div.className = "session-boundary-divider";
+    const m = String(msg.content || "").match(
+      /^At (.+?) the user restored this conversation from the saved archive '([^']+)'/m,
+    );
+    div.textContent = m
+      ? `Session reloaded from ${m[2]} \u2014 ${m[1]}`
+      : "Session boundary \u2014 earlier messages restored from archive";
+    container.appendChild(div);
+    scrollToBottom();
+    return div;
+  }
+
   const wrap = document.createElement("div");
   wrap.className = `message ${msg.role}${msg.error ? " error" : ""}`;
 

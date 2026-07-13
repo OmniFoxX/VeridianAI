@@ -2261,3 +2261,24 @@ button.oracle-eye {
 .burn-btn:focus-visible {
   outline: 2px solid #e0533d;
 }
+
+/* v2.12.8 session provenance divider (archive reload marker). Uses only
+   theme tokens defined in BOTH dark and parchment themes (--text-muted,
+   --border) so contrast holds on either. */
+.session-boundary-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 18px 0;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: center;
+}
+.session-boundary-divider::before,
+.session-boundary-divider::after {
+  content: "";
+  flex: 1;
+  border-top: 1px solid var(--border);
+}

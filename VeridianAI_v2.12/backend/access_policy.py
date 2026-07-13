@@ -48,6 +48,11 @@ RECORD (all keys optional; defaults = unrestricted)
                             profile (default-off is recommended for child /
                             restricted profiles; see Microsoft Store policy
                             on minors + parental controls).
+    admin_grants    : list  Capability groups delegated to this profile
+                            ("models", "integrations", "imagegen", "skills").
+                            Empty = no delegation (default). Lets an owner
+                            hand an assistant manager specific owner-level
+                            controls without giving away the whole node.
 
 DESIGN NOTES
 ------------
@@ -72,7 +77,17 @@ DEFAULTS = {
     "lock_reason": "",
     "lock_until": None,
     "socials_allowed": True,
+    "admin_grants": [],
 }
+
+# v2.12.9 delegated admin ("assistant manager"): capability groups the owner
+# can grant to a non-owner profile via Access Controls. Each maps to a set of
+# otherwise owner-only endpoints (enforced by main.py _owner_gate(cap) and
+# skill_api.py _owner_guard). Deliberately NOT grantable: sage-network node
+# tokens, BitChat peer verification, AIQNudge, devmode, and the exercise-log
+# wipe -- those are the node's cryptographic identity / steering channel and
+# stay strictly owner.
+ADMIN_CAPS = ("models", "integrations", "imagegen", "skills")
 
 _MAX_SESSION_MINUTES = 1440          # one day; anything longer is "no cap"
 _MAX_REASON_LEN = 300
@@ -148,6 +163,19 @@ def validate_patch(patch: dict) -> Tuple[dict, Optional[str]]:
             clean[k] = s
         elif k in ("locked", "socials_allowed"):
             clean[k] = bool(v)
+        elif k == "admin_grants":
+            if v is None:
+                clean[k] = []
+                continue
+            if not isinstance(v, (list, tuple)):
+                return {}, "admin_grants must be a list"
+            grants = []
+            for cap in v:
+                if not isinstance(cap, str) or cap not in ADMIN_CAPS:
+                    return {}, f"unknown admin capability: {cap!r}"
+                if cap not in grants:
+                    grants.append(cap)
+            clean[k] = grants
         elif k == "lock_reason":
             if not isinstance(v, (str, type(None))):
                 return {}, "lock_reason must be a string"
@@ -333,6 +361,16 @@ def tick_usage(username: str, now: Optional[float] = None) -> bool:
     except Exception as exc:
         print(f"[ACCESS] usage tick failed for {username}: {exc}")
         return False   # metering trouble must never lock anyone out
+
+
+def admin_granted(username: str, cap: str) -> bool:
+    """True when the owner delegated capability `cap` to this profile.
+    FAIL-CLOSED (unlike socials_allowed's fail-open): an error while reading
+    the policy store must never mint admin powers."""
+    try:
+        return cap in ADMIN_CAPS and cap in (get_policy(username)["admin_grants"] or [])
+    except Exception:
+        return False
 
 
 def socials_allowed(username: str) -> bool:

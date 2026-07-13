@@ -436,6 +436,23 @@
       '<input id="ac-to" type="time" aria-label="To" style="' + inputStyle() + ';margin:0"></div>' +
       '<label style="' + chk + '"><input id="ac-socials" type="checkbox" style="accent-color:' +
       V("--gold", "#f0a500") + '">Allow socials (Discord, Mastodon, Bluesky, BitChat)</label>' +
+      // v2.12.9 delegated admin: grant an assistant-manager profile specific
+      // owner-level controls. Maps to access_policy.admin_grants; enforced
+      // server-side by _owner_gate(cap) / _owner_guard -- these checkboxes
+      // are the owner's pen, not the lock. Node tokens, BitChat verify,
+      // AIQNudge and devmode are deliberately NOT delegable (no checkbox).
+      '<div style="border-top:1px solid ' + V("--border", "#2a3a5a") + ';margin-top:14px;padding-top:4px">' +
+      '<div style="font-size:12px;margin:4px 2px 2px;color:' + V("--text-muted", "#7890b8") +
+      '">Delegated admin \u2014 give this profile owner-level controls for:</div>' +
+      '<label style="' + chk + '"><input id="ac-cap-models" type="checkbox" style="accent-color:' +
+      V("--gold", "#f0a500") + '">Models &amp; tiers (load, unload, restart)</label>' +
+      '<label style="' + chk + '"><input id="ac-cap-integrations" type="checkbox" style="accent-color:' +
+      V("--gold", "#f0a500") + '">Integrations (web-search key, browser, plugins)</label>' +
+      '<label style="' + chk + '"><input id="ac-cap-imagegen" type="checkbox" style="accent-color:' +
+      V("--gold", "#f0a500") + '">Image engine (ComfyUI setup &amp; models)</label>' +
+      '<label style="' + chk + '"><input id="ac-cap-skills" type="checkbox" style="accent-color:' +
+      V("--gold", "#f0a500") + '">Skill sharing &amp; trust store</label>' +
+      '</div>' +
       '<div style="border-top:1px solid ' + V("--border", "#2a3a5a") + ';margin-top:14px;padding-top:4px">' +
       '<label style="' + chk + '"><input id="ac-locked" type="checkbox" style="accent-color:' +
       V("--error", "#ff6b6b") + '">Lock sign-in now (ends their current session)</label>' +
@@ -486,6 +503,11 @@
       el("ac-from").value = w.length === 2 ? w[0] : "";
       el("ac-to").value = w.length === 2 ? w[1] : "";
       el("ac-socials").checked = a.socials_allowed !== false;
+      var g = a.admin_grants || [];
+      el("ac-cap-models").checked = g.indexOf("models") !== -1;
+      el("ac-cap-integrations").checked = g.indexOf("integrations") !== -1;
+      el("ac-cap-imagegen").checked = g.indexOf("imagegen") !== -1;
+      el("ac-cap-skills").checked = g.indexOf("skills") !== -1;
       el("ac-locked").checked = !!a.locked;
       el("ac-reason").value = a.lock_reason || "";
       // Restore the auto-unlock countdown from the stored deadline. (v2.13
@@ -509,6 +531,8 @@
       daily_minutes: parseInt(el("ac-daily").value, 10) || 0,
       allowed_hours: (from && to) ? (from + "-" + to) : "",
       socials_allowed: !!el("ac-socials").checked,
+      admin_grants: ["models", "integrations", "imagegen", "skills"].filter(
+        function (c) { return !!el("ac-cap-" + c).checked; }),
       locked: !!el("ac-locked").checked,
       lock_reason: (el("ac-reason").value || "").trim(),
     };

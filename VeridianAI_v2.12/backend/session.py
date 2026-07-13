@@ -1,4 +1,4 @@
-"""In-memory session store for OracleAI multi-user mode.
+"""In-memory session store for VeridianAI multi-user mode.
 
 Maps an opaque 256-bit session token -> {username, ns, is_owner, created, expires}.
 
@@ -10,6 +10,7 @@ cryptographically random and never derived from the password.
 import secrets
 import threading
 import time
+from fastapi import Request, HTTPException
 
 _SESSIONS = {}
 _LOCK = threading.Lock()
@@ -18,6 +19,27 @@ _DEFAULT_TTL = 7 * 24 * 3600  # 7 days
 
 def _now():
     return int(time.time())
+
+
+def owner_or_granted(request: Request, cookie_name: str, cap: str = None) -> bool:
+    """True if this request's session belongs to the owner, or (when cap is
+    given) belongs to a non-owner explicitly granted that capability via
+    Access Controls. Fetches the session directly from the cookie every
+    call — no dependency on middleware-stamped request state, so this works
+    identically for HTTP requests, WebSocket handshakes, or anything else
+    that carries the cookie."""
+    s = get_session(request.cookies.get(cookie_name))
+    if not s:
+        return False
+    if s.get("is_owner"):
+        return True
+    if cap:
+        try:
+            import access_policy as _ap
+            return bool(_ap.admin_granted(s.get("username"), cap))
+        except Exception:
+            return False  # fail-closed: a broken policy store never mints admin power
+    return False
 
 
 def create_session(user, ttl=_DEFAULT_TTL):

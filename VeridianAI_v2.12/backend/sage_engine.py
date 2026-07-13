@@ -1,8 +1,8 @@
 """
 Non-cloud based, fully locally run inference VeridianAI with Toga Engine v3
 Provides: web search, weather, code execution, memory/archives,
-query pre-processing with auto-detection, semantic search,
-file upload/text extraction, complexity routing, vibe prompts,
+query pre-processing with complexity-detection, auto-routing, semantic search,
+file upload/text extraction, vibe prompts,
 and agentic tool dispatch with dual TaskPrioritiser support.
 
 v2.1.1 additions:
@@ -2260,7 +2260,7 @@ def analyze_complexity(prompt: str) -> float:
 
     # 4. Multi-step indicators
     step_words = [
-        "first", "then", "next", "after that", "finally",
+        "first", "then", "next", "after that", "finally", "continue", "concurrently",
         "step by step", "in order", "subsequently", "second,", "third,",
     ]
     step_hits = sum(1 for w in step_words if w in pl)
@@ -2455,11 +2455,6 @@ def route_query(prompt: str, candidates: "list[str] | None" = None,
         pass
 
     if len(pool) == 1:
-        return pool[0]
-
-    # Feature flag escape hatch -- if complexity detection is
-    # disabled, return the first candidate deterministically.
-    if not is_feature_enabled("complexity_detector"):
         return pool[0]
 
     complexity = analyze_complexity(prompt)

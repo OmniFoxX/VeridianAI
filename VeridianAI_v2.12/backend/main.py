@@ -1498,6 +1498,7 @@ async def api_socials_verify(request: Request, payload: dict):
     Body: {fingerprint, nickname?, verified?: bool (default true)}.
     Per-peer by design: a blanket verify-all would defeat the entire point
     of out-of-band fingerprint comparison."""
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     if not _is_local_client(request):
         raise HTTPException(404)
     fpn = _socials_fp_norm(payload.get("fingerprint") or "")
@@ -1645,6 +1646,7 @@ def _get_setup_queue():
 
 @app.post("/api/comfyui/run-setup")
 async def comfyui_run_setup(request: Request):
+    _owner_gate(request, "imagegen")  # v2.12.8 owner, or "imagegen" grant (semgrep+AC)
     try:
         body = await request.json()
     except Exception:
@@ -1741,6 +1743,7 @@ async def comfyui_download_model(request: Request):
     """Download a catalog model into ComfyUI/models/checkpoints, streaming
     progress over the SAME SSE channel the setup wizard uses
     (/api/comfyui/setup-progress). Records the choice in config on success."""
+    _owner_gate(request, "imagegen")  # v2.12.8 owner, or "imagegen" grant (semgrep+AC)
     try:
         body = await request.json()
     except Exception:
@@ -1810,6 +1813,7 @@ async def comfyui_download_model(request: Request):
 async def comfyui_select_model(request: Request):
     """Set the active model (must already be installed). Persists the choice so
     generation uses it + its params across restarts."""
+    _owner_gate(request, "imagegen")  # v2.12.8 owner, or "imagegen" grant (semgrep+AC)
     try:
         body = await request.json()
     except Exception:
@@ -1834,6 +1838,7 @@ async def comfyui_select_model(request: Request):
 async def comfyui_delete_model(request: Request):
     """Delete an installed checkpoint to reclaim disk. If it was the active
     model, clear the selection so generation falls back cleanly."""
+    _owner_gate(request, "imagegen")  # v2.12.8 owner, or "imagegen" grant (semgrep+AC)
     try:
         body = await request.json()
     except Exception:
@@ -1859,6 +1864,7 @@ async def comfyui_enable_directml(request: Request):
     """OPT-IN: install torch-directml so AMD/Intel GPUs accelerate via --directml.
     REFUSES on NVIDIA (CUDA is already optimal; we never touch the CUDA build).
     Streams progress over the setup-progress SSE channel."""
+    _owner_gate(request, "imagegen")  # v2.12.8 owner, or "imagegen" grant (semgrep+AC)
     import comfyui_setup
     import comfyui_launcher
     gpu = comfyui_setup.detect_gpu()
@@ -1922,7 +1928,8 @@ async def api_list_models():
 
 
 @app.post("/api/models/load")
-async def api_load_model(payload: dict):
+async def api_load_model(payload: dict, request: Request):
+    _owner_gate(request, "models")  # v2.12.8 owner, or "models" grant (semgrep+AC)
     mid = payload.get("model_id", "")
     if not mid:
         raise HTTPException(400, "model_id required")
@@ -1930,7 +1937,8 @@ async def api_load_model(payload: dict):
 
 
 @app.post("/api/models/unload")
-async def api_unload_model(payload: dict):
+async def api_unload_model(payload: dict, request: Request):
+    _owner_gate(request, "models")  # v2.12.8 owner, or "models" grant (semgrep+AC)
     mid = payload.get("model_id", "")
     await model_manager.unload_model(mid)
     return {"status": "unloaded", "model_id": mid}
@@ -1954,10 +1962,11 @@ async def api_tier_status(name: str):
 
 
 @app.post("/api/tiers/{name}/restart")
-async def api_tier_restart(name: str):
+async def api_tier_restart(name: str, request: Request):
     """Manually restart a single tier using its current desired ctx_size
     computed from config.json. Blocks for up to ~70 seconds while the
     new llama-server loads its model."""
+    _owner_gate(request, "models")  # v2.12.8 owner, or "models" grant (semgrep+AC)
     name = name.lower().strip()
     if name not in tier_lifecycle.TIER_PORTS:
         raise HTTPException(400, f"Unknown tier: {name!r}")
@@ -1971,12 +1980,13 @@ async def api_tier_restart(name: str):
 
 
 @app.post("/api/models/refresh")
-async def api_models_refresh():
+async def api_models_refresh(request: Request):
     """Combined endpoint for the frontend Refresh Models button.
     1. Restart any llama-server tier whose ctx_size has changed
        since the last boot/restart (no-op if nothing changed).
     2. Return the fresh model list plus a list of tiers that
        were actually restarted this call."""
+    _owner_gate(request, "models")  # v2.12.8 owner, or "models" grant (semgrep+AC)
     tier_result = await tier_lifecycle.refresh_if_needed(config)
     models = await model_manager.list_models()
     return {
@@ -2175,7 +2185,8 @@ async def api_get_devmode():
 
 
 @app.post("/api/devmode")
-async def api_set_devmode(payload: dict):
+async def api_set_devmode(payload: dict, request: Request):
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     import devmode
     enabled = bool(payload.get("enabled"))
     devmode.set_enabled(enabled)
@@ -2216,7 +2227,8 @@ async def api_get_browser_config():
 
 
 @app.post("/api/browser/config")
-async def api_set_browser_config(payload: dict):
+async def api_set_browser_config(payload: dict, request: Request):
+    _owner_gate(request, "integrations")  # v2.12.8 owner, or "integrations" grant (semgrep+AC)
     import ui_prefs
     val = bool(payload.get("persist_cookies"))
     ui_prefs.set("browser_persist_cookies", val)
@@ -2289,13 +2301,15 @@ async def api_get_tavily():
 
 
 @app.post("/api/tavily")
-async def api_set_tavily(payload: dict):
+async def api_set_tavily(payload: dict, request: Request):
+    _owner_gate(request, "integrations")  # v2.12.8 owner, or "integrations" grant (semgrep+AC)
     key = payload.get("api_key", "")
     return sage_engine.set_tavily_key(key)
 
 
 @app.delete("/api/tavily")
-async def api_delete_tavily():
+async def api_delete_tavily(request: Request):
+    _owner_gate(request, "integrations")  # v2.12.8 owner, or "integrations" grant (semgrep+AC)
     return sage_engine.delete_tavily_key()
 
 
@@ -2328,6 +2342,36 @@ def _is_owner(request: Request) -> bool:
         return bool(s and s.get("is_owner"))
     except Exception:
         return False
+
+
+def _owner_gate(request: Request, cap: str = None):
+    """v2.12.8 semgrep hardening: owner-or-404 for system-level endpoints
+    (shared tokens/keys, model+tier lifecycle, plugin flags, global prefs,
+    ComfyUI install/model ops, AIQNudge, exercise wipe, BitChat trust).
+    Single-user mode counts as owner via _is_owner (multiuser off = owner
+    by definition -- zero change for solo installs); in multi-user mode a
+    non-owner session gets the uniform 404 cloak, matching _require_owner
+    and the WAN-guard convention (no hint the surface exists).
+
+    v2.12.9 delegated admin: when `cap` is given ("models", "integrations",
+    "imagegen") a non-owner profile passes IF the owner granted it that
+    capability in Access Controls (access_policy.admin_grants -- the
+    assistant-manager story). cap=None endpoints stay strictly owner:
+    sage-network tokens, AIQNudge, devmode, exercise wipe, BitChat verify.
+    The grant lookup is fail-closed in access_policy.admin_granted."""
+    if _is_owner(request):
+        return
+    if cap:
+        try:
+            import session as _session
+            _s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
+            if _s and not _s.get("is_owner"):
+                import access_policy as _ap
+                if _ap.admin_granted(_s.get("username"), cap):
+                    return
+        except Exception:
+            pass
+    raise HTTPException(404)
 
 
 # --- v2.11.13: per-user settings overlay -------------------------------------
@@ -2504,7 +2548,7 @@ async def openai_list_models():
     """OpenAI-compatible models list. Continue.dev probes this on connect.
 
     v2.2 (2026-05-31): returns a single virtual model identifier
-    'sage-pipeline' which represents the configured OracleAI inference
+    'sage-pipeline' which represents the configured VeridianAI inference
     chain (auto-route between primary + secondary per config.json --
     the request's `model` field is ignored). Once Session 2 lands the
     agentic-loop bridge, this same model id will route through the
@@ -2703,7 +2747,7 @@ async def api_route_query(payload: dict):
 
 # --- AIQNudge send (UI side-channel) ------------------------------------------
 @app.post("/api/aiq-nudge")
-async def api_aiq_nudge(payload: dict):
+async def api_aiq_nudge(payload: dict, request: Request):
     """Sign + deposit a mid-run nudge for Sage from the chat UI — the
     button-driven equivalent of the aiq_nudge_send.py terminal helper, so the
     user never has to open a terminal to steer Sage mid-run.
@@ -2713,6 +2757,7 @@ async def api_aiq_nudge(payload: dict):
     and Sage consumes it on her next agentic step. Uses the shared
     AIQNudge.send() and the same sage_data-resolved key as the consumer, so
     UI nudges verify identically to terminal ones."""
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     message = (payload.get("message") or "").strip()
     if not message:
         raise HTTPException(400, "empty nudge")
@@ -3186,16 +3231,18 @@ async def api_sn_status():
 
 
 @app.get("/api/sage-network/token")
-async def api_sn_token_reveal():
+async def api_sn_token_reveal(request: Request):
     # localhost-only (the LAN guard blocks this from remote). Reveals THIS node's
     # home token so the user can copy it to another machine they own.
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     import node_trust
     token = node_trust.load_or_create_home_token(str(DATA_DIR))
     return {"token": token, "fingerprint": node_trust.token_fingerprint(token)}
 
 
 @app.post("/api/sage-network/token")
-async def api_sn_token_set(payload: dict):
+async def api_sn_token_set(payload: dict, request: Request):
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     import node_trust
     tok = (payload.get("token") or "").strip()
     if not tok:
@@ -3206,7 +3253,8 @@ async def api_sn_token_set(payload: dict):
 
 
 @app.post("/api/sage-network/token/reset")
-async def api_sn_token_reset():
+async def api_sn_token_reset(request: Request):
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     import node_trust
     tok = node_trust.reset_home_token(str(DATA_DIR))
     if not tok:
@@ -3615,13 +3663,15 @@ async def api_exercise_add(payload: dict):
 
 
 @app.delete("/api/exercise")
-async def api_exercise_clear():
+async def api_exercise_clear(request: Request):
+    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     return sage_engine.clear_exercise_log()
 
 
 # --- Plugin Feature Toggle Wiring ---
 @app.post("/api/plugins/{plugin_id}/toggle")
-async def api_toggle_plugin_v2(plugin_id: str):
+async def api_toggle_plugin_v2(plugin_id: str, request: Request):
+    _owner_gate(request, "integrations")  # v2.12.8 owner, or "integrations" grant (semgrep+AC)
     result = plugin_manager.toggle_plugin(plugin_id)
     # Wire toggle state to sage_engine feature flags
     feature_map = {

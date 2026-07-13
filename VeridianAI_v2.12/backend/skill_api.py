@@ -124,6 +124,41 @@ def _ratelimit(request):
         raise HTTPException(429, "rate limited; retry in %ss" % rl["retry_after"])
 
 
+def _owner_guard(request: Request):
+    """v2.12.8 semgrep hardening: the MANAGE / IDENTITY+TRUSTED / BUNDLE
+    endpoints are owner actions (this module's docstring always said so);
+    now it's enforced, not just documented. Single-user mode (multiuser
+    off) = owner by definition, so solo installs see zero change. In
+    multi-user mode main.py's _session_gate middleware has already
+    attached request.state.user for every non-allowlisted path, so a
+    missing or non-owner session gets the uniform 404 cloak here --
+    matching main.py's _require_owner / WAN-guard convention. The
+    peer-facing SERVE endpoints (/catalog, /object) are intentionally
+    NOT gated: they are allowlisted, rate-limited, and expose only
+    promoted signed skills."""
+    try:
+        mu = bool(_config.get("multiuser_enabled", False)) if _config else False
+    except Exception:
+        mu = False
+    if not mu:
+        return
+    import session as _session
+    u = _session.get_session(request.cookies.get(_OWNER_COOKIE))
+    if u and u.get("is_owner"):
+        return
+    # v2.12.9 delegated admin: the owner can grant the "skills" capability
+    # to an assistant-manager profile via Access Controls (admin_grants).
+    # Lookup is fail-closed in access_policy.admin_granted -- a policy-store
+    # error must never mint admin powers.
+    try:
+        import access_policy as _ap
+        if u and _ap.admin_granted(u.get("username"), "skills"):
+            return
+    except Exception:
+        pass
+    raise HTTPException(404)
+
+
 # ---------------- SERVE (peer-facing; allowlisted; flag-gated) ----------------
 @skill_router.get("/catalog")
 async def skills_catalog(request: Request):
@@ -144,14 +179,16 @@ async def skills_object(hid: str, request: Request):
 
 # ---------------- MANAGE (owner; behind session gate; flag-gated) -------------
 @skill_router.get("/local")
-async def skills_local():
+async def skills_local(request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     return {"skills": s.store.list(), "stats": s.store.stats(),
             "fingerprint": _self_fingerprint()}
 
 
 @skill_router.post("/publish")
-async def skills_publish(payload: dict):
+async def skills_publish(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     name = (payload.get("name") or "").strip()
     body = payload.get("body")
@@ -165,7 +202,8 @@ async def skills_publish(payload: dict):
 
 
 @skill_router.post("/browse")
-async def skills_browse(payload: dict):
+async def skills_browse(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     relay = (payload.get("relay") or "").strip().rstrip("/")
     target = (payload.get("target") or "").strip()
@@ -197,7 +235,8 @@ async def skills_browse(payload: dict):
 
 
 @skill_router.post("/fetch")
-async def skills_fetch(payload: dict):
+async def skills_fetch(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     hid = (payload.get("id") or "").strip()
     relay = (payload.get("relay") or "").strip().rstrip("/")
@@ -228,7 +267,8 @@ async def skills_fetch(payload: dict):
 
 
 @skill_router.post("/promote")
-async def skills_promote(payload: dict):
+async def skills_promote(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     hid = (payload.get("id") or "").strip()
     if not hid:
@@ -238,7 +278,8 @@ async def skills_promote(payload: dict):
 
 
 @skill_router.post("/reject")
-async def skills_reject(payload: dict):
+async def skills_reject(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     hid = (payload.get("id") or "").strip()
     if not hid:
@@ -247,7 +288,8 @@ async def skills_reject(payload: dict):
 
 
 @skill_router.post("/remove")
-async def skills_remove(payload: dict):
+async def skills_remove(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     hid = (payload.get("id") or "").strip()
     if not hid:
@@ -257,19 +299,22 @@ async def skills_remove(payload: dict):
 
 # ---------------- IDENTITY + TRUSTED KEYS (owner; behind session gate) ----------
 @skill_router.get("/identity")
-async def skills_identity():
+async def skills_identity(request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     _guard()
     return skill_keys.self_identity(_key_dir)
 
 
 @skill_router.get("/trusted")
-async def skills_trusted_list():
+async def skills_trusted_list(request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     _guard()
     return {"keys": skill_keys.list_keys(_key_dir)}
 
 
 @skill_router.post("/trusted")
-async def skills_trusted_add(payload: dict):
+async def skills_trusted_add(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     _guard()
     pub = (payload.get("pubkey") or "").strip()
     if not pub:
@@ -278,7 +323,8 @@ async def skills_trusted_add(payload: dict):
 
 
 @skill_router.post("/trusted/remove")
-async def skills_trusted_remove(payload: dict):
+async def skills_trusted_remove(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     _guard()
     pub = (payload.get("pubkey") or "").strip()
     if not pub:
@@ -288,7 +334,8 @@ async def skills_trusted_remove(payload: dict):
 
 # ---------------- OFFLINE BUNDLES (owner; behind session gate) -----------------
 @skill_router.get("/export/{hid}")
-async def skills_export(hid: str):
+async def skills_export(hid: str, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     b = s.export_bundle(hid)
     if b is None:
@@ -297,7 +344,8 @@ async def skills_export(hid: str):
 
 
 @skill_router.post("/import")
-async def skills_import(payload: dict):
+async def skills_import(payload: dict, request: Request):
+    _owner_guard(request)  # v2.12.8 owner-only (semgrep)
     s = _guard()
     bundle = payload.get("bundle") if (isinstance(payload, dict) and "bundle" in payload) else payload
     return s.import_bundle(bundle, trusted_pubkeys=_trusted())

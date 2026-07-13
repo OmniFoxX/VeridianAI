@@ -54,7 +54,7 @@ class PluginManager:
                 "description": p.get("description", ""),
                 "version":     p.get("version", ""),
                 "enabled":     p.get("enabled", True),
-                "author":      p.get("author", "OracleAI"),
+                "author":      p.get("author", "VeridianAI"),
                 "hooks":       list(p.get("hooks", {}).keys()),
             }
             for pid, p in self._plugins.items()
