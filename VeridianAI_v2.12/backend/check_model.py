@@ -33,7 +33,9 @@ for p in _candidates():
     if os.path.exists(p):
         print("  File exists")
         try:
-            data = torch.load(p, map_location="cpu")
+            # nosemgrep -- weights_only=True prevents arbitrary-code execution during
+            # unpickling; this diagnostic only ever inspects a state_dict of tensors.
+            data = torch.load(p, map_location="cpu", weights_only=True)
             print(f"  Loaded successfully. Keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
         except Exception as e:
             print(f"  Failed to load: {e}")

@@ -52,7 +52,10 @@ def infer_plm(
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
     try:
-        checkpoint = torch.load(model_path, map_location=device)
+        # nosemgrep -- weights_only=True blocks arbitrary-code execution during
+        # unpickling. Matters here because a PLM checkpoint can arrive from another
+        # Aether node; we only ever consume checkpoint['model_state_dict'] (tensors).
+        checkpoint = torch.load(model_path, map_location=device, weights_only=True)
     except Exception as e:
         raise RuntimeError(f"Failed to load model: {str(e)}")
 

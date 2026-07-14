@@ -2003,6 +2003,39 @@ async def api_get_config(request: Request):
     return _effective_config(_session_ns(request))
 
 
+# --- Path-traversal hardening (semgrep: FastAPI path traversal) --------------
+# Namespaces are already sanitized at account creation (users._ns_for ->
+# [A-Za-z0-9_-], <=40 chars). These helpers re-assert that invariant at every
+# filesystem boundary, so a path can NEVER be built from an unexpected ns, plus
+# a single containment primitive reused by the burn / settings / upload /
+# image-write / account-wipe paths below. HIPAA §164.312(a)(1) access control.
+import re as _re_pt
+_NS_RE = _re_pt.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _safe_ns(ns):
+    """Return ns unchanged if it is a valid namespace token, else raise.
+    None (owner / single-user) passes through untouched."""
+    if ns is None:
+        return None
+    ns = str(ns)
+    if not _NS_RE.match(ns):
+        raise HTTPException(400, "invalid namespace")
+    return ns
+
+
+def _within(child, parent) -> bool:
+    """True iff resolved `child` is `parent` or lives inside it (symlink/'..'
+    safe). Defensive containment check run before destructive/write ops on a
+    constructed path."""
+    try:
+        child = Path(child).resolve()
+        parent = Path(parent).resolve()
+        return child == parent or parent in child.parents
+    except Exception:
+        return False
+
+
 @app.post("/api/burn")
 async def api_burn(payload: dict, request: Request):
     """v2.12.0 Zero-Data-Retention 'Burn' — one-touch wipe of ALL of the
@@ -2025,7 +2058,7 @@ async def api_burn(payload: dict, request: Request):
     if payload.get("confirm") != "BURN":
         raise HTTPException(400, "burn requires explicit confirmation")
     import shutil as _shutil
-    ns = _session_ns(request)
+    ns = _safe_ns(_session_ns(request))
     removed = []
     errors = []
 
@@ -2046,9 +2079,9 @@ async def api_burn(payload: dict, request: Request):
                 fp = os.path.join(d, name)
                 try:
                     if os.path.isdir(fp):
-                        _shutil.rmtree(fp, ignore_errors=True)
+                        _shutil.rmtree(fp, ignore_errors=True)  # nosemgrep -- fp is an entry inside a caller-contained dir (burn validates via _safe_ns + _within; owner branch uses fixed store paths)
                     else:
-                        os.remove(fp)
+                        os.remove(fp)  # nosemgrep -- see above; fp is inside a caller-validated directory
                 except Exception as e:
                     errors.append(f"{fp}: {e}")
             removed.append(os.path.basename(d) + "/*")
@@ -2059,6 +2092,8 @@ async def api_burn(payload: dict, request: Request):
         if ns:
             # Non-owner: wipe ONLY sage_data/users/<ns>/*
             base = os.path.join(str(DATA_DIR), "users", str(ns))
+            if not _within(base, Path(str(DATA_DIR)) / "users"):
+                raise HTTPException(400, "refusing to wipe a path outside users/")
             _rm_tree_contents(base)
         else:
             # Owner / single-user: shared stores, but NOT the users/ tree.
@@ -2392,7 +2427,8 @@ PER_USER_KEYS = frozenset({
 
 
 def _user_settings_file(ns) -> Path:
-    return Path(DATA_DIR) / "users" / str(ns) / "settings.json"
+    # _safe_ns re-validates the namespace at this filesystem boundary (semgrep).
+    return Path(DATA_DIR) / "users" / str(_safe_ns(ns)) / "settings.json"
 
 
 def _load_user_overlay(ns) -> dict:
@@ -2403,6 +2439,8 @@ def _load_user_overlay(ns) -> dict:
     try:
         f = _user_settings_file(ns)
         if f.exists():
+            # nosemgrep -- f built via _user_settings_file, which routes ns through
+            # _safe_ns above (no separators/traversal possible).
             raw = json.loads(f.read_text(encoding="utf-8"))
             if isinstance(raw, dict):
                 return {k: v for k, v in raw.items() if k in PER_USER_KEYS}
@@ -2418,6 +2456,7 @@ def _save_user_overlay(ns, patch: dict) -> dict:
     try:
         f = _user_settings_file(ns)
         f.parent.mkdir(parents=True, exist_ok=True)
+        # nosemgrep -- f built via _user_settings_file (ns validated by _safe_ns).
         f.write_text(json.dumps(overlay, indent=2), encoding="utf-8")
     except Exception as e:
         print(f"[USER SETTINGS] save failed for ns={ns}: {e}")
@@ -2783,10 +2822,15 @@ async def api_upload(request: Request, file: UploadFile = File(...)):
         r'[^\w\-.]', '_', file.filename
     ) or f"upload_{TimeManager.epoch_int()}"  # v2.1.6 unified
 
-    dest = _uploads_dir_for_ns(_session_ns(request)) / safe_name
+    _updir = _uploads_dir_for_ns(_safe_ns(_session_ns(request)))
+    dest = _updir / safe_name
     dest.parent.mkdir(parents=True, exist_ok=True)
+    # safe_name is regex-scrubbed, but '.' is allowed so a bare '..' could slip
+    # through; assert the final path stays inside the user's uploads dir.
+    if dest.name in ("", ".", "..") or not _within(dest, _updir):
+        raise HTTPException(400, "invalid upload filename")
 
-    with open(dest, "wb") as f:
+    with open(dest, "wb") as f:  # nosemgrep -- dest contained within _updir (checked above)
         shutil.copyfileobj(file.file, f)
 
     size = dest.stat().st_size
@@ -2799,10 +2843,10 @@ async def api_upload(request: Request, file: UploadFile = File(...)):
     # in the response, never re-reads the disk file).
     try:
         import atrest as _atrest
-        with open(dest, "rb") as _uf:
+        with open(dest, "rb") as _uf:  # nosemgrep -- dest already contained within uploads dir (checked at write time)
             _raw = _uf.read()
         if not _atrest.is_encrypted(_raw):
-            with open(dest, "wb") as _uf:
+            with open(dest, "wb") as _uf:  # nosemgrep -- same contained dest
                 _uf.write(_atrest.encrypt_bytes(_raw))
     except Exception:
         pass
@@ -2856,12 +2900,21 @@ async def _generate_image_routed(prompt, downloads_dir=None, **opts):
                     import base64
                     import uuid
                     raw = base64.b64decode(res["data"])
-                    fn = res.get("filename") or ("gen_remote_" + uuid.uuid4().hex[:8] + ".png")
+                    # 'filename' comes from the REMOTE node's response -> untrusted.
+                    # Reduce to a bare basename, strip leading dots, scrub the rest,
+                    # then confirm containment so a hostile/compromised node can't
+                    # traverse out of downloads/ (e.g. "../../config.json").
+                    _rawfn = os.path.basename(str(res.get("filename") or ""))
+                    fn = _re_pt.sub(r"[^A-Za-z0-9._-]", "_", _rawfn).lstrip(".") \
+                        or ("gen_remote_" + uuid.uuid4().hex[:8] + ".png")
                     _dl.mkdir(parents=True, exist_ok=True)
+                    _outp = _dl / fn
+                    if not _within(_outp, _dl):
+                        _outp = _dl / ("gen_remote_" + uuid.uuid4().hex[:8] + ".png")
                     import atrest as _atrest
-                    with open(_dl / fn, "wb") as _f:
+                    with open(_outp, "wb") as _f:  # nosemgrep -- _outp reduced to a basename + contained in _dl
                         _f.write(_atrest.encrypt_bytes(raw))
-                    res["path"] = str(_dl / fn)
+                    res["path"] = str(_outp)
                     res["via"] = "remote"
                 except Exception:
                     pass
@@ -3547,8 +3600,10 @@ async def api_auth_users_delete(request: Request, payload: dict):
         try:
             import shutil
             d = sage_engine.user_data_dir(r["ns"])
-            users_root = str((DATA_DIR / "users").resolve())
-            if d and d.exists() and str(d.resolve()).startswith(users_root):
+            # nosemgrep -- _within() confirms d resolves to inside sage_data/users/
+            # before any delete; separator-safe (avoids the '.../users_evil' prefix
+            # trap that a bare startswith() would miss).
+            if d and d.exists() and _within(d, DATA_DIR / "users"):
                 shutil.rmtree(d, ignore_errors=True)
                 wiped = True
         except Exception as _wipe_err:

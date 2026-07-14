@@ -464,6 +464,8 @@ async def lifespan(app: FastAPI):
     ann = asyncio.create_task(_periodic_announce())
     initk = asyncio.create_task(_initiate_pending())
     advw = asyncio.create_task(_advertising_watchdog())
+    # nosemgrep -- LOG string, not a live socket. WS_HOST defaults to 127.0.0.1
+    # (loopback); "ws://" here is only the advertised local URL for the app UI.
     logger.info("[GW] ready - WS on ws://%s:%d/ws", WS_HOST, WS_PORT)
     yield
     for t in (relay, ann, initk, advw):

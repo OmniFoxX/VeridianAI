@@ -1,9 +1,9 @@
 {
   "id": "browser-plugin",
-  "name": "Sage Browser",
-  "description": "Headless web fetcher and DuckDuckGo search. Lets Sage read web pages and search without using Tavily API budget. Off by default — toggle on to enable [BROWSE: url] and [WEB_SEARCH: query] tags.",
+  "name": "Toga Browser",
+  "description": "Headless web fetcher and DuckDuckGo search. Lets Toga read web pages and search without using Tavily API budget. Off by default — toggle on to enable [BROWSE: url] and [WEB_SEARCH: query] tags.",
   "version": "4.2.2",
-  "author": "OracleAI",
+  "author": "VeridianAI",
   "enabled": true,
   "category": "research",
   "icon": "🌐",

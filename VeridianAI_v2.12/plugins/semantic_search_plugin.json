@@ -3,7 +3,7 @@
   "name": "Semantic Search",
   "description": "AI-powered semantic search through chat archives.",
   "version": "2.0",
-  "author": "OracleAI",
+  "author": "VeridianAI",
   "enabled": true,
   "type": "python_tool",
   "hooks": {}

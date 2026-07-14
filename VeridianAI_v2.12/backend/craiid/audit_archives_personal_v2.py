@@ -148,7 +148,9 @@ def load_plm(model_path, device='cpu'):
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"PLM not found: {model_path}")
 
-    checkpoint = torch.load(model_path, map_location=device)
+    # nosemgrep -- weights_only=True blocks arbitrary-code execution during
+    # unpickling; only checkpoint['model_state_dict'] (tensors) is consumed below.
+    checkpoint = torch.load(model_path, map_location=device, weights_only=True)
 
     required_keys = {'model_state_dict', 'idx_to_label', 'feature_dim', 'hidden_dim'}
     missing = required_keys - checkpoint.keys()

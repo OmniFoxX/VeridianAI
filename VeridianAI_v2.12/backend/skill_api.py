@@ -29,7 +29,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 import ipaddress
 import socket
-from urllib.parse import urlparse
+from urllib.parse import urlparse, quote
 
 import skill_keys
 from wan_guard import AbuseGuard
@@ -113,7 +113,13 @@ def _validate_external_url(url: str) -> None:
         ip = ipaddress.ip_address(resolved)
     except (socket.gaierror, ValueError):
         raise HTTPException(400, "could not resolve host")
-    if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+    if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+            or ip.is_multicast or ip.is_unspecified):
+        # is_unspecified blocks 0.0.0.0 / :: (which route to localhost on many
+        # stacks); is_multicast blocks 224.0.0.0/4. NOTE: this resolves the host
+        # once for validation, so a determined attacker could still attempt DNS
+        # rebinding between this check and httpx's own lookup -- acceptable here
+        # because these endpoints are owner-only, but see remediation doc.
         raise HTTPException(400, "target address not allowed")
 
 
@@ -222,6 +228,8 @@ async def skills_browse(payload: dict, request: Request):
     _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=20.0) as c:
+            # nosemgrep -- base is SSRF-validated by _validate_external_url above
+            # (rejects loopback/private/link-local/reserved/multicast/unspecified).
             r = await c.get(base + "/api/skills/catalog")
             if r.status_code != 200:
                 raise HTTPException(502, "peer returned %d" % r.status_code)
@@ -255,7 +263,9 @@ async def skills_fetch(payload: dict, request: Request):
     _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
-            r = await c.get(base + "/api/skills/object/" + hid)
+            # nosemgrep -- base is SSRF-validated (_validate_external_url) and hid is
+            # URL-encoded so it can't inject host/path structure into the request.
+            r = await c.get(base + "/api/skills/object/" + quote(hid, safe=""))
             if r.status_code != 200:
                 raise HTTPException(502, "peer returned %d" % r.status_code)
             obj = r.json()

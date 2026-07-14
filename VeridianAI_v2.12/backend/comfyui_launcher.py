@@ -360,9 +360,18 @@ def _spawn(command):
             cwd=cwd, creationflags=flags,
         ))
 
-    # Explicit shell command string from config (user-supplied).
-    return _register_spawn(subprocess.Popen(
-        command, shell=True, stdout=dn, stderr=dn, stdin=dn,
+    # Explicit command string from config (comfyui_launch_cmd, owner-only). Run it
+    # WITHOUT a shell so nothing interprets metacharacters (&, |, >, $(), %VAR%):
+    #   * Windows: hand the raw string to CreateProcess (shell=False). The native
+    #     parser still resolves quoted paths/args, but cmd.exe never runs.
+    #   * POSIX: split into an argv list with shlex.
+    # Auto-detected launches never reach here (they return a list or an existing
+    # file path, handled above). If a launch truly needs shell features, point
+    # comfyui_launch_cmd at a .bat/.cmd/.sh wrapper (hits the file-path branch).
+    import shlex
+    proc_cmd = command if os.name == "nt" else shlex.split(command)
+    return _register_spawn(subprocess.Popen(  # nosemgrep -- shell=False; no shell interpretation
+        proc_cmd, shell=False, stdout=dn, stderr=dn, stdin=dn,
         creationflags=flags,
     ))
 

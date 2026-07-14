@@ -134,7 +134,13 @@ def _configured_nickname() -> str:
 
 
 NICKNAME = _configured_nickname()
-WS_HOST = os.environ.get("BITCHAT_WS_HOST", "0.0.0.0")
+# Default to loopback (matches bitchat_winrt_gateway.py). This WS is a local
+# bridge between the daemon and the app UI on the SAME machine; it is plaintext
+# ws://, so binding it to all interfaces (0.0.0.0) would expose an unencrypted
+# channel on the LAN. An operator who genuinely needs remote access can set
+# BITCHAT_WS_HOST explicitly AND must front it with TLS (see startup warning
+# below). HIPAA §164.312(e): no plaintext ePHI-adjacent traffic over a network.
+WS_HOST = os.environ.get("BITCHAT_WS_HOST", "127.0.0.1")
 WS_PORT = int(os.environ.get("BITCHAT_WS_PORT", "8080"))
 
 ws_clients: Set[WebSocket] = set()
@@ -313,6 +319,14 @@ async def lifespan(app: FastAPI):
         logger.error("[BLE] could not start peripheral: %s", exc)
     relay_task = asyncio.create_task(_inbound_relay_loop())
     ann_task = asyncio.create_task(_periodic_announce())
+    if WS_HOST not in ("127.0.0.1", "localhost", "::1"):
+        logger.warning(
+            "[Daemon] WS bound to %s (non-loopback) over PLAINTEXT ws:// -- front it "
+            "with a TLS reverse proxy or traffic crosses the network unencrypted.",
+            WS_HOST,
+        )
+    # nosemgrep -- LOG string, not a live socket. Bind host defaults to loopback
+    # (WS_HOST above); "ws://" here is only the advertised local URL for the UI.
     logger.info("[Daemon] ready - WS on ws://%s:%d/ws", WS_HOST, WS_PORT)
     yield
     for t in (relay_task, ann_task):

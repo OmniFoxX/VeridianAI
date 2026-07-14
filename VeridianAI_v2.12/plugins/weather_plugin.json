@@ -3,7 +3,7 @@
   "name": "Weather Lookup",
   "description": "Real-time weather data and 3-day forecasts via wttr.in.",
   "version": "1.1",
-  "author": "OracleAI",
+  "author": "VeridianAI",
   "enabled": true,
   "type": "python_tool",
   "hooks": {}

@@ -153,6 +153,10 @@ def train_plm(
     print(f"Saving model to {output_path}...")
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
+    # nosemgrep -- torch.save() SERIALIZES; it is not a deserialization/RCE vector.
+    # The load-side risk is mitigated separately with weights_only=True (see
+    # infer_plm_daemon_v2.py / audit_archives_personal_v2.py). Saved payload is
+    # tensors + plain dicts/ints, so it stays weights_only-loadable downstream.
     torch.save({
         'model_state_dict': model.state_dict(),
         'idx_to_label': dataset.idx_to_label,

@@ -52,7 +52,10 @@ function renderSessionBanner() {
 
 /* --- WebSocket ------------------------------------------------ */
 function connectWS() {
-  const url = `ws://${location.host}/ws/chat`;
+  // wss:// when the page is served over TLS, ws:// only for local/plaintext — the
+  // socket inherits the page's transport security (HIPAA §164.312(e), in transit).
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws/chat`;
   ws = new WebSocket(url);
   ws.onopen = () => {
     setStatus("Ready");
