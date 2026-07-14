@@ -1,0 +1,91 @@
+VERIDIANAI — MENTISPHERE SOFTWARE
+████████████████████████████████████████████████████████████████████████
+VERIDIANAI DISCORD BOT — SUPPLEMENTAL TERMS OF SERVICE
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 1.0
+
+SECTION 1 — PURPOSE, SCOPE, AND RELATIONSHIP TO MAIN TERMS
+1.1 Supplement to Main Terms of Service
+These Discord Bot Supplemental Terms of Service ("Bot Terms") apply specifically and exclusively to Licensee's use of the VeridianAI Discord bot integration ("Discord Bot" or "Bot"). They do not replace the VeridianAI Terms of Service ("Main Terms"), Privacy Policy, or End-User License Agreement ("EULA"), each of which remains in full force and governs User's overall relationship with MentiSphere Software and use of the VeridianAI Platform.
+
+By using the VeridianAI Discord Bot, you accept the Main Terms, the EULA, the Privacy Policy, and these Bot Terms. In the event of any conflict between these Bot Terms and the Main Terms, the Main Terms control unless these Bot Terms explicitly state otherwise with respect to a specific Bot-related provision.
+
+1.2 Separate Governance by Discord, Inc.
+VeridianAI's Discord Bot operates within the Discord platform, which is owned and operated by Discord, Inc. ("Discord"). Discord's own Terms of Service (available at discord.com/terms) and Privacy Policy (available at discord.com/privacy) govern all aspects of the Discord platform, including Discord's own data collection, account management, server administration, content moderation, and community governance. Publisher does not control Discord's platform, has no authority over Discord's terms, and assumes no liability for Discord's actions or omissions.
+
+You must independently comply with Discord's Terms of Service and Community Guidelines as a condition of using the Discord platform and by extension the VeridianAI Discord Bot. Violations of Discord's terms may result in Discord restricting or terminating your Discord account, independently of any action Publisher may take.
+
+SECTION 2 — NATURE OF THE DISCORD BOT: PASS-THROUGH INTERFACE
+2.1 Architectural Description
+The VeridianAI Discord Bot is a pass-through interface only. It does not provide independent AI inference capability through Discord's cloud infrastructure. Instead, its function is limited to:
+
+(a) Receiving commands and message inputs through the Discord API on behalf of a User; (b) Routing those commands and inputs to a User-operated VeridianAI local instance or designated local inference endpoint controlled by the User; (c) Receiving the inference output generated entirely within that local environment; and (d) Returning the output to the Discord channel or direct message where the command originated.
+
+The AI inference processing enabled by the Bot occurs on User's local hardware or a local runtime designated and controlled by User. Publisher's Bot infrastructure functions solely as a messaging bridge and does not perform, host, or augment AI inference.
+
+2.2 Zero Publisher-Side Data Retention
+Publisher does not store, log, record, cache, index, retain, or process — beyond the instant of real-time routing — any of the following:
+
+The content of any Discord message or command submitted to the Bot;
+Any Discord user identifier, server identifier, channel identifier, or role data, beyond what is transiently required to route the command and return the response;
+Any AI-generated output returned through the Bot;
+Any metadata about the content or context of any command;
+Any history of prior Bot interactions; or
+Any analytics or behavioral data derived from Bot command patterns.
+Each command cycle is ephemeral: command content enters Publisher's Bot infrastructure, is immediately routed, a response is returned, and no record of the command or response is created or retained by Publisher. After delivery of the Bot response, Publisher holds zero information about the content of that interaction.
+
+2.3 Discord API Minimum Requirements
+Publisher's Bot infrastructure necessarily handles, for the duration of the routing transaction only, the technical minimum of information required by the Discord API to receive and return messages. This includes transient processing of:
+
+The Discord API event payload, which includes the channel ID, server guild ID, author user ID, and message content, as transmitted by Discord's API to the Bot at the moment of command receipt; and
+A response payload sufficient to deliver the Bot's return message to the originating channel.
+This transient handling is architecturally unavoidable given how Discord's API operates. It does not constitute data retention, logging, or storage by Publisher. The data described in this Section 2.3 is governed on Discord's side by Discord's own Terms and Privacy Policy; on Publisher's side, it is held in memory only for the duration of the routing transaction.
+
+SECTION 3 — USER RESPONSIBILITIES FOR DISCORD BOT USE
+3.1 Discord Community Standards
+You are solely responsible for ensuring that your use of the VeridianAI Discord Bot within any Discord server or direct message complies with:
+
+(a) Discord's Terms of Service and Community Guidelines; (b) The rules and policies of any Discord server in which you deploy or use the Bot; (c) All applicable laws and regulations governing the content you generate, transmit, and publish through Discord; and (d) The prohibited use provisions of the VeridianAI Terms of Service (Article V, Section 5.2), which apply in full to Bot-mediated interactions.
+
+3.2 Server Administrator Responsibilities
+If you operate a Discord server in which the VeridianAI Discord Bot is deployed:
+
+(a) You are responsible for configuring appropriate permission scopes, channel access restrictions, and role-based access controls to govern which users in your server may interact with the Bot; (b) You are responsible for establishing and enforcing your server's content moderation standards with respect to AI-generated content returned through the Bot; (c) You accept that AI-generated outputs appearing in your server are generated on the local hardware of the command-issuing user (or a user-designated local endpoint), not by Publisher, and you assume responsibility for your server's community governance accordingly; and (d) You are responsible for ensuring that your deployment of the Bot within your server complies with Discord's API Terms of Service and Bot developer policies.
+
+3.3 No Bot-Mediated Data Collection by Publisher
+Because Publisher collects zero post-transaction Bot interaction data, Publisher cannot enforce, review, or respond to content-specific complaints arising from Bot interactions on Discord. Content moderation, rule enforcement, and community governance within Discord servers are the exclusive responsibility of Discord and individual server administrators. Publisher may, upon receiving credible reports of Bot-mediated prohibited use, take action at the Bot-deployment or account level.
+
+SECTION 4 — INTELLECTUAL PROPERTY IN BOT INTERACTIONS
+4.1 User Content Ownership
+All prompts submitted through the Discord Bot and all AI-generated outputs returned through the Discord Bot are User Content as defined in the EULA. User retains full ownership of such content as set forth in EULA Section 3.2.
+
+4.2 Bot Software Ownership
+The VeridianAI Discord Bot's code, integration architecture, and associated materials are the intellectual property of MentiSphere Software as described in EULA Section 3.1. No rights in the Bot beyond the right to use it as a pass-through interface pursuant to the license granted in the EULA are conveyed to User.
+
+SECTION 5 — BOT AVAILABILITY AND MODIFICATIONS
+5.1 No Guarantee of Availability
+Publisher does not warrant that the Discord Bot will be continuously available, free from outages, or compatible with future versions of the Discord API. Discord API changes, Discord policy changes, or Publisher's operational decisions may result in modifications to or discontinuation of the Bot integration, with or without advance notice.
+
+5.2 Modifications
+Publisher may modify the Bot's functionality, command structure, or supported features at any time. Material changes that affect Users' interactions will be communicated through Publisher's standard notice mechanisms described in the Main Terms.
+
+5.3 Discontinuation
+Publisher may discontinue the Discord Bot integration at any time. Discontinuation of the Discord Bot does not affect User's license to use the VeridianAI Platform itself.
+
+SECTION 6 — DISCLAIMER AND LIMITATION OF LIABILITY (BOT-SPECIFIC)
+6.1 Bot-Specific Disclaimer
+THE DISCORD BOT IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND. In addition to all disclaimers set forth in the Main Terms and EULA, Publisher expressly disclaims:
+
+(a) Any warranty that the Bot will be available, error-free, or compatible with any Discord client version; (b) Any warranty regarding the accuracy, completeness, or suitability of AI-generated content returned through the Bot; and (c) Any liability for Discord API changes, Discord platform outages, Discord policy enforcement actions, or Discord's data handling practices.
+
+6.2 Bot-Specific Liability Limitation
+Publisher's total liability for claims arising from or related to the Discord Bot is subject to and shall not exceed the caps specified in Main Terms Article VIII, Section 8.3. Publisher shall have no liability whatsoever for:
+
+(a) Discord's data handling, enforcement actions, or platform decisions; (b) Content moderation failures within user-operated Discord servers; (c) Actions taken by Discord as a result of Bot use in violation of Discord's terms; or (d) Any downstream consequences of AI-generated content published in Discord channels through Bot responses.
+
+6.3 AI Safety in Bot Context
+All AI safety provisions, output disclaimers, and indemnification obligations set forth in Main Terms Article VIII apply in full to content generated and delivered through Bot interactions. The pass-through nature of the Bot does not alter User's responsibilities with respect to AI-generated content under the Main Terms.
+
+SECTION 7 — GOVERNING LAW, VENUE, AND CONTACT
+These Bot Terms are governed by the laws of Washington State, USA. Any dispute arising from these Bot Terms shall be resolved in King County, Washington State courts, subject to the same dispute resolution provisions described in Main Terms Article X.
+
+Contact: silverfox4816@gmail.com Subject Line Recommended for Bot-Specific Inquiries: "Discord Bot Inquiry — VeridianAI"

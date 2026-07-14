@@ -479,7 +479,9 @@ _current_offload: contextvars.ContextVar = contextvars.ContextVar(
 # ---------------------------------------------------------------------------
 import re as _re_size
 
-_MODEL_SIZE_PATTERN = _re_size.compile(r"(\d+(?:\.\d+)?)\s*b\b", _re_size.IGNORECASE)
+# Bounded digit counts so a very long numeric model name can't cause polynomial
+# backtracking (ReDoS); real model sizes are only a few digits (7b, 1.5b, 120b).
+_MODEL_SIZE_PATTERN = _re_size.compile(r"(\d{1,4}(?:\.\d{1,3})?)\s*b\b", _re_size.IGNORECASE)
 _SMALL_TIER_THRESHOLD_B = 4.0
 
 
@@ -3394,7 +3396,12 @@ async def api_save_to_downloads(payload: dict, request: Request):
         raise HTTPException(400, "filename required")
     import re as _re
     safe_name = _re.sub(r'[^\w\-.]', '_', filename)
-    path = _downloads_dir_for_ns(_session_ns(request)) / safe_name
+    _ddir = _downloads_dir_for_ns(_safe_ns(_session_ns(request)))
+    path = _ddir / safe_name
+    # safe_name is scrubbed, but '.' is allowed so a bare '..' could slip through;
+    # confirm the final path stays inside the user's downloads dir before writing.
+    if safe_name in ("", ".", "..") or not _within(path, _ddir):
+        raise HTTPException(400, "invalid filename")
     path.write_text(content, encoding="utf-8")
     return {"success": True, "filename": safe_name, "size": path.stat().st_size}
 
@@ -6045,7 +6052,7 @@ async def ws_chat(websocket: WebSocket):
                         if ("[SEARCH:" in search_buffer
                                 and not search_intercepted and web_ok):
                             match = re.search(
-                                r"\[SEARCH:\s*(.*?)(\]|$)",
+                                r"\[SEARCH:\s*([^\]]*)(\]|$)",  # [^\]]* is linear -> no ReDoS
                                 search_buffer, re.I,
                             )
                             if match and match.group(2) == "]":

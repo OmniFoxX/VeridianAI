@@ -1,0 +1,1 @@
+Models in the "YourChosenDriveAndPath"\VeridianAI_v2.12+\bundled_models\ folder MUST go in the sister folder "YourChosenDriveAndPath"\sage_data\models\ for VeridianAI to work. If it doesn't work after setup, this is likely why. Copy the models to that folder, the relaunch VeridianAI, enjoy!

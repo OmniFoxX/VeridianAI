@@ -24,8 +24,6 @@ sage_data/downloads/
 .pem
 .oai_signing_key.pem
 **/.oai_signing_key.pem
-**/uploads
-**/downloads
 
 # VeridianAI specific
 sage_plm.pt

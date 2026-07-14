@@ -87,11 +87,21 @@ class SkillStore:
             c.execute("CREATE INDEX IF NOT EXISTS idx_skills_pub ON skills(author_pub)")
 
     # ---- object paths ----
+    @staticmethod
+    def _safe_hid(hid):
+        """Content-addresses are hashes/tokens, never paths. Reject separators and
+        traversal so a fetched id can't escape the objects/ dir (path injection)."""
+        h = str(hid or "").strip()
+        if (not h or len(h) > 160 or "/" in h or "\\" in h or ".." in h
+                or "\x00" in h or h in (".", "..")):
+            raise ValueError("invalid skill id")
+        return h
+
     def _body_path(self, hid):
-        return self.objects / (hid + ".bin")
+        return self.objects / (self._safe_hid(hid) + ".bin")
 
     def _env_path(self, hid):
-        return self.objects / (hid + ".skill.json")
+        return self.objects / (self._safe_hid(hid) + ".skill.json")
 
     def _atomic_write(self, path, data):
         tmp = Path(str(path) + ".tmp")
@@ -140,11 +150,17 @@ class SkillStore:
         return {"ok": True, "id": hid, "reason": "stored", "deduped": deduped}
 
     def get_body(self, hid):
-        p = self._body_path(hid)
+        try:
+            p = self._body_path(hid)
+        except ValueError:
+            return None
         return p.read_bytes() if p.exists() else None
 
     def get_envelope(self, hid):
-        p = self._env_path(hid)
+        try:
+            p = self._env_path(hid)
+        except ValueError:
+            return None
         if not p.exists():
             return None
         try:
@@ -195,7 +211,10 @@ class SkillStore:
     def remove(self, hid):
         """Reversible removal: move objects to removed/ and drop the catalog row.
         Never hard-deletes."""
-        bp, ep = self._body_path(hid), self._env_path(hid)
+        try:
+            bp, ep = self._body_path(hid), self._env_path(hid)
+        except ValueError:
+            return False
         row = self.get(hid)
         if not row and not bp.exists():
             return False

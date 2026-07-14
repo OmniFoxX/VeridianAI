@@ -59,7 +59,11 @@ sage_d = _OracleD(sage_p, num_subagents=3)
 # --- Tavily Key ---------------------------------------------------------------
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY", "")
 if TAVILY_KEY_FILE.exists():
-    try: TAVILY_API_KEY = TAVILY_KEY_FILE.read_text().strip()
+    # Read via atrest so an encrypted key file is transparently decrypted; a legacy
+    # plaintext file still reads and gets upgraded to ciphertext on the next save.
+    try:
+        import atrest as _atrest
+        TAVILY_API_KEY = _atrest.read_file_auto(TAVILY_KEY_FILE).decode("utf-8", "ignore").strip()
     except Exception: pass
 
 # --- Feature toggles (controlled by plugin system) ---------------------------
@@ -1177,6 +1181,18 @@ def verify_written_file(path: str) -> str:
     
     if not os.path.isabs(path):
         path = os.path.join(_project_root, path)
+    # [VERIFY_FILE:] is model-invoked, so treat `path` as untrusted: only allow
+    # files under the project root or the data dir. Blocks '..' escapes and
+    # absolute paths to arbitrary system files (path traversal / info disclosure).
+    _rp = os.path.realpath(path)
+    _allowed = [os.path.realpath(_project_root)]
+    try:
+        from config import DATA_DIR as _DD
+        _allowed.append(os.path.realpath(str(_DD)))
+    except Exception:
+        pass
+    if not any(_rp == a or _rp.startswith(a + os.sep) for a in _allowed):
+        return f"[VERIFY FAILED] Path is outside the allowed directories: {path}"
     try:
         if not os.path.exists(path):
             return f"[VERIFY FAILED] File not found: {path}"
@@ -2033,7 +2049,9 @@ def set_tavily_key(key: str) -> dict:
     TAVILY_API_KEY = key.strip()
     try:
         TAVILY_KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
-        TAVILY_KEY_FILE.write_text(TAVILY_API_KEY)
+        # Encrypt the API key at rest (was clear-text). Read side uses read_file_auto.
+        import atrest as _atrest
+        TAVILY_KEY_FILE.write_bytes(_atrest.encrypt_bytes(TAVILY_API_KEY.encode("utf-8")))
         return {"success": True}
     except Exception as e:
         return {"success": False, "error": str(e)}

@@ -741,13 +741,21 @@ function handleStallDetected(data) {
 function handleImageGenerated(data) {
   // Toga-triggered image (from the [GENERATE_IMAGE:] agentic dispatch).
   if (!data || !data.data) return;
-  const url = `data:${data.mimetype || "image/png"};base64,${data.data}`;
+  // Constrain the node-supplied mimetype to a raster image type so it can't turn
+  // the data: URL into text/html or anything script-bearing.
+  const _mt = /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(data.mimetype || "")
+    ? data.mimetype : "image/png";
+  const url = `data:${_mt};base64,${data.data}`;
   appendImageResult(url, data.prompt);
 }
 
 function appendImageResult(imgUrl, prompt) {
   // Append a generated image to the chat. Built with createElement (img.src as a
   // property), so there is no innerHTML injection surface.
+  // imgUrl can originate from a remote Aether node -> only allow image data / blob /
+  // http(s) / same-origin URLs, never javascript:, vbscript:, or data:text/html.
+  if (typeof imgUrl !== "string" ||
+      !/^(?:data:image\/|blob:|https?:\/\/|\/)/i.test(imgUrl)) return;
   const container = document.getElementById("messages");
   if (!container) return;
   const wrap = document.createElement("div");

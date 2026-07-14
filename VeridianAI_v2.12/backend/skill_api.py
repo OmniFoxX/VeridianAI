@@ -263,9 +263,11 @@ async def skills_fetch(payload: dict, request: Request):
     _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
-            # nosemgrep -- base is SSRF-validated (_validate_external_url) and hid is
-            # URL-encoded so it can't inject host/path structure into the request.
-            r = await c.get(base + "/api/skills/object/" + quote(hid, safe=""))
+            # base is SSRF-validated by _validate_external_url() above (rejects private/
+            # loopback/link-local/reserved/multicast/unspecified); hid is URL-encoded;
+            # and these routes are owner-only. Neither scanner recognizes the validator.
+            # codeql[py/full-ssrf]
+            r = await c.get(base + "/api/skills/object/" + quote(hid, safe=""))  # nosemgrep
             if r.status_code != 200:
                 raise HTTPException(502, "peer returned %d" % r.status_code)
             obj = r.json()

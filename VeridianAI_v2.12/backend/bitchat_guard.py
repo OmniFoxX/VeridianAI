@@ -42,7 +42,7 @@ MAX_INBOUND_CHARS = 1200
 # controls (U+200B..U+200F, U+202A..U+202E, U+2060..U+2064, U+FEFF BOM).
 _CONTROL_RE = re.compile(
     "[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]"
-    "|[​-‏‪-‮⁠-⁤﻿]")
+    "|[\u200b-\u200f\u202a-\u202e\u2060-\u2064\ufeff]")
 _WS_RUN_RE = re.compile(r"[ \t]{4,}")
 _NL_RUN_RE = re.compile(r"\n{4,}")
 

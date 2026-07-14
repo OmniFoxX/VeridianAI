@@ -609,7 +609,8 @@ class BrowserTool:
         This works for Tuta, AtomicMail, or any site with standard forms.
         """
         print(f"[SIGNUP] Starting universal signup at: {signup_url}")
-        print(f"[SIGNUP] Username: {username}, Password: {password}")
+        # Never log the password (clear-text logging of a credential). Username only.
+        print(f"[SIGNUP] Username: {username}")
 
         await self.goto(signup_url)
 

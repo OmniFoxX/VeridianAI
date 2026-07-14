@@ -1,0 +1,262 @@
+DOCUMENT 1 OF 4: PRIVACY POLICY
+VERIDIANAI — MENTISPHERE SOFTWARE
+████████████████████████████████████████████████████████████████████████
+VERIDIANAI PRIVACY POLICY
+Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: July 2026 Version: 1.0
+
+PREAMBLE: A PLAIN-LANGUAGE COMMITMENT
+Before the formal legal text begins, we want to say this plainly:
+
+We built VeridianAI so that your data never has to meet us. Every model, every prompt, every inference result lives on your own hardware, inside your own device or local container. We cannot read your conversations with the AI because those conversations never travel to our servers. We do not sell your data, because we do not have your data. We do not profile you, track you across websites, or place advertising pixels anywhere in the platform.
+
+What we do hold is narrow, necessary, and described in full below. We hold it only as long as legally or operationally required, and we will promptly delete it at your request wherever law permits.
+
+This policy is long because the world's privacy laws require completeness. But the underlying truth is short: your content is yours, it stays on your machine, and we have zero access to it.
+
+SECTION 1 — IDENTITY OF THE DATA CONTROLLER
+Business Name: MentiSphere Software Place of Formation and Principal Operations: Washington State, United States of America Contact for All Privacy Matters: silverfox4816@gmail.com Product: VeridianAI — a local artificial intelligence inference platform
+
+For purposes of the General Data Protection Regulation (EU) 2016/679 ("GDPR"), the UK General Data Protection Regulation as retained by the Data Protection Act 2018 ("UK GDPR"), the California Consumer Privacy Act as amended by the California Privacy Rights Act (Cal. Civ. Code § 1798.100 et seq.) ("CCPA/CPRA"), the Washington Privacy Act (RCW Chapter 19.390) ("WPA"), and other applicable privacy statutes, MentiSphere Software ("we," "us," "our," "the Publisher") is the data controller solely with respect to the limited categories of operational data described in Section 3 of this Policy.
+
+Critical Scope Limitation: MentiSphere Software is expressly and categorically not a data controller or data processor with respect to any user content, artificial intelligence prompts, model inference outputs, training data, local context, documents, files, or any other information that users process through the VeridianAI platform. Such information never traverses Publisher infrastructure, is never transmitted to Publisher systems, and is inaccessible to Publisher by the fundamental design of the platform's architecture. See Section 2.
+
+SECTION 2 — ARCHITECTURE: WHY WE CANNOT SEE YOUR DATA
+2.1 Local-Only Inference Model
+VeridianAI is engineered as a zero-retention, client-side-only inference platform. All artificial intelligence model weights, all user prompts and queries, and all model outputs are processed exclusively on hardware owned or controlled by the end user — including the user's personal computer, workstation, local server, on-premises infrastructure, or isolated local container. No portion of this computational pipeline touches Publisher-controlled servers, cloud infrastructure, data pipelines, API endpoints, or storage systems.
+
+This is not a contractual promise alone — it is an architectural fact. The VeridianAI client software does not transmit prompt data or inference results to any Publisher-operated endpoint. The Publisher does not operate model-serving infrastructure. The Publisher does not maintain user session databases, conversation logs, or output repositories.
+
+2.2 Consequences for Data Controller Classification
+Because user content never enters Publisher infrastructure:
+
+(a) Under GDPR Article 4(7), a "controller" is defined as the entity that determines the purposes and means of the processing of personal data. With respect to user content processed through VeridianAI's inference pipeline, the user is the sole controller; Publisher determines neither the purpose nor the means of such processing.
+
+(b) Under GDPR Article 4(8), a "processor" acts on behalf of the controller. Publisher acts on no one's behalf with respect to this data, because Publisher never receives it.
+
+(c) Under Washington's My Health My Data Act (ESHB 1155), "collection" is defined as the act of buying, renting, gathering, obtaining, receiving, or accessing consumer health data by any means. Publisher does not collect consumer health data under any means described in that definition. Accessibility users and others who use VeridianAI to process health-adjacent information retain full data sovereignty; that information remains on their hardware.
+
+(d) Under CCPA/CPRA, "collect" means buying, renting, gathering, obtaining, receiving, or accessing personal information by any means. Publisher does not collect personal information as a function of VeridianAI's core inference capability.
+
+2.3 User Data Sovereignty
+You, the user, are the exclusive owner and controller of all content you generate, process, input, or receive through VeridianAI. Your prompts, outputs, model configurations, local datasets, embedded documents, and conversation histories belong to you. Publisher asserts no proprietary interest, license right, or claim over any such content.
+
+SECTION 3 — INFORMATION WE ACTUALLY COLLECT
+Notwithstanding the foregoing, Publisher does collect a narrow set of operational data necessary to provide, maintain, and improve the platform and to comply with legal obligations. We collect only the following:
+
+3.1 Billing and Payment Information (Paid Tier Only)
+If you purchase a paid commercial license, subscription, or optional personal-tier contribution, we collect, or our payment processor collects on our behalf:
+
+Your name and billing address, as necessary for invoice generation and tax compliance;
+Your email address, for transaction confirmation and license key delivery;
+Payment method information — specifically, the data processed by our contracted third-party payment processor (e.g., credit card type and last four digits of card number, transaction reference identifiers); and
+Transaction timestamps and amounts.
+We do not receive, store, or process full payment card numbers, CVV codes, or bank account credentials. Full payment card data is processed exclusively by our payment processor, which operates under current PCI-DSS certification. We receive only a tokenized reference and summary record sufficient to verify your license status.
+
+Legal basis (GDPR): Article 6(1)(b) — performance of a contract; Article 6(1)(c) — compliance with legal obligation (tax and record-keeping requirements).
+
+3.2 Voluntary Feedback Submissions
+If you choose to submit feedback, a bug report, a feature request, or a testimonial through Publisher's voluntary feedback mechanisms, we collect the content of that submission and, if you choose to include them, your name and contact email. Feedback submission is never required to use VeridianAI and is always expressly optional.
+
+Legal basis (GDPR): Article 6(1)(a) — consent freely given.
+
+3.3 Inbound Communications
+If you contact us by email, submit a support request, or otherwise communicate with us directly, we retain the content of that communication and any contact information you provide for the purpose of responding to your inquiry, resolving disputes, and maintaining records of customer interactions.
+
+Legal basis (GDPR): Article 6(1)(f) — legitimate interests (responding to and documenting customer communications).
+
+3.4 Aggregated Platform Metrics Required by Third-Party Integrations
+Certain third-party platform integrations through which VeridianAI is distributed, listed, or operated (including but not limited to integration app directories, bot verification platforms, and developer portal listings) may require the Publisher to submit or acknowledge basic non-personal platform metrics — such as aggregate download counts, platform version identifiers, API call volume, or bot verification badges. Where Publisher controls such submissions, we ensure they are aggregated and non-attributable to any individual user. Where these metrics are passively collected by third-party platforms outside Publisher's control, those platforms' own privacy policies govern.
+
+Legal basis (GDPR): Article 6(1)(f) — legitimate interests (maintaining platform listings and integrations necessary to make VeridianAI accessible).
+
+3.5 Discord Bot Technical Pass-Through Data
+VeridianAI's optional Discord bot integration processes Discord user commands in real time, acting as a pass-through interface between the Discord API and VeridianAI's local inference runtime. In performing this function:
+
+Publisher's bot infrastructure may transiently receive Discord user identifiers, server identifiers, and message content for the duration of processing that specific command only;
+No message content, user identifier, or command history is stored in any Publisher-controlled database or log file after the command response is delivered;
+Discord's own data collection and processing occur entirely on Discord's platforms, under Discord, Inc.'s Terms of Service and Privacy Policy, over which Publisher has no control.
+Legal basis (GDPR): Article 6(1)(f) — legitimate interests (providing the optional bot integration functionality requested by the user).
+
+SECTION 4 — INFORMATION WE EXPRESSLY DO NOT COLLECT
+For the avoidance of any doubt, and in direct fulfillment of VeridianAI's core privacy-by-design commitment, Publisher does not collect, receive, store, access, sell, share, process, or retain:
+
+The text of any prompt or query you submit to any AI model through VeridianAI;
+The output, response, or inference result returned by any AI model through VeridianAI;
+The content of any document, file, image, video, audio recording, or other media processed locally by VeridianAI;
+The identity, configuration parameters, quantization settings, or weights of any AI model you use or install locally;
+Any fine-tuning data, RLHF feedback, or training data processed or generated on your hardware;
+Local conversation history, context windows, memory configurations, or session state;
+Keystroke data, clipboard data, or screen content from your device;
+Hardware identifiers, CPU/GPU utilization metrics, RAM usage, or system health telemetry from your device; or
+Behavioral analytics, interaction heatmaps, engagement metrics, or usage patterns within the application.
+SECTION 5 — HOW WE USE THE INFORMATION WE COLLECT
+We use the limited information described in Section 3 solely for the following purposes:
+
+Data Category	Purposes
+Billing data	Process transactions; generate invoices; deliver license keys; comply with tax law; prevent fraud
+Feedback submissions	Improve VeridianAI; identify and fix bugs; prioritize features; understand user needs
+Communications	Respond to inquiries; resolve disputes; document interactions; provide support
+Aggregated platform metrics	Maintain third-party distribution listings; report to required platform partners; monitor platform health at a population level
+Discord bot transient data	Deliver the requested bot command response; enforce bot usage policies
+We do not use any collected data for automated profiling, behavioral advertising, AI model training on user behavior, or sale to third parties for any purpose.
+
+SECTION 6 — DISCLOSURE AND THIRD-PARTY DATA SHARING
+6.1 Payment Processor
+We share billing data with our contracted third-party payment processor(s) to the extent necessary to complete transactions. Our payment processor acts as an independent data controller for payment processing under its own terms and privacy policy, and as our data processor for record-keeping purposes. We require any payment processor we engage to maintain PCI-DSS compliance and appropriate data protection standards.
+
+6.2 Legal Process and Regulatory Compliance
+We may disclose information where we are legally compelled to do so by a valid court order, subpoena, regulatory demand, or other lawful legal process under applicable law. In such circumstances, we will:
+
+Promptly notify affected users of any disclosure demand where legally permitted to do so;
+Review all demands for legal sufficiency before complying; and
+Disclose only the minimum information necessary to satisfy the legal obligation.
+Because Publisher cannot access user content (Section 2), any legal demand for VeridianAI prompt or output data directed at Publisher would yield no responsive records — Publisher simply does not possess such data to disclose.
+
+6.3 Business Transfers
+In the event of a merger, acquisition, sale of substantially all assets, or reorganization involving Publisher, personal data held by Publisher may be transferred to the acquiring or successor entity, subject to the acquiring entity's assumption of obligations at least as protective as this Policy. Users will be notified of any such transfer prior to completion, with a right to request deletion of their data before the transfer occurs.
+
+6.4 No Sale of Personal Data
+Publisher does not sell, rent, lease, trade, barter, auction, or otherwise commercially transfer personal information to any third party for monetary or other valuable consideration. Publisher does not share personal data for cross-context behavioral advertising purposes. This prohibition is absolute and is not conditioned on opt-out status.
+
+6.5 Discord
+Discord, Inc. operates its own data collection and processing infrastructure. Our Discord bot integration is a pass-through; Publisher's obligation is to minimize what passes through Publisher's infrastructure (see Section 3.5). Discord's privacy practices are governed by Discord's Privacy Policy, available at discord.com/privacy.
+
+SECTION 7 — INTERNATIONAL DATA TRANSFERS AND CROSS-BORDER SAFEGUARDS
+Publisher is domiciled in Washington State, USA. If you are located in the European Economic Area, the United Kingdom, or another jurisdiction with data transfer restrictions, and you provide personal data to Publisher (e.g., billing information or a feedback submission), that data may be transferred to and processed in the United States.
+
+Publisher implements the following safeguards for such transfers:
+
+For EU/EEA data subjects: Where personal data is transferred from the EEA to the United States, Publisher relies on the European Commission's Standard Contractual Clauses (SCCs) adopted pursuant to Commission Implementing Decision 2021/914 (Module 2: Controller-to-Controller, where applicable) as the transfer mechanism under GDPR Article 46(2)(c). Publisher applies appropriate supplementary technical measures, including encryption of data in transit and at rest, consistent with EDPB Recommendations 01/2020.
+
+For UK data subjects: Publisher relies on the UK International Data Transfer Agreement (IDTA) or the UK Addendum to the EU SCCs, as issued by the Information Commissioner's Office, where applicable.
+
+For all users: Regardless of location, Publisher applies the same level of data protection described in this Policy. Jurisdictional differences in your rights are described in Section 9; Publisher will honor the highest applicable standard where rights overlap.
+
+SECTION 8 — DATA RETENTION
+Publisher retains personal data only as long as necessary for the purposes for which it was collected, or as required by applicable law:
+
+Data Category	Retention Period
+Billing and transaction records	Seven (7) years from transaction date, or as required by applicable tax and accounting law
+License key assignment records	Duration of the license term, plus three (3) years
+Voluntary feedback submissions	Until you request deletion, or until Publisher determines the feedback is no longer operationally relevant
+Inbound communications	Two (2) years from the date of last communication, or until the matter is fully resolved
+Discord bot transient processing data	Zero (0) — deleted immediately upon delivery of command response; no post-processing retention
+Aggregated platform metrics	Retained in aggregated, non-attributable form indefinitely; no individual attribution
+Upon expiration of the applicable retention period, we will securely delete or anonymize personal data using industry-standard methods. You may request earlier deletion pursuant to your rights under Section 9.
+
+SECTION 9 — YOUR PRIVACY RIGHTS BY JURISDICTION
+9.1 Rights Under GDPR and UK GDPR (EU, EEA, and UK Residents)
+If you are located in the EU, EEA, or United Kingdom, you have the following rights with respect to personal data Publisher controls, exercisable without fee and within the statutory response period (one calendar month, extendable by two months for complex requests):
+
+Right of Access (Art. 15): You may request confirmation of whether Publisher processes your personal data, and if so, a copy of that data together with supplementary information about the processing.
+
+Right to Rectification (Art. 16): You may request correction of inaccurate or incomplete personal data.
+
+Right to Erasure (Art. 17): You may request deletion of your personal data where it is no longer necessary for the purpose collected, where you withdraw consent (where consent was the lawful basis), where you object to processing and no overriding legitimate interest exists, where processing was unlawful, or where deletion is required by law.
+
+Right to Restriction of Processing (Art. 18): You may request that Publisher restrict processing of your personal data in specified circumstances, including during the period of contested accuracy or pending your objection.
+
+Right to Data Portability (Art. 20): You may request receipt of personal data you provided to us in a structured, commonly used, machine-readable format, and you may request that we transmit that data to another controller where technically feasible, where processing was based on consent or contract and carried out by automated means.
+
+Right to Object (Art. 21): You have an absolute right to object to processing based on legitimate interests (Article 6(1)(f)) at any time. Upon objection, Publisher will cease that specific processing unless Publisher demonstrates compelling legitimate grounds that override your interests or the processing is necessary for legal claims.
+
+Rights Regarding Automated Individual Decision-Making (Art. 22): Publisher does not engage in automated decision-making that produces legal or similarly significant effects on individuals based on the personal data described in this Policy.
+
+Right to Lodge a Complaint: You have the right to lodge a complaint with the supervisory authority in your EU member state of habitual residence, place of work, or place of the alleged infringement. For UK residents, the relevant authority is the Information Commissioner's Office (ico.org.uk).
+
+9.2 Rights Under CCPA/CPRA (California Residents)
+California residents have the following rights under the California Consumer Privacy Act (Cal. Civ. Code § 1798.100) as amended by the California Privacy Rights Act:
+
+Right to Know: You may request disclosure of the categories and specific pieces of personal information Publisher has collected about you, the categories of sources from which information was collected, the business or commercial purpose for collection, and the categories of third parties with whom it is shared.
+
+Right to Delete: You may request deletion of personal information Publisher has collected from you, subject to exceptions for legal compliance, security, internal use consistent with the context of your relationship with Publisher, and other CCPA-specified exceptions.
+
+Right to Correct: You may request correction of inaccurate personal information.
+
+Right to Opt-Out of Sale or Sharing: Publisher does not sell personal information and does not share personal information for cross-context behavioral advertising. This right is satisfied by default; no affirmative opt-out is required.
+
+Right to Limit Use of Sensitive Personal Information: Publisher does not use sensitive personal information for purposes other than those specified in Cal. Civ. Code § 1798.121(a). No limitation request is necessary given the narrow scope of our collection.
+
+Right to Non-Discrimination: Publisher will not discriminate against you for exercising any CCPA/CPRA right, including by denying services, charging different prices, providing different quality of service, or suggesting that exercising your rights will result in any penalty.
+
+Authorized Agent: You may designate an authorized agent to submit CCPA requests on your behalf. Publisher will require reasonable verification of both the request and the agent's authorization.
+
+9.3 Rights Under the Washington Privacy Act (RCW 19.390) (Washington State Residents)
+Washington State residents have the following rights under the Washington Privacy Act:
+
+The right to confirm whether Publisher processes personal data about you and to access such data;
+The right to correct inaccuracies;
+The right to delete personal data provided by or obtained about you;
+The right to obtain a copy of personal data in a portable format;
+The right to opt out of the processing of personal data for purposes of targeted advertising (Publisher does not engage in targeted advertising), the sale of personal data (Publisher does not sell data), or profiling in furtherance of solely automated decisions that produce legal or similarly significant effects (Publisher does not engage in such profiling);
+The right to appeal Publisher's refusal to act on a rights request, with Publishers providing an internal appeal mechanism and notifying you of the right to contact the Washington Attorney General if your appeal is denied.
+Publisher will respond to verifiable WPA rights requests within forty-five (45) days, extendable by an additional forty-five (45) days where reasonably necessary, with notification of the extension provided within the initial period.
+
+9.4 Consumer Health Data — Washington My Health My Data Act (ESHB 1155)
+Publisher's position under the My Health My Data Act: The My Health My Data Act (MHMD) regulates regulated entities that "collect, share, sell, or process consumer health data." As detailed in Section 2, Publisher collects no consumer health data as a function of VeridianAI's core architectural design. All data — including any health-related information — that a user processes through VeridianAI's inference engine remains exclusively on the user's hardware and is never transmitted to Publisher.
+
+For accessibility users: We recognize that persons with disabilities, chronic conditions, and healthcare needs may use VeridianAI to process health-relevant information (e.g., AI-assisted reading of medical documents, accessibility accommodations for health communications). All such information is processed locally on your device. Publisher holds no such data, and MHMD's operative obligations for data collection, authorization requirements, and deletion rights as they relate to Publisher-held data are satisfied by default given our zero-collection architecture.
+
+For any incidental collection: If a voluntary feedback submission or inbound communication you send to Publisher happens to contain information that qualifies as "consumer health data" under MHMD § 2(5), Publisher will treat that information with the full protections required by the Act, including: no sale of such data; no sharing for unauthorized purposes; and honoring deletion requests without delay.
+
+9.5 Rights Under Other Applicable Laws
+Canadian Residents (PIPEDA and provincial laws): You have the right to access your personal information held by Publisher, to challenge its accuracy, and to withdraw consent for processing where consent was the lawful basis. Contact us at silverfox4816@gmail.com.
+
+Brazilian Residents (LGPD — Lei 13.709/2018): You have rights to confirmation and access, correction, anonymization/blocking/deletion, portability, information about sharing, information about the consequences of withholding consent, and revocation of consent. Publisher's legal bases under LGPD align with those described in this Policy for GDPR.
+
+Australian Residents (Privacy Act 1988 — Australian Privacy Principles): You have the right to access and correct personal information Publisher holds about you. Publisher handles your data in accordance with APP 12 (access) and APP 13 (correction).
+
+Exercising Rights Globally: Regardless of your jurisdiction, Publisher will honor the privacy rights most protective of you under any applicable law. To exercise any right, contact silverfox4816@gmail.com with a description of your request and sufficient information to verify your identity.
+
+SECTION 10 — CHILDREN'S PRIVACY
+10.1 Minimum Age
+VeridianAI is not directed at children. Publisher does not knowingly collect personal information from:
+
+Children under the age of thirteen (13) in the United States, as required by the Children's Online Privacy Protection Act (COPPA), 15 U.S.C. § 6501 et seq.;
+Children under the age of sixteen (16) in EU and EEA member states, pursuant to GDPR Article 8(1) and applicable national implementing provisions; or
+Children below the applicable minimum age of digital consent in any other jurisdiction where VeridianAI is distributed.
+10.2 Discovery and Deletion
+If Publisher discovers or is notified that it has inadvertently collected personal information from a child below the applicable minimum age, Publisher will promptly delete such information from its systems. If you believe Publisher has collected information from a child in violation of this Section, please contact silverfox4816@gmail.com immediately.
+
+10.3 Local Processing and Minors
+This Section addresses Publisher's collection of operational data. Because VeridianAI's core inference operates locally on the user's hardware, parental or guardian oversight of a minor's use of VeridianAI's model inference capabilities is the responsibility of the parent or guardian. Publisher recommends that parents and guardians supervise minors' use of any AI inference platform.
+
+SECTION 11 — ACCESSIBILITY USERS AND DISABILITY-RELATED PRIVACY
+VeridianAI provides a free perpetual license to users with accessibility needs and disability use cases, reflecting Publisher's commitment to AI as an accessibility tool. Publisher recognizes that accessibility users may rely on VeridianAI to assist with conditions including but not limited to: visual impairment, auditory impairment, motor disabilities, cognitive disabilities, learning differences, speech impairments, chronic pain conditions, and neurological conditions.
+
+Publisher does not collect, require disclosure of, or infer any disability status, accessibility accommodation need, or medical condition as a condition of accessing the free accessibility tier. Users access the free tier at their own election. Publisher collects no health data, disability data, or accommodation-related data in connection with the free tier or otherwise.
+
+Any information regarding disability or health conditions shared voluntarily in a feedback submission or communication to Publisher will be treated as sensitive personal data under applicable law, handled with the highest applicable privacy protections, and deleted promptly upon request.
+
+SECTION 12 — SECURITY
+Publisher implements administrative, technical, and physical safeguards appropriate to the nature and volume of personal data held:
+
+Encryption: Personal data stored by Publisher is encrypted at rest using industry-standard algorithms. Data in transit is protected using TLS 1.2 or higher.
+Access controls: Access to personal data within Publisher's systems is limited to individuals with a legitimate need, enforced through access controls and authentication requirements.
+Payment security: All payment card processing occurs through PCI-DSS compliant payment processors. Publisher does not store raw payment card data.
+Vendor management: Third parties processing data on Publisher's behalf are required to maintain security standards commensurate with the sensitivity of the data.
+Incident response: In the event of a data breach affecting your personal data, Publisher will notify affected individuals and applicable regulatory authorities within the timeframes required by law (72 hours for GDPR supervisory authorities; 30 days for WPA; as otherwise required by applicable breach notification statutes).
+Important caveat: Because VeridianAI's core architecture ensures that user content never reaches Publisher's infrastructure, the risk profile for a Publisher-side breach is inherently narrow — limited to the operational data described in Section 3. Users are encouraged to apply their own security measures to their local VeridianAI installations, including device encryption, access controls, and model-weight integrity verification.
+
+SECTION 13 — COOKIES AND TRACKING TECHNOLOGIES
+VeridianAI is a locally installed software application, not a browser-based service. The application itself does not deploy cookies, web beacons, tracking pixels, fingerprinting scripts, session replay tools, or similar tracking technologies.
+
+If Publisher operates any website, web portal, or documentation site in connection with VeridianAI, any cookies used on those web properties will be governed by a separate cookie notice on that property.
+
+SECTION 14 — DATA PROTECTION OFFICER
+Publisher is not currently required under GDPR Article 37 to designate a Data Protection Officer, as Publisher's processing activities do not meet the thresholds specified in Article 37(1)(b) or (c). Nonetheless, all privacy inquiries are directed to and handled by Publisher's principal contact at silverfox4816@gmail.com, who is responsible for data protection compliance oversight.
+
+EU and UK residents who require escalation beyond direct Publisher contact may contact the relevant supervisory authority in their member state.
+
+SECTION 15 — CHANGES TO THIS POLICY
+Publisher reserves the right to update this Privacy Policy to reflect changes in applicable law, Publisher's practices, or the VeridianAI platform's features. Where changes are material, Publisher will provide notice by:
+
+Posting the updated Policy with a revised Effective Date;
+Updating the version number; and
+Where Publisher has a means of contacting affected users with an established relationship (e.g., commercial licensees with billing email on file), providing direct advance notice at least thirty (30) calendar days prior to the effective date of material changes.
+Your continued use of VeridianAI after the effective date of any updated Policy constitutes acceptance of the revised terms. Where consent is the legal basis for a processing activity affected by the change, Publisher will re-obtain consent as required.
+
+SECTION 16 — HOW TO EXERCISE YOUR RIGHTS AND CONTACT US
+To exercise any privacy right described in this Policy, to submit a data subject access request, to request deletion, or to raise any privacy concern, contact Publisher directly:
+
+Email: silverfox4816@gmail.com Subject Line Recommended: "Privacy Rights Request — Washington State - King County" Response Commitment: Publisher will acknowledge receipt within five (5) business days and provide a substantive response within the applicable statutory deadline for your jurisdiction. Identity Verification: Publisher may request reasonable verification of your identity before fulfilling a rights request, in order to protect you from unauthorized access to your data. Appeals: If Publisher declines a rights request, you will receive a written explanation. You may appeal that decision by contacting Publisher with the word "APPEAL" in your subject line or by contacting the applicable regulatory authority for your jurisdiction.
