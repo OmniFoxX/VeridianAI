@@ -1193,7 +1193,7 @@ async def api_ip_access_post(request: Request, payload: dict):
         if action == "remove":
             return ip_access.remove(which, ip)
     except ValueError as e:
-        raise HTTPException(400, str(e))
+        raise HTTPException(400, _safe_detail(e))
     raise HTTPException(400, "action must be add, remove, or lockdown")
 
 
@@ -1220,7 +1220,7 @@ async def api_voice_transcribe(request: Request, payload: dict | None = None):
     try:
         text = await _run_in_threadpool(voice_service.transcribe_once, seconds)
     except Exception as e:
-        raise HTTPException(503, str(e))
+        raise HTTPException(503, _safe_detail(e))
     return {"ok": True, "text": text or ""}
 
 
@@ -1238,7 +1238,7 @@ async def api_voice_wake(request: Request, payload: dict):
         else:
             voice_service.stop_wake()
     except Exception as e:
-        raise HTTPException(503, str(e))
+        raise HTTPException(503, _safe_detail(e))
     return {"ok": True, "wake_active": voice_service.wake_active}
 
 
@@ -1514,7 +1514,7 @@ async def api_socials_verify(request: Request, payload: dict):
     try:
         _socials_trust_save(trust)
     except Exception as exc:
-        raise HTTPException(500, f"could not persist trust store: {exc}")
+        raise HTTPException(500, _safe_detail(exc, "trust store"))
     return {"ok": True, "trusted_count": len(trust)}
 
 
@@ -1623,7 +1623,7 @@ async def comfyui_setup_status():
             "launcher_status":  comfyui_launcher.status(),
         })
     except Exception as e:
-        return JSONResponse({"installed": False, "error": str(e)})
+        return JSONResponse({"installed": False, "error": _safe_detail(e, "install")})
 
 
 # --------------------------------------------------------------------------- #
@@ -1688,11 +1688,11 @@ async def comfyui_run_setup(request: Request):
             import traceback
             traceback.print_exc()
             loop.call_soon_threadsafe(queue.put_nowait, {
-                "message": f"Setup crashed: {e}",
+                "message": _safe_detail(e, "setup"),
                 "percent": 0,
                 "done": True,
                 "success": False,
-                "error": str(e),
+                "error": _safe_detail(e, "setup"),
             })
             return
         done_event = {
@@ -1785,8 +1785,8 @@ async def comfyui_download_model(request: Request):
             result = comfyui_models.download_model(key, comfy_home, progress_cb)
         except Exception as e:
             loop.call_soon_threadsafe(queue.put_nowait, {
-                "message": f"Download crashed: {e}", "percent": 0,
-                "done": True, "success": False, "error": str(e)})
+                "message": _safe_detail(e, "download"), "percent": 0,
+                "done": True, "success": False, "error": _safe_detail(e, "install")})
             return
         if result.get("success"):
             # Record the choice (persisted in oracleai_config.json) so generation
@@ -1901,8 +1901,8 @@ async def comfyui_enable_directml(request: Request):
             res = comfyui_directml.provision_directml(comfy_home, progress_cb)
         except Exception as e:
             loop.call_soon_threadsafe(queue.put_nowait, {
-                "message": f"DirectML install crashed: {e}", "percent": 0,
-                "done": True, "success": False, "error": str(e)})
+                "message": _safe_detail(e, "directml"), "percent": 0,
+                "done": True, "success": False, "error": _safe_detail(e, "install")})
             return
         if res.get("success"):
             # Force the launcher to re-resolve so the next launch uses --directml.
@@ -2036,6 +2036,19 @@ def _within(child, parent) -> bool:
         return child == parent or parent in child.parents
     except Exception:
         return False
+
+
+def _safe_detail(exc, where=""):
+    """Log the real exception server-side, return a generic client-safe message with a
+    correlation ref. Keeps internals/stack traces out of API responses (CodeQL
+    py/stack-trace-exposure); the full error is in the server log under that ref."""
+    import logging as _logging, uuid as _uuid
+    _ref = _uuid.uuid4().hex[:8]
+    try:
+        _logging.getLogger("veridian").warning("[err %s] %s: %r", _ref, where or "op", exc)
+    except Exception:
+        pass
+    return "internal error (ref %s)" % _ref
 
 
 @app.post("/api/burn")
@@ -2217,7 +2230,7 @@ async def api_get_devmode():
         import devmode
         return {"enabled": devmode.is_enabled()}
     except Exception as e:
-        return {"enabled": False, "error": str(e)}
+        return {"enabled": False, "error": _safe_detail(e, "cap")}
 
 
 @app.post("/api/devmode")
@@ -2238,7 +2251,7 @@ async def api_devmode_diag():
         import devmode
         return devmode.diagnose()
     except Exception as e:
-        return {"supported": False, "error": str(e)}
+        return {"supported": False, "error": _safe_detail(e, "cap")}
 
 
 @app.get("/api/build/integrity")
@@ -2249,7 +2262,7 @@ async def api_build_integrity():
         import build_integrity
         return build_integrity.verify()
     except Exception as e:
-        return {"status": "error", "error": str(e)}
+        return {"status": "error", "error": _safe_detail(e, "status")}
 
 
 # --- Browser cookie persistence (opt-in, default OFF) -----------------------
@@ -2808,7 +2821,7 @@ async def api_aiq_nudge(payload: dict, request: Request):
     try:
         target = aiq_nudge.send(message)
     except Exception as e:
-        raise HTTPException(500, f"could not write nudge: {e}")
+        raise HTTPException(500, _safe_detail(e, "nudge"))
     return {"success": True, "file": target.name, "length": len(message)}
 
 
@@ -6392,7 +6405,7 @@ def launch_visible_browser() -> dict:
         _visible_browser_proc = None
         return {
             "status": "error",
-            "error": f"Failed to launch visible browser: {e}",
+            "error": _safe_detail(e, "browser"),
             "script": str(_BROWSER_SCRIPT),
         }
 

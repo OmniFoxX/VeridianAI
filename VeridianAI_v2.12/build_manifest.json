@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "d6c630c1fd9a4cdd8d7b15a76e7f79f7",
-    "built_utc": "2026-07-14T05:38:07.866724+00:00",
+    "build_id": "e6fc34a6f3894ffcbfe21c90953e88d0",
+    "built_utc": "2026-07-14T07:09:34.054822+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -90,7 +90,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "52a1ab1224677cf591b23aee54da19e7922267b6601c1dae1d17556a30612118",
+      "backend/main.py": "341ae7e9c8d3377aec5c4e6b8ebc6bdc9251c183199c5043fd45719a2f5d8af1",
       "backend/mcp_handlers.py": "ed36501c18c4426bab3e40214af39f5233730ebc7bf26c7ba860353e9fdb657c",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -119,7 +119,7 @@
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
       "backend/session.py": "05c22737763e1d2371ff282bc94cb440e4d26817451b3edab474c29a67b4883d",
       "backend/shutdown_cleanup.py": "19365ddefe69c1054444e58bccfb6651894ddccacf202a1f58a3bf0eae671f29",
-      "backend/skill_api.py": "68b8a535127285fa152d678eb77091eebf8ece5ce3898764fc516fcc606efaf5",
+      "backend/skill_api.py": "b399c0a0303b48834100ab683dbc332b7869b4ce93e1b163b4703e948ec51de1",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
       "backend/skill_service.py": "024ad02189752d0f24bf12efb184ef3c8891f1b5bdf29dda4fc3e38b679af76d",
@@ -202,5 +202,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "9VxVWTf/YAXxgKgTCOaEdHmdXNb/MWng0a+hKUKKlksADDcf5hpsz/6+Pum8I5+E0D8ClBGpAI9VxPRUyRp5Cg=="
+  "signature_b64": "Ylb5iSXlLkrfu/SJXUXxOoIn/XzvKAeGnyxQiPBNqbuwHre5LxMvC7e4JORn8DoaTL0Y6IZqPb0U5RzFYHunBQ=="
 }

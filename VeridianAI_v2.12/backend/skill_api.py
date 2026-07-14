@@ -99,6 +99,18 @@ def _guard():
     return s
 
 
+def _safe_detail(exc, where=""):
+    """Log the real exception server-side; return a generic client-safe message with a
+    correlation ref (CodeQL py/stack-trace-exposure). Full error is in the server log."""
+    import logging as _logging, uuid as _uuid
+    _ref = _uuid.uuid4().hex[:8]
+    try:
+        _logging.getLogger("veridian").warning("[err %s] %s: %r", _ref, where or "op", exc)
+    except Exception:
+        pass
+    return "internal error (ref %s)" % _ref
+
+
 def _validate_external_url(url: str) -> None:
     """Reject URLs pointing at loopback, private, or link-local addresses.
     Prevents SSRF via user-supplied base_url/relay targets."""
@@ -237,7 +249,7 @@ async def skills_browse(payload: dict, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"ok": False, "reason": "browse error: %s" % e, "items": []}
+        return {"ok": False, "reason": _safe_detail(e, "browse"), "items": []}
     remote = data.get("skills", []) if isinstance(data, dict) else []
     return s.browse(lambda: remote, trusted_pubkeys=_trusted())
 
@@ -274,7 +286,7 @@ async def skills_fetch(payload: dict, request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"ok": False, "reason": "fetch error: %s" % e, "verdict": None}
+        return {"ok": False, "reason": _safe_detail(e, "fetch"), "verdict": None}
     return s.fetch_object(lambda h: obj, hid, source=base, trusted_pubkeys=_trusted())
 
 
@@ -370,14 +382,4 @@ async def relay_skill_handler(payload):
     if not _enabled():
         return {"error": "skill sharing disabled"}
     s = _svc()
-    if s is None:
-        return {"error": "skill service unavailable"}
-    if not isinstance(payload, dict):
-        return {"error": "bad request"}
-    path = payload.get("path")
-    if path == "catalog":
-        return {"skills": s.local_catalog(), "fingerprint": _self_fingerprint()}
-    if path == "object":
-        obj = s.get_shareable(str(payload.get("id", "")))
-        return obj if obj is not None else {"error": "not found"}
-    return {"error": "unknown path"}
+   
