@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "e6fc34a6f3894ffcbfe21c90953e88d0",
-    "built_utc": "2026-07-14T07:09:34.054822+00:00",
+    "build_id": "ef6b3ee79bee43cb85c070f78ad6bc64",
+    "built_utc": "2026-07-14T07:40:27.291397+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -90,7 +90,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "341ae7e9c8d3377aec5c4e6b8ebc6bdc9251c183199c5043fd45719a2f5d8af1",
+      "backend/main.py": "a9335cf8cdbfc2e150d0ca9bfae43be6dba32ccc83c239bb6c18c6e864cf4748",
       "backend/mcp_handlers.py": "ed36501c18c4426bab3e40214af39f5233730ebc7bf26c7ba860353e9fdb657c",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -149,7 +149,7 @@
       "backend/tier_launcher.py": "e1c661f413f5033aeec0b3db3aad78b7035a6466675d5f6f99bd032b02f007ed",
       "backend/tier_lifecycle.py": "316038cd33cc339f90fe9175e504f8cbcf2febd4f196618b6db6946660635f4c",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
-      "backend/train_plm_daemon_v2.py": "7ef559da78f3459ff5831593df5dd76945f44e8335b719b01fb6a4e40842de9a",
+      "backend/train_plm_daemon_v2.py": "af5263d4ed7d97e712f742973e7764fe4c77005a93db92e39b1a4f6db6937115",
       "backend/ui_prefs.py": "2434c64713332763b4fd75108827f6fb540166ecef25dead343c6cea306fa77c",
       "backend/urgent_quota.py": "0676b038d12bc0d494d00e7037ed144b6791dfec347f3549e7974f87a6a47178",
       "backend/usage_meter.py": "5182f6d7ac145bd090640c396d836b177544d7b904552924ac9394229791c0ea",
@@ -202,5 +202,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "Ylb5iSXlLkrfu/SJXUXxOoIn/XzvKAeGnyxQiPBNqbuwHre5LxMvC7e4JORn8DoaTL0Y6IZqPb0U5RzFYHunBQ=="
+  "signature_b64": "MBcKYfOQbcadpxSvcjmptBq76jj07TL/dKL1RPjQUZjfN8fnHn/eIYsoTe3uCbZLTMgi0W1G8BKjb57n68HJBQ=="
 }

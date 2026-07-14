@@ -3470,8 +3470,21 @@ async def api_auth_status(request: Request):
             "multiuser": _mu}
 
 
+def _cookie_secure(request: Request) -> bool:
+    """Secure-cookie flag: True when the request arrived over HTTPS (directly or via a
+    TLS-terminating proxy) so the auth cookie is never sent in cleartext on a real
+    deployment; False on plain-http localhost so local sign-in still works.
+    (HIPAA transmission security / semgrep: missing Secure cookie attribute.)"""
+    try:
+        if request.url.scheme == "https":
+            return True
+        return "https" in request.headers.get("x-forwarded-proto", "").lower()
+    except Exception:
+        return False
+
+
 @app.post("/api/auth/setup")
-async def api_auth_setup(payload: dict):
+async def api_auth_setup(payload: dict, request: Request):
     import users as _users
     import session as _session
     if _users.any_users():
@@ -3484,7 +3497,8 @@ async def api_auth_setup(payload: dict):
     resp = JSONResponse({"success": True, "username": r["username"], "is_owner": True})
     # Session cookie (NO max_age) so it's discarded when the browser/app closes
     # -> reopening requires a fresh sign-in. Server session still expires via TTL.
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
+                    secure=_cookie_secure(request))
     return resp
 
 
@@ -3521,7 +3535,8 @@ async def api_auth_login(payload: dict, request: Request):
                          "is_owner": r["is_owner"]})
     # Session cookie (NO max_age) so it's discarded when the browser/app closes
     # -> reopening requires a fresh sign-in. Server session still expires via TTL.
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
+                    secure=_cookie_secure(request))
     return resp
 
 
@@ -3530,7 +3545,8 @@ async def api_auth_logout(request: Request):
     import session as _session
     _session.destroy_session(request.cookies.get(_AUTH_COOKIE))
     resp = JSONResponse({"success": True})
-    resp.delete_cookie(_AUTH_COOKIE)
+    resp.delete_cookie(_AUTH_COOKIE, httponly=True, samesite="lax",
+                       secure=_cookie_secure(request))
     return resp
 
 
@@ -3564,7 +3580,8 @@ async def api_auth_change_password(payload: dict, request: Request):
     resp = JSONResponse({"success": True})
     # Session cookie (NO max_age) so it's discarded when the browser/app closes
     # -> reopening requires a fresh sign-in. Server session still expires via TTL.
-    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax")
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
+                    secure=_cookie_secure(request))
     return resp
 
 

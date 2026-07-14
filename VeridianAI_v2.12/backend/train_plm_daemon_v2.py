@@ -95,7 +95,9 @@ def train_plm(
     # Load dataset
     print(f"Loading engineered features from {data_path}...")
     dataset = PLAMDataset(data_path)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    # pin_memory only on CUDA (faster host->GPU copies; a no-op/waste on CPU).
+    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
+                            pin_memory=(device == "cuda"))
 
     print(f"Vocabulary ({dataset.vocab_size} commands): {dataset.idx_to_label}")
     print(f"Dataset size: {len(dataset)} samples")
