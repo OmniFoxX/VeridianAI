@@ -82,7 +82,8 @@ class SkillService:
         try:
             obj = fetcher(hid)
         except Exception as e:
-            return {"ok": False, "id": hid, "reason": "fetch error: %s" % e, "verdict": None}
+            import logging; logging.getLogger("veridian").warning("skill fetch_object error: %r", e)
+            return {"ok": False, "id": hid, "reason": "fetch failed", "verdict": None}
         if not isinstance(obj, dict) or "body_b64" not in obj or "envelope" not in obj:
             return {"ok": False, "id": hid, "reason": "malformed object", "verdict": None}
         try:
@@ -100,7 +101,8 @@ class SkillService:
         try:
             remote = catalog_fetcher() or []
         except Exception as e:
-            return {"ok": False, "reason": "browse error: %s" % e, "items": []}
+            import logging; logging.getLogger("veridian").warning("skill browse error: %r", e)
+            return {"ok": False, "reason": "browse failed", "items": []}
         tset = set(trusted_pubkeys or [])
         items = []
         for m in remote:

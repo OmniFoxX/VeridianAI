@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "8963a2e724d142c694511cd9dcfa6585",
-    "built_utc": "2026-07-15T02:27:07.881599+00:00",
+    "build_id": "62b72ce1a4164165a828a7778b41e0e0",
+    "built_utc": "2026-07-15T03:58:33.695497+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -123,9 +123,9 @@
       "backend/skill_api.py": "2df0610c6c266d36fce27f8f0704184b8752ad2de11c89cacb6925a67849f411",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
-      "backend/skill_service.py": "024ad02189752d0f24bf12efb184ef3c8891f1b5bdf29dda4fc3e38b679af76d",
+      "backend/skill_service.py": "7d932412cef8780e280bfdb5ecaff03ee642c8f9a72e661bda779251bceb7b92",
       "backend/skill_store.py": "047d4f30ff8ba73ff17f5765dc7ed45affae66eb8d90e62b2b0b20ecf10aa7e0",
-      "backend/skill_trust.py": "e63a5aadc52379943e624f74c6f6d4d5adffebe75b48ce1e3269dbd5f2d207c7",
+      "backend/skill_trust.py": "55e922dad68cc8b85fef4bb705fab60fa2322d3f7de3393b5d1b24e41ec53792",
       "backend/socials_config.py": "2935b5c1a030d020c98253e920c552883c1dd9d2b09359c68795692917127eef",
       "backend/task_prioritiser.py": "9a9dd94f0307b045240bae5574bce22cf514109cc318b4be04fefe8f13723a4c",
       "backend/test_aether_sim.py": "6451a546822f6ac727202f9e192e0c4473861265ebd8779f32e1411523ac59ca",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "A7BOGk25ijDp32YRckfGiny8YtZLWne1AbVRx2KjHdLohIgL+/4GJSq3LZefDAMIGYkgAA2nRdIuv73XCESQBQ=="
+  "signature_b64": "pzkzjFcnR1dh7ylvF7LCjsozlcXmQ+J+bzZIHz0IIjxltwAcAEGgAYrpHyUhq1k1oBJkLxq5HSIthuolQ9kvBw=="
 }

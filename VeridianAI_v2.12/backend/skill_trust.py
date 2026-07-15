@@ -189,5 +189,6 @@ def verify_artifact(envelope, body, trusted_pubkeys=None):
             res["trusted"] = pub_b64 in set(trusted_pubkeys)
         return res
     except Exception as e:
-        res["reason"] = "error: %s" % e
+        import logging; logging.getLogger("veridian").warning("verify_artifact error: %r", e)
+        res["reason"] = "verification error"
         return res
