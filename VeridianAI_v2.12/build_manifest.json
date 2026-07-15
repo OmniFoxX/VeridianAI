@@ -3,10 +3,10 @@
     "schema": "oracleai_build_manifest",
     "manifest_version": 1,
     "product": "OracleAI",
-    "version": "2.12.0",
+    "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "6a4f79bc0ad044cd8549d0ea68945c8b",
-    "built_utc": "2026-07-15T04:29:50.569500+00:00",
+    "build_id": "f47995bcb90d4d788db2db2ad6376e21",
+    "built_utc": "2026-07-15T05:31:22.425577+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "MCDogekAyDm0AN45kUl3sbgpKduy6GwyB/9Q3VO5UP6t+2TWhlNyjmp5c6bl3kkivFkXeI0rOOpccobNQvDMAQ=="
+  "signature_b64": "DKIC2Zezs/7cijAHDHkm/GJIw2CgiOd4uK992zRaBL8gixAj13uLREwdLp/n753Ym1N4iDXJFMa6lUDrrEFhBg=="
 }
