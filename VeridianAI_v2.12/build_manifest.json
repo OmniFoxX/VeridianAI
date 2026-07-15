@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "62b72ce1a4164165a828a7778b41e0e0",
-    "built_utc": "2026-07-15T03:58:33.695497+00:00",
+    "build_id": "6a4f79bc0ad044cd8549d0ea68945c8b",
+    "built_utc": "2026-07-15T04:29:50.569500+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -168,7 +168,7 @@
       "bitchat-python/bitchat/terminal_ux.py": "338bb6e8096eb1ddeda22ae2d750e2b141569a9bd8e36dc82c54ebf998e30f97",
       "docs/README/TogaAetherNets_Win_FirewallSetup/setup_firewall.ps1": "6a0ff26fcb486f079666f3cdde8b2c51982ebad8c12fc89d823d9189f7d65c6d",
       "docs/TogaAetherNets_Win_FirewallSetup/setup_firewall.ps1": "6a0ff26fcb486f079666f3cdde8b2c51982ebad8c12fc89d823d9189f7d65c6d",
-      "electron/first_run.js": "1e2d7cbc01387f8505c0f59ef6d998e402e124c8b80e296b3c2acb9060061ccc",
+      "electron/first_run.js": "bcd95942200f61e90888bd10d401220540ce47a3e0aee158bda63078bda9bc60",
       "electron/main.js": "9e9148e2d6d198b3ec26d6a5936e55d3308de1381929c6942a17ba7dbcbe654f",
       "electron/preload.js": "88dc1cd8c9d336da917a902fece697f438fac18415f33c1c4a436cbf13155173",
       "frontend/css/comfyui-wizard.css": "18eae3602295eaf3bbd5bd5307a2a5d3d383aa6e3ce6ddcb41e4b70b4d129e22",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "pzkzjFcnR1dh7ylvF7LCjsozlcXmQ+J+bzZIHz0IIjxltwAcAEGgAYrpHyUhq1k1oBJkLxq5HSIthuolQ9kvBw=="
+  "signature_b64": "MCDogekAyDm0AN45kUl3sbgpKduy6GwyB/9Q3VO5UP6t+2TWhlNyjmp5c6bl3kkivFkXeI0rOOpccobNQvDMAQ=="
 }

@@ -97,6 +97,9 @@ function addToSessionPath(dir) {
 
 // --- tool discovery ----------------------------------------------------
 function tryVersion(cmd) {
+  // nosemgrep: detect-child-process -- execFileSync (NO shell), fixed ['--version']
+  // args, and cmd is an internal literal (py/python/python3/ollama/winget), never
+  // user input; no shell metacharacters can be interpreted.
   try { execFileSync(cmd, ['--version'], { stdio: 'ignore', timeout: 15000 }); return true; }
   catch { return false; }
 }
@@ -138,6 +141,10 @@ function run(cmd, args, onLine, opts) {
   return new Promise((resolve) => {
     let p;
     try {
+      // nosemgrep: detect-child-process -- spawn WITHOUT shell:true, so args are
+      // passed as an argv array and never parsed by a shell. cmd/args come from
+      // internal tool discovery (findPython/findOllama) + fixed installer args,
+      // not from user input. (Callers never pass shell:true in opts.)
       p = spawn(cmd, args, {
         cwd: projectRoot(), windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'], ...(opts || {}),
