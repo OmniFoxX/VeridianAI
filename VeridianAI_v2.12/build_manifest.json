@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f47995bcb90d4d788db2db2ad6376e21",
-    "built_utc": "2026-07-15T05:31:22.425577+00:00",
+    "build_id": "cf7d82ade41a4611869402e4e2809c16",
+    "built_utc": "2026-07-15T23:14:57.794211+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -70,11 +70,11 @@
       "backend/craiid/craiid_archivist_compression_integration.py": "04b71ef77dceaf3d5ce2e50fc4d9616d50f22e4db96cf1dc0c9e7e4c624f146d",
       "backend/craiid/craiid_author.py": "a9e05c0843cde410bb513c25b1097bd87360054f2667fe319119af53cc1d820e",
       "backend/craiid/craiid_author_compression_integration.py": "f98ffaa5063155f7eec8d175e9689cc5764a3d9e9011685147d799a0cdcf1c70",
-      "backend/craiid/craiid_compression_core_v3.py": "6263145b0da855158457bc8ae9c96d87f3bbb56282d81b8262d44b3bda000340",
+      "backend/craiid/craiid_compression_core_v3.py": "5a7d5a61a25593c21135ce59826836477e104dde29106ecc39869ddabdf4bb96",
       "backend/craiid/craiid_compression_validation_v4.py": "517bd9b6f94e2f509bfd0b5f82330712544b0fd4beaa972bacd1941138892126",
       "backend/craiid/fatigue_injector.py": "71e5cf1ff30707a90971d3d10916c22c422a2c52df0b264e88272a01ce6851e7",
       "backend/craiid/integrity_check.py": "5485d153833ac66ce87ed3eb13c8c39a19ca2e075742313b14c49437dd9ae3a1",
-      "backend/craiid/journalist.py": "8ba1970817b7b79dde1a46769d9ce38792ac200120fe259338738d5cc6bc0506",
+      "backend/craiid/journalist.py": "5cc36f40f9a11ad507b321b1831e810580764e738d175cb934e154a5be471f86",
       "backend/craiid/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
       "backend/craiid/probe_environment.py": "2d9fc41ec8a2a5d43304e08dacdfc9c41a86bf3a56dc4cab4e48428ba5c67007",
       "backend/craiid/test_author_robustness.py": "0e93abc78cc0ec50406f6c439c6d68a40ff559674ca3ef69360b303e14ffd5ba",
@@ -104,7 +104,7 @@
       "backend/node_trust.py": "53d74033401fa0a318d5e18faa2ae63818b75f453a7176c389f498e78dcb2731",
       "backend/overseer_daemon.py": "a0d479b1aec83d66b414b72c82c88a6840dbadc90fc8344ebd8779235a0f3414",
       "backend/pid_registry.py": "62fe71083cb81edb7e53dde4cec2edb12222dee6bc2fcef317cbea0809b1b642",
-      "backend/plugin_manager.py": "26141b884b59f48a475cadec9c01c6b3b892c62b06e719d55ad5734689081cc5",
+      "backend/plugin_manager.py": "0893c9cd9cbce50737d5b707b2514396eb04fef7a0f4ab01a185502d3ad48442",
       "backend/probe_environment.py": "2d9fc41ec8a2a5d43304e08dacdfc9c41a86bf3a56dc4cab4e48428ba5c67007",
       "backend/procedural_memory.py": "e4cec929b03cb0a1c58e93fb72380a426fd43297e3a1a469a3b952a08fbdc8f9",
       "backend/prompt_cache_manager.py": "815f7530d02232e314d450d76d2c612d99e5c0b9fdbd2a8fbb237b04cde5c2ba",
@@ -114,7 +114,7 @@
       "backend/request_scheduler.py": "1ae318e130d4c7330dbd631f6619337f71e26d68f398b1c9fd591fc9803e9f82",
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
       "backend/sage_daemon_client.py": "2ec56533c7e00a0022c046b3936626e5a63532931b5d6f6076275f6d1005be6b",
-      "backend/sage_engine.py": "9c1ab2c0c475aec7b6c8503eb33066c826ef0007094480aeb155357629b82844",
+      "backend/sage_engine.py": "9f91c70c06ff0eec09885b7869461defb9eb1783add3e06417aced6a34c4e31d",
       "backend/sage_messaging_adapter.py": "b73ab78b01bdb8967e1f19125038d2f1ceb9ef1cc0c38bdff5c050ea16f995e8",
       "backend/sage_rag.py": "b6c08d57909851e7488c154c8aecc543f82943435cd2e17b8c0acf007e4ba56d",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
@@ -150,7 +150,7 @@
       "backend/tier_launcher.py": "e1c661f413f5033aeec0b3db3aad78b7035a6466675d5f6f99bd032b02f007ed",
       "backend/tier_lifecycle.py": "316038cd33cc339f90fe9175e504f8cbcf2febd4f196618b6db6946660635f4c",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
-      "backend/train_plm_daemon_v2.py": "af5263d4ed7d97e712f742973e7764fe4c77005a93db92e39b1a4f6db6937115",
+      "backend/train_plm_daemon_v2.py": "c6abb9bc4611a61641c00a13824328cbe52532d009e5de74b1639d473bd1141a",
       "backend/ui_prefs.py": "2434c64713332763b4fd75108827f6fb540166ecef25dead343c6cea306fa77c",
       "backend/urgent_quota.py": "0676b038d12bc0d494d00e7037ed144b6791dfec347f3549e7974f87a6a47178",
       "backend/usage_meter.py": "5182f6d7ac145bd090640c396d836b177544d7b904552924ac9394229791c0ea",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "DKIC2Zezs/7cijAHDHkm/GJIw2CgiOd4uK992zRaBL8gixAj13uLREwdLp/n753Ym1N4iDXJFMa6lUDrrEFhBg=="
+  "signature_b64": "ZaQcIaHnolE525ksG7mAFLpChFGeHh/u/q/oqHuwT18c9xHT/+c1pnEJM/X+Nrz0fyFay1f1BcagWG/k5YjnCQ=="
 }

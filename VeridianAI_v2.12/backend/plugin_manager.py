@@ -1,5 +1,5 @@
 """
-OracleAI Plugin Manager
+VeridianAI Plugin Manager
 Loads JSON plugin definitions from the /plugins directory.
 Each plugin can define pre/post processing hooks and metadata.
 """

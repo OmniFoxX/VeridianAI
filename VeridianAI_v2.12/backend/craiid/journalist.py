@@ -386,6 +386,7 @@ class Journalist:
             import json as _json
             import os as _os
             import urllib.request
+            from net_guard import safe_urlopen
             try:
                 from config import LLAMA_EMBED_URL as _url
             except Exception:
@@ -395,7 +396,7 @@ class Journalist:
                 _url.rstrip("/") + "/v1/embeddings", data=body,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=6) as resp:
+            with safe_urlopen(req, timeout=6) as resp:
                 data = _json.loads(resp.read().decode("utf-8"))
             vecs = [d.get("embedding") for d in data.get("data", [])]
             if vecs and len(vecs) == len(texts) and all(isinstance(v, list) and v for v in vecs):
@@ -439,6 +440,7 @@ class Journalist:
             import json as _json
             import os as _os
             import urllib.request
+            from net_guard import safe_urlopen
             try:
                 from config import LLAMA_DAEMON_URL as _url
             except Exception:
@@ -465,7 +467,7 @@ class Journalist:
                 _url.rstrip("/") + "/v1/chat/completions", data=data,
                 headers={"Content-Type": "application/json"},
             )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
+            with safe_urlopen(req, timeout=timeout) as resp:
                 out = _json.loads(resp.read().decode("utf-8"))
             choices = out.get("choices") or []
             if not choices:

@@ -8,7 +8,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
-class PLAMDataset(Dataset):
+class PLMDataset(Dataset):
     """Dataset for PLM training on engineered daemon features (v2)."""
 
     def __init__(self, data_path):
@@ -94,7 +94,7 @@ def train_plm(
 
     # Load dataset
     print(f"Loading engineered features from {data_path}...")
-    dataset = PLAMDataset(data_path)
+    dataset = PLMDataset(data_path)
     # pin_memory only on CUDA (faster host->GPU copies; a no-op/waste on CPU).
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True,
                             pin_memory=(device == "cuda"))

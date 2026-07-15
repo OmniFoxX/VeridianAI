@@ -192,11 +192,15 @@ class VLTSCompressor:
             print(f"[WARN] Archive directory not found: {self.archive_dir}")
             return self._build_symbol_map()
 
+        _atr = _get_atrest()
         file_count = 0
         for json_file in self.archive_dir.glob("*.json"):
             try:
-                with open(json_file, "r", encoding="utf-8") as f:
-                    data = json.load(f)
+                if _atr is not None:
+                    data = json.loads(_atr.read_file_auto(str(json_file)))
+                else:
+                    with open(json_file, "r", encoding="utf-8") as f:
+                        data = json.load(f)
                 text = self._extract_text_from_archive(data)
                 if text:
                     tokens = self._tokenize(text)
