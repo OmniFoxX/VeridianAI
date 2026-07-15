@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+
+<html data-theme="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>VeridianAI</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&amp;family=Rajdhani:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap" rel="stylesheet"/>
+<link href="/static/css/styles.css?v=2.11.12" rel="stylesheet"/>
+<link href="/static/css/command-palette.css?v=2.9.10" rel="stylesheet"/>
+<link href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark-dimmed.min.css" id="hljs-theme" rel="stylesheet"/>
+<link href="/static/css/comfyui-wizard.css?v=2.9.10" rel="stylesheet"/>
+<!-- PWA: installable app + icons -->
+<link href="/manifest.webmanifest" rel="manifest"/>
+<meta content="#0b1430" name="theme-color"/>
+<link href="/static/icons/icon-192.png" rel="icon"/>
+<link href="/static/icons/icon-192.png" rel="apple-touch-icon"/>
+</head>
+<script src="/static/js/comfyui-wizard.js?v=2.11.15"></script>
+<script>
+  // PWA: register the service worker (installability + friendly offline page
+  // when the backend/Ollama isn't running).
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('/sw.js').catch(function (e) {
+        console.warn('[PWA] service worker registration failed:', e);
+      });
+    });
+  }
+</script>
+<body>
+<a class="skip-link" href="#main-content">Skip to main content</a>
+<header class="app-header">
+<div class="header-brand">
+<button aria-label="Veridian Eye" class="oracle-eye" id="oracle-eye" onclick="openGamePanel()" data-tip="Click to open/reset games" type="button">
+<div class="eye-outer"></div>
+<div class="eye-inner"></div>
+<div class="eye-pupil"></div>
+</button>
+<span class="brand-name">VERIDIAN<span class="brand-ai">AI</span></span>
+</div>
+<div class="header-controls">
+<select class="model-selector" id="model-select" aria-label="Active model" data-tip="Your active model. Auto-route uses this as the primary for most turns." onchange="onModelChange(this.value)">
+<option value="">— Select Model —</option>
+</select>
+<div class="header-toggles">
+<button class="icon-btn" id="privacy-btn" aria-label="🔒 Privacy Mode" onclick="togglePrivacy()" data-tip="Privacy Mode">🔒</button>
+<button class="icon-btn" id="haptic-btn" aria-label="📳 Haptic feedback" onclick="toggleHaptic()" data-tip="Haptic feedback">📳</button>
+<button class="icon-btn" id="theme-btn" aria-label="○ Toggle light/dark theme" onclick="toggleTheme()" data-tip="Toggle light/dark">○</button>
+<button class="icon-btn" id="sidebar-btn" aria-label="≡ Toggle sidebar" onclick="toggleSidebar()" data-tip="Toggle sidebar">≡</button>
+</div>
+</div>
+</header>
+<!-- === Body ===================================================== -->
+<div class="app-body">
+<!-- ── Sidebar ----------------------------------------------- -->
+<aside class="sidebar" id="sidebar">
+<nav class="sidebar-nav" aria-label="Settings panels">
+<button class="nav-tab active" onclick="switchPanel('hardware', this)">HARDWARE</button>
+<button class="nav-tab" onclick="switchPanel('settings',  this)">SETTINGS</button>
+<button class="nav-tab" onclick="switchPanel('plugins',   this)">PLUGINS</button>
+</nav>
+<!-- Hardware panel -->
+<div class="panel active" id="panel-hardware">
+<h2 class="panel-header">System Intelligence</h2>
+<div id="hardware-info" role="status" aria-live="polite">
+<div class="loading-placeholder">Scanning hardware…</div>
+</div>
+<div id="hw-toggles"></div>
+</div>
+<!-- Settings panel -->
+<div class="panel" id="panel-settings">
+<h2 class="panel-header">Configuration</h2>
+<div class="setting-group">
+<label class="setting-label">Backend</label>
+<select class="setting-select" id="setting-backend" aria-label="Backend" onchange="updateSetting('backend', this.value); onBackendChange(this.value); reloadModels()">
+<option value="ollama">Ollama (recommended)</option>
+<option value="llamacpp">llama.cpp (GGUF files)</option>
+</select>
+</div>
+<div class="setting-group" id="ollama-url-row">
+<label class="setting-label">Ollama URL</label>
+<input aria-label="Ollama URL" class="setting-input" id="setting-ollama-url" onchange="updateSetting('ollama_url', this.value); reloadModels()" placeholder="http://localhost:11434" type="text"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Sampling randomness. Lower (~0.2) = focused and consistent; higher (~1.0+) = more creative and varied. Changes how varied the wording is, not the stance the model takes.">Temperature  
+          <span id="temp-display" style="color:var(--gold)">0.7</span>
+</label>
+<input aria-label="Temperature 0.7" class="setting-range" id="setting-temperature" max="2" min="0" onchange="updateSetting('temperature', parseFloat(this.value))" oninput="document.getElementById('temp-display').textContent=parseFloat(this.value).toFixed(2)" step="0.05" type="range" value="0.7"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Nucleus sampling: keep the smallest set of most-likely tokens whose probabilities add up to Top-P. Lower = more focused, higher = more varied. 0.9 is typical.">Top-P  
+          <span id="top-p-display" style="color:var(--gold)">0.90</span>
+</label>
+<input aria-label="Top-P 0.90" class="setting-range" id="setting-top-p" max="1" min="0" oninput="document.getElementById('top-p-display').textContent=parseFloat(this.value).toFixed(2)" step="0.01" type="range" value="0.9"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Top-K: only sample from the K most-likely next tokens. Lower = safer/more repetitive, higher = more variety. 40 is typical; 0 disables the limit.">Top-K  
+          <span id="top-k-display" style="color:var(--gold)">40</span>
+</label>
+<input aria-label="Top-K 40" class="setting-range" id="setting-top-k" max="100" min="0" oninput="document.getElementById('top-k-display').textContent=this.value" step="1" type="range" value="40"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Repeat penalty: discourages reusing recent tokens. 1.0 = off, ~1.1 is typical. Too high can hurt coherence.">Repeat Penalty  
+          <span id="repeat-penalty-display" style="color:var(--gold)">1.10</span>
+</label>
+<input aria-label="Repeat Penalty 1.10" class="setting-range" id="setting-repeat-penalty" max="2" min="1" oninput="document.getElementById('repeat-penalty-display').textContent=parseFloat(this.value).toFixed(2)" step="0.01" type="range" value="1.1"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Auto-Re-Prompt: how many times to auto-send the continue message before stopping (your infinite-loop guard). Only used when the Auto-Re-Prompt toggle is on.">Auto-Continue Max</label>
+<input aria-label="Auto-Continue Max" class="setting-input" id="setting-auto-reprompt-max" max="50" min="1" step="1" data-tip="Maximum automatic continue messages per chain." type="number" value="3"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="The exact message Auto-Re-Prompt sends to continue a task or debate.">Auto-Continue Text</label>
+<input aria-label="Auto-Continue Text" class="setting-input" id="setting-auto-reprompt-text" data-tip="Sent automatically when Auto-Re-Prompt continues a task." type="text" value="Please continue."/>
+</div>
+<div class="setting-group">
+<label class="setting-label">Max Tokens</label>
+<!-- v2.1.8 max_tokens=-1 trap fix:
+             Backend treats -1 as "unlimited" (Ollama num_predict=-1, llama-server
+             omits the field entirely). The old min="64" / hardcoded value="2048"
+             mismatched the backend default (-1) — settings.js would programmatically
+             set -1 into a field that says "minimum 64", which broke save flows and
+             confused users. Now: min="-1" accepts the sentinel, placeholder shows
+             the meaning, default rendering is controlled by settings.js
+             (blank = use backend default). Users who want a cap type a positive
+             integer; users who want unlimited leave it blank. -->
+<input aria-label="Max Tokens" class="setting-input" id="setting-max-tokens" max="131072" min="-1" onchange="updateSetting('max_tokens', sanitizeMaxTokensInput(this.value))" placeholder="blank = unlimited" step="64" data-tip="Blank or -1 = unlimited. Set a positive integer to cap the response length." type="number"/>
+</div>
+<div class="setting-group">
+<label class="setting-label">Context Window (n_ctx)</label>
+<input aria-label="Context Window (n_ctx)" class="setting-input" id="setting-n-ctx" max="131072" min="512" onchange="updateSetting('n_ctx', parseInt(this.value))" step="512" type="number" value="4096"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="How many model layers to offload to the GPU. -1 = all (fastest if they fit in VRAM); lower keeps more on the CPU to save VRAM.">GPU Layers <span style="color:var(--text-faint)">(-1 = all)</span></label>
+<input aria-label="GPU Layers (-1 = all)" class="setting-input" id="setting-gpu-layers" max="256" min="-1" onchange="updateSetting('n_gpu_layers', parseInt(this.value))" type="number" value="-1"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Extra instructions appended to Toga's built-in system prompt (it adds to it, never replaces it). Use it for a persistent persona or standing rules.">System Prompt</label>
+<textarea class="setting-textarea" id="setting-system-prompt" aria-label="System prompt" onblur="updateSetting('system_prompt', this.value)" oninput="updateSystemPromptDebounced(this.value)" rows="4"></textarea>
+</div>
+<!-- Toga / Agent Settings -->
+<div class="settings-section">
+<div class="settings-section-title">Toga AI Agent</div>
+<!-- v2.12.1: personalization — rename the assistant + set the voice wake word -->
+<div class="setting-group" style="margin-bottom:12px">
+<label class="setting-label" data-tip="What the assistant calls itself and answers to. Default 'Toga'. This changes the persona name only — menus and labels stay the same. Per-profile: each user can pick their own.">Assistant Name</label>
+<input class="setting-input" id="setting-assistant-name" aria-label="Assistant name" placeholder="Toga" maxlength="24" onchange="updateSetting('assistant_name', this.value.trim() || 'Toga')" type="text"/>
+</div>
+<div class="setting-group" id="wake-word-group" style="margin-bottom:14px">
+<label class="setting-label" data-tip="The spoken/typed word that wakes hands-free voice and triggers social auto-replies. Default 'Toga'. Owner-level (one microphone per machine). Restart voice listening after changing.">Wake Word</label>
+<input class="setting-input" id="setting-wake-word" aria-label="Wake word" placeholder="Toga" maxlength="24" onchange="updateSetting('voice_wake_word', this.value.trim() || 'Toga')" type="text"/>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Toga Mode: route messages through the Toga agent (memory, tools, procedural skills). Off = plain model chat with no agent layer.">Toga Mode</span>
+<label class="toggle-switch">
+<input aria-label="Enable Toga" checked="" id="toggle-sage" onchange="updateSetting('sage_mode', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Let Toga work in multi-step agentic loops -- planning, calling tools, and continuing until the task is done -- instead of a single reply.">Agentic Mode</span>
+<label class="toggle-switch">
+<input aria-label="Enable Agentic" checked="" id="toggle-agentic" onchange="updateSetting('agentic_mode', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Symposium: two models debate opposing sides of your next message and Toga moderates. Primary slot moderates; secondary + tertiary debate. Resets off each session.">Symposium Mode</span>
+<label class="toggle-switch">
+<input aria-label="Enable Symposium" id="toggle-symposium" onchange="if(this.checked)setStatus('Symposium is a reasoning exercise -- verify any facts, dates, or figures independently.')" data-tip="When ON, your next message is a debate proposition. Symposium is a reasoning exercise, not a fact source -- double-check any empirical claims." type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Build Battle: two models compete to write the best code for your specification, critique each other, then Toga judges. Primary slot judges; secondary + tertiary build. Resets off each session.">Build Battle</span>
+<label class="toggle-switch">
+<input aria-label="Enable Build Battle" id="toggle-build-battle" onchange="var _r=document.getElementById('build-battle-rounds-row');if(_r)_r.style.display=this.checked?'':'none';if(this.checked)setStatus('Build Battle: describe a coding challenge and the models will compete to solve it. Review all generated code before use.')" data-tip="When ON, your next message is a coding specification. Two models build, critique, and refine — Toga judges the result." type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" id="build-battle-rounds-row" style="margin-bottom:6px;display:none">
+<span class="hw-toggle-label" data-tip="How many Critique &amp; Refine passes each builder runs before final submissions. More rounds dig deeper but take more time and compute.">Build Battle Rounds</span>
+<select class="setting-select" id="build-battle-rounds" aria-label="Build Battle rounds" style="width:auto" data-tip="Critique &amp; Refine passes (1-3).">
+<option selected="" value="1">1 (quick)</option>
+<option value="2">2 (deeper)</option>
+<option value="3">3 (thorough)</option>
+</select>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Auto-Re-Prompt: after each reply finishes, automatically send a continue message (set the text and limit below) so long research or debates finish while you are away. Stops at the limit. Resets off each session.">Auto-Re-Prompt</span>
+<label class="toggle-switch">
+<input aria-label="Enable Auto Reprompt" id="toggle-auto-reprompt" data-tip="When ON, VeridianAI auto-sends a continue message after each reply, up to the Auto-Continue Max." type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Allow Toga to search the web for current information when a question needs it.">Web Search</span>
+<label class="toggle-switch">
+<input aria-label="Enable Websearch" checked="" id="toggle-websearch" onchange="updateSetting('web_search_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row">
+<span class="hw-toggle-label" data-tip="Allow Toga to run code in a sandbox to compute results, run tests, or process files during a reply.">Code Execution</span>
+<label class="toggle-switch">
+<input aria-label="Enable Codeexec" checked="" id="toggle-codeexec" onchange="updateSetting('code_exec_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-top:6px">
+<span class="hw-toggle-label" data-tip="Let Toga's browser keep cookies between sessions (faster logins). OFF by default: bookmarks and history persist, but cookies are cleared each session. Cookies can hold personal/session data.">Browser keeps cookies (opt-in)</span>
+<label class="toggle-switch">
+<input aria-label="Enable Browser Cookies" id="toggle-browser-cookies" onchange="setBrowserCookies(this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+</div>
+<!-- Profiles (v2.11.13) — owner-only; settings.js reveals it for the owner -->
+<div class="settings-section" id="multiprofile-section" style="display:none">
+<div class="settings-section-title">Profiles</div>
+<div class="hw-toggle-row">
+<span class="hw-toggle-label" data-tip="Multi-Profile: everyone gets their own sign-in with separate chats, archives, settings, and system-prompt addendum. Socials (Discord, Bluesky, BitChat...) stay with the owner profile. Only the owner can change this switch. Users may need to sign in again after switching.">Enable Multi-Profile</span>
+<label class="toggle-switch">
+<input aria-label="Enable Multi-Profile" id="toggle-multiprofile" onchange="setMultiProfile(this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+</div>
+<!-- Developer Mode -->
+<div class="settings-section">
+<div class="settings-section-title">Developer Mode</div>
+<div class="hw-toggle-row">
+<span class="hw-toggle-label" data-tip="Show or hide the background log terminals (Ollama, Toga, Daemon, Overseer, model servers). Off = clean desktop; on = all logs visible. Takes effect when you restart VeridianAI.">Show log terminals</span>
+<label class="toggle-switch">
+<input aria-label="Enable Devmode" id="toggle-devmode" onchange="setDevMode(this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+</div>
+<!-- Build integrity / provenance -->
+<div class="settings-section">
+<div class="settings-section-title">Build</div>
+<div class="setting-group">
+<span class="setting-label" id="build-integrity-status" role="status" aria-live="polite" style="display:block">Checking build…</span>
+<a class="setting-label" href="https://github.com/OmniFoxX" rel="noopener" style="opacity:.65;font-size:12px;text-decoration:underline" target="_blank">Canonical source: github.com/OmniFoxX</a>
+</div>
+</div>
+<!-- Tavily API Key -->
+<div class="settings-section">
+<div class="settings-section-title">Tavily API Key</div>
+<div class="api-key-display" id="tavily-status" role="status" aria-live="polite">
+<span class="key-status none">No key set</span>
+</div>
+<div class="setting-group" style="margin-top:6px">
+<label class="sr-only" for="tavily-input">Tavily API Key</label>
+<input aria-label="Tavily API Key" class="setting-input" id="tavily-input" data-tip="Your Tavily API key for web search. Stored locally and never shown again after saving." placeholder="Enter Tavily API key…" type="password"/>
+<div style="display:flex;gap:4px;margin-top:4px">
+<button class="toolbar-btn" aria-label="Save Tavily key" data-tip="Save the Tavily key" onclick="saveTavilyKey()" style="flex:1">Save</button>
+<button class="toolbar-btn" aria-label="Clear Tavily key field" data-tip="Clear the input field (does not delete the saved key)" onclick="document.getElementById('tavily-input').value=''" style="flex:1">Clear</button>
+<button class="toolbar-btn danger" aria-label="Delete saved Tavily key" data-tip="Delete the saved Tavily key" onclick="deleteTavilyKey()" style="flex:1">Delete</button>
+</div>
+</div>
+</div>
+<!-- Multi-Model -->
+<div class="settings-section">
+<div class="settings-section-title">Multi-Model Routing</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label">Auto-Route by Complexity</span>
+<label class="toggle-switch">
+<input aria-label="Enable Autoroute" id="toggle-autoroute" onchange="updateSetting('auto_route', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Your main model. Auto-route sends most turns here, and it is the agentic model that uses tools.">Primary Model</label>
+<select class="setting-select" id="setting-primary-model" aria-label="Primary model" onchange="onModelChange(this.value)">
+<option value="">— Select Model —</option>
+</select>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="A second model auto-route can choose, e.g. a larger model for heavy queries or a vision model for images.">Secondary Model</label>
+<select class="setting-select" id="setting-secondary-model" aria-label="Secondary model" onchange="updateSetting('secondary_model', this.value)">
+<option value="">— None —</option>
+</select>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="An optional third model in the routing pool, e.g. a dedicated vision model or a future Symposium participant.">Tertiary Model</label>
+<select class="setting-select" id="setting-tertiary-model" aria-label="Tertiary model" onchange="updateSetting('tertiary_model', this.value)">
+<option value="">— None —</option>
+</select>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title">Toga Network - Skill/Compute Sharing (Local/Home Network)</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Let your OTHER machines reach this one over your LAN, token-encrypted. OFF by default; only the node surface is exposed, settings and token stay local.">Serve peers (node server)</span>
+<label class="toggle-switch">
+<input aria-label="Enable Node Server" id="toggle-node-server" onchange="updateSetting('node_server_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Bind the server to your LAN so peers can reach it. The LAN guard keeps only the encrypted node surface reachable. Takes effect on RESTART.">Bind to LAN (restart to apply)</span>
+<label class="toggle-switch">
+<input aria-label="Enable Bind LAN" id="toggle-bind-lan" onchange="snSetBind(this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="setting-group">
+<label class="setting-label">This machine's address (give to your other node): <span id="sn-lan-addr">-</span></label>
+</div>
+<div class="setting-group">
+<label class="setting-label">Device name (used by Toga Network + relay)</label>
+<input aria-label="Device name (used by Toga Network + relay)" class="setting-select" id="setting-node-name" onchange="updateSetting('node_name', this.value)" placeholder="e.g. desktop" type="text"/>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="A non-secret fingerprint of this node's home token. Two nodes are paired when their fingerprints match.">Toga Network token fingerprint: <span id="sn-fingerprint">-</span></label>
+<button class="toolbar-btn" onclick="snRevealToken()">Reveal token to copy</button>
+<button class="toolbar-btn danger" onclick="snResetToken()">Reset (new token)</button>
+<div id="sn-token-box" style="display:none;margin-top:6px">
+<input aria-label="Sn Token" class="setting-select" id="sn-token" readonly="" type="text"/>
+<button class="toolbar-btn" onclick="snCopyToken()">Copy</button>
+</div>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Paste the home token from your OTHER machine so this one shares it (pairs the two).">Pair: paste a token from another node</label>
+<input aria-label="Pair: paste a token from another node" class="setting-select" id="sn-paste-token" placeholder="paste token from your other node" type="text"/>
+<button class="toolbar-btn" onclick="snSetToken()">Set token</button>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Route heavy tasks (image generation now; big queries later) to the remote node instead of running locally. OFF = everything stays on this machine, even if a remote URL is set.">Offload heavy tasks to remote</span>
+<label class="toggle-switch">
+<input aria-label="Enable Offload" id="toggle-offload" onchange="updateSetting('offload_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="setting-group">
+<label class="setting-label">Remote node URL (machine to offload to)</label>
+<input aria-label="Remote node URL (machine to offload to)" class="setting-select" id="setting-remote-node-url" onchange="updateSetting('remote_node_url', this.value)" placeholder="http://192.168.x.x:8000" type="text"/>
+<button class="toolbar-btn" onclick="snPairTest()">Test pairing</button>
+<div id="sn-pair-result" style="margin-top:6px;font-size:0.85em;opacity:0.8"></div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title">Image Generation (ComfyUI)</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Launch ComfyUI automatically when VeridianAI starts, and shut it down when VeridianAI closes (which clears ComfyUI's job queue). If ComfyUI is already running, it is left alone. OFF by default. Takes effect on RESTART.">Auto-launch ComfyUI with the app (restart to apply)</span>
+<label class="toggle-switch">
+<input aria-label="Enable Comfyui Autostart" id="toggle-comfyui-autostart" onchange="updateSetting('comfyui_autostart_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Optional. Leave blank to auto-detect your Start Menu ComfyUI shortcut, the desktop app, or a portable run_*.bat. Set this only if auto-detect cannot find ComfyUI.">ComfyUI launch command (optional - blank = auto-detect)</label>
+<input aria-label="ComfyUI launch command (optional - blank = auto-detect)" class="setting-select" id="setting-comfyui-launch-cmd" onchange="updateSetting('comfyui_launch_cmd', this.value)" placeholder="auto-detect (or full path to ComfyUI.exe)" type="text"/>
+<div style="font-size:0.8em;opacity:0.7;margin-top:3px">VeridianAI owns the process it starts, so closing VeridianAI clears ComfyUI's queue. Prompt-based image generation needs ComfyUI running.</div>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Choose which downloaded model image generation uses, or download another.">Image model</label>
+<button class="setting-select" onclick="ComfyUIWizard.manage()" style="cursor:pointer;text-align:left" type="button">Manage / change models…</button>
+<div style="font-size:0.8em;opacity:0.7;margin-top:3px">Pick the active model or download more (SD 1.5, SDXL, Flux). Your choice is remembered.</div>
+</div>
+</div>
+<div class="settings-section">
+<div class="settings-section-title">Aether Network - Skill/Compute Sharing (Experimental)</div>
+<div class="hw-toggle-row" style="margin-bottom:6px">
+<span class="hw-toggle-label" data-tip="Let this Toga SERVE its promoted skills to peers and fetch theirs. OFF by default. Everything fetched lands quarantined; you promote explicitly. Takes effect on RESTART.">Enable skill sharing (restart to apply)</span>
+<label class="toggle-switch">
+<input aria-label="Enable Skill Share" id="toggle-skill-share" onchange="updateSetting('skill_share_enabled', this.checked)" type="checkbox"/>
+<span class="toggle-track"></span>
+</label>
+</div>
+<div class="setting-group">
+<label class="setting-label" data-tip="Your Toga's public identity. Share this fingerprint out-of-band so peers can trust skills you author.">Aether identity fingerprint: <span id="sk-fingerprint">-</span></label>
+<button class="toolbar-btn" onclick="skCopyIdentity()">Copy public key</button>
+</div>
+<div class="setting-group">
+<label class="setting-label">Trusted authors (import a peer's key to allow promoting their skills)</label>
+<div id="sk-trusted-list" style="font-size:0.85em;opacity:0.85;margin:4px 0"></div>
+<input aria-label="Trusted authors (import a peer's key to allow promoting their skills)" class="setting-select" id="sk-key-label" placeholder="label (e.g. Mom's laptop)" type="text"/>
+<input aria-label="Trusted authors (import a peer's key to allow promoting their skills)" class="setting-select" id="sk-key-pub" placeholder="paste peer's public key" type="text"/>
+<button class="toolbar-btn" onclick="skAddKey()">Trust this key</button>
+</div>
+<div class="setting-group">
+<label class="setting-label">Browse a peer or pool</label>
+<input aria-label="Browse a peer or pool" class="setting-select" id="sk-peer-url" placeholder="http://192.168.x.x:8000" type="text"/>
+<button class="toolbar-btn" aria-label="Browse skills at this peer" onclick="skBrowse()">Browse</button>
+<div id="sk-browse-result" style="margin-top:6px;font-size:0.85em"></div>
+</div>
+<div class="setting-group">
+<label class="setting-label">Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)</label>
+<div class="hw-toggle-row" style="margin-bottom:4px">
+<span class="hw-toggle-label" data-tip="Host the relay broker on THIS machine so peers can rendezvous here. Takes effect on RESTART.">Host the relay here</span>
+<label class="toggle-switch"><input aria-label="Enable Relay Server" id="toggle-relay-server" onchange="updateSetting('relay_server_enabled', this.checked)" type="checkbox"/><span class="toggle-track"></span></label>
+</div>
+<div class="hw-toggle-row" style="margin-bottom:4px">
+<span class="hw-toggle-label" data-tip="Serve MY skills over the relay so peers can reach me even when I have no public address. Takes effect on RESTART.">Serve my skills via relay</span>
+<label class="toggle-switch"><input aria-label="Enable Relay Source" id="toggle-relay-source" onchange="updateSetting('relay_source_enabled', this.checked)" type="checkbox"/><span class="toggle-track"></span></label>
+</div>
+<input aria-label="Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)" class="setting-select" id="sk-relay-url" onchange="updateSetting('relay_url', this.value)" placeholder="relay URL (e.g. http://desktop-ip:8000)" type="text"/>
+<input aria-label="Relay (Reach peers across networks, unless behind CGNAT. Relay v2 is in R/D)" class="setting-select" id="sk-relay-target" placeholder="browse: target device name" type="text"/>
+<button class="toolbar-btn" onclick="skBrowseRelay()">Browse via relay</button>
+<div style="font-size:0.8em;opacity:0.7;margin-top:3px">Toggles take effect on restart. Your device name is set in the Toga Network section above.</div>
+</div>
+<div class="setting-group">
+<label class="setting-label">Import a .skill file (offline -- no network needed)</label>
+<input accept=".skill,.json,application/json" aria-label="Import a .skill file (offline -- no network needed)" class="setting-select" id="sk-import-file" type="file"/>
+<button class="toolbar-btn" onclick="skImport()">Import</button>
+</div>
+<div class="setting-group">
+<label class="setting-label">Your skills <button class="toolbar-btn" aria-label="Refresh your shared skills" onclick="skLoadLocal()">Refresh</button></label>
+<div id="sk-local-list" style="font-size:0.85em;margin-top:4px"></div>
+</div>
+<div class="setting-group">
+<label class="setting-label">IP Access (Aether) — status: <span id="ip-lockdown-state">public</span>
+<button class="toolbar-btn" aria-label="Refresh Aether IP access list" onclick="ipLoad()">Refresh</button></label>
+<label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+<input aria-label="Lockdown (allowlist-only)" id="toggle-ip-lockdown" onchange="ipLockdown(this.checked)" type="checkbox"/>
+<span class="hw-toggle-label" data-tip="Lockdown: ONLY allowlisted IPs may reach the Aether peer surface. Off = public (the denylist still applies).">Lockdown (allowlist-only)</span>
+</label>
+<input aria-label="IP Access (Aether) — status: public Refresh" class="setting-select" id="ip-entry" placeholder="IP or CIDR  e.g. 203.0.113.5  or  203.0.113.0/24" style="width:100%;margin-top:4px" type="text"/>
+<div style="display:flex;gap:6px;margin-top:4px">
+<button class="toolbar-btn danger" onclick="ipAdd('deny')" data-tip="Block this IP/range everywhere, even the peer surface">Block</button>
+<button class="toolbar-btn" onclick="ipAdd('allow')" data-tip="Allow this IP/range to reach the peer surface when Lockdown is on">Allow</button>
+</div>
+<label class="setting-label" style="margin-top:6px">Denylist (always blocked)</label>
+<div id="ip-deny-list" style="font-size:0.85em">none</div>
+<label class="setting-label" style="margin-top:6px">Allowlist (lockdown peers)</label>
+<div id="ip-allow-list" style="font-size:0.85em">none</div>
+</div>
+<div class="setting-group">
+<button class="toolbar-btn danger" onclick="skKillSwitch()" data-tip="Go dark: instantly disable skill sharing, relay hosting/serving, and node serving. Restart to fully sever any running services.">† et tu, Brute? - Kill Switch -</button>
+</div>
+<div class="setting-group">
+<label class="setting-label">Voice — <span id="voice-status" role="status" aria-live="polite">checking…</span>
+<button class="toolbar-btn" aria-label="Refresh voice status" onclick="voiceRefreshStatus()">Refresh</button></label>
+<div id="voice-setup-hint" style="font-size:0.8em;opacity:0.9;margin:2px 0;display:none;white-space:pre-wrap;user-select:all"></div>
+<label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+<input aria-label="Speak replies aloud" id="toggle-voice-speak" onchange="voiceToggleSpeak(this.checked)" type="checkbox"/>
+<span class="hw-toggle-label" data-tip="Read Toga's replies aloud with your device's built-in offline voice.">Speak replies aloud</span>
+</label>
+<div style="display:flex;gap:6px;margin:2px 0">
+<select class="setting-select" id="voice-tts-voice" aria-label="Read-aloud voice" onchange="voiceSelectVoice(this.value)" style="flex:1" data-tip="Pick the voice used to read replies aloud"></select>
+<button class="toolbar-btn" onclick="voiceTestSpeak()" data-tip="Hear the selected voice">Test</button>
+</div>
+<label class="hw-toggle" style="margin:4px 0;display:flex;gap:6px;align-items:center">
+<input aria-label="Wake word (always listening) — opt-in" id="toggle-voice-wake" onchange="voiceToggleWake(this.checked)" type="checkbox"/>
+<span class="hw-toggle-label" data-tip="Hands-free: always listen for the wake word, then take the next sentence as a command.">Wake word (always listening) — opt-in</span>
+</label>
+<div id="voice-wake-note" style="font-size:0.8em;opacity:0.85;margin-top:2px">
+            🔒 Offline &amp; private: audio is transcribed on this machine and immediately discarded — nothing is recorded or uploaded. Recognized text enters only your normal (encrypted) chat. Always-listening keeps your microphone open until you switch it back off.
+          </div>
+</div>
+</div>
+<button class="action-btn" onclick="clearChat()">✕  Clear Chat</button>
+<button class="action-btn secondary" onclick="reloadModels()">↻  Refresh Models</button>
+</div>
+<!-- Plugins panel -->
+<div class="panel" id="panel-plugins">
+<h2 class="panel-header">Extensions</h2>
+<div id="plugins-list">
+<div class="loading-placeholder">Loading plugins…</div>
+</div>
+</div>
+</aside>
+<!-- ── Chat area --------------------------------------------- -->
+<span id="main-content" tabindex="-1"></span>
+<main class="chat-area" id="chat-area">
+<!-- Toolbar: Archive, Print, Privacy -->
+<div class="chat-toolbar">
+<button class="toolbar-btn" onclick="archiveChat()" data-tip="Archive current chat">📦 Archive</button>
+<button class="toolbar-btn" onclick="showLoadArchive()" data-tip="Load an archived chat">📂 Load</button>
+<button class="toolbar-btn" onclick="printChat()" data-tip="Print chat">🖨️ Print</button>
+<button class="toolbar-btn" id="privacy-toolbar-btn" onclick="togglePrivacy()" data-tip="Toggle privacy blur">🔒 Privacy</button>
+</div>
+<div aria-live="polite" role="log" aria-label="Conversation with Toga (your messages on the right, Toga's on the left)" class="messages-container" id="messages"></div>
+<!-- Vibe Coding Bar -->
+<div class="vibe-bar" id="vibe-bar"></div>
+<div class="input-container">
+<div class="file-preview" id="file-preview"></div>
+<div class="input-row">
+<div style="display:flex;flex-direction:column;gap:4px">
+<button aria-label="&#127908; Voice input, push to talk" class="attach-btn" id="voice-mic-btn" onclick="voicePushToTalk()" data-tip="Voice input — push to talk: click, speak, and it types your words and sends" type="button">🎤</button>
+<label class="attach-btn" for="file-input" aria-label="📎 Attach file" data-tip="Attach file">📎</label>
+<input aria-label="📎" id="file-input" multiple="" onchange="handleFileAttach(event)" style="display:none" type="file"/>
+<button class="attach-btn" id="gen-image-btn" aria-label="🎨 Generate image" onclick="generateImageManual()" data-tip="Generate an image from the prompt in the box" type="button">🎨</button>
+<button class="attach-btn burn-btn" id="burn-btn" aria-label="🔥 Burn all my data" onclick="burnAllData()" data-tip="Burn — permanently erase ALL your data (chats, archives, memory). Zero Data Retention. Cannot be undone." type="button">🔥</button>
+</div>
+<label class="sr-only" for="user-input">Ask Toga</label>
+<textarea class="user-input" id="user-input" aria-label="Message to Toga" data-tip="Type your message here. Enter to send, Shift+Enter for a new line." oninput="autoResize(this)" onkeydown="handleInputKey(event)" placeholder="Ask Toga…" rows="4"></textarea>
+<div style="display:flex;flex-direction:column;gap:4px">
+<button class="send-btn nudge-btn" id="urgent-btn" aria-label="⚡ Mark next message urgent" onclick="toggleUrgent()" data-tip="Urgent — your next message jumps ahead of queued work on this machine (and keeps its urgency if offloaded to a network node, within that node's budget). One-shot: resets after sending.">⚡</button>
+<button class="send-btn nudge-btn" id="nudge-btn" aria-label="👋 Send nudge to Toga" onclick="handleNudgeClick()" data-tip="AI QNudge — send Toga a steering nudge mid-task (no interruption)">👋</button>
+<button class="send-btn" id="send-btn" aria-label="▶ Send message" onclick="handleSendClick()" data-tip="Send  (Enter)">▶</button>
+<button class="vibe-toggle" id="vibe-toggle" aria-label="✨ Vibe Coding prompts" onclick="toggleVibeBar()" data-tip="Vibe Coding prompts">✨</button>
+</div>
+</div>
+<div class="input-footer">
+<span class="status-text" id="status-text" role="status">Connecting…</span>
+<span class="token-count" id="token-count"></span>
+</div>
+<div class="input-disclaimer">Toga is an AI and can make mistakes — particularly on events after your selected model's training cutoff date. Always fact/cross-check responses.</div>
+</div>
+</main>
+<!-- ── Oracle panel (games) ---------------------------------- -->
+<aside class="oracle-panel" id="oracle-panel">
+<div class="oracle-panel-header">
+<button class="game-close-btn" aria-label="✕ Close games" onclick="closeGamePanel()" data-tip="Close">✕</button>
+<span class="panel-title">Toga is thinking…</span>
+<div class="game-selector">
+<button class="game-tab active" aria-label="☄ Asteroids" onclick="switchGame('asteroids', this)" data-tip="Asteroids">☄</button>
+<button class="game-tab" aria-label="🐍 Snake" onclick="switchGame('snake', this)" data-tip="Snake">🐍</button>
+<button class="game-tab" aria-label="✕○ Tic-Tac-Toe" onclick="switchGame('tictactoe', this)" data-tip="Tic-Tac-Toe">✕○</button>
+<button class="game-tab" aria-label="📡 Socials" onclick="switchGame('socials', this)" data-tip="Socials">📡</button>
+</div>
+</div>
+<canvas height="320" id="game-canvas" width="300"></canvas>
+<!-- Scoreboard -->
+<div class="scoreboard-container" id="scoreboard-container">
+<div class="scoreboard-title">
+<span>Top 10</span>
+<button class="scoreboard-clear" aria-label="Clear game scoreboard" onclick="clearScoreboard()">Clear</button>
+</div>
+<div id="scoreboard-entries"></div>
+</div>
+<div class="game-info" role="status" aria-live="polite">
+<span id="game-score">Score: 0</span>
+<span class="game-hint">Play while Toga thinks…</span>
+</div>
+<div class="game-controls" id="game-controls">↑↓←→  Move / Rotate
+Space  Shoot / Action</div>
+<!-- Socials: full-area tab view (hidden until the 📡 tab is selected) -->
+<div class="socials-view" id="socials-view" style="display:none;flex-direction:column;gap:8px;padding:2px">
+<div class="scoreboard-title">
+<span>📡 Socials — <span id="socials-status" role="status" aria-live="polite" style="opacity:0.8;font-weight:normal">…</span></span>
+<button class="scoreboard-clear" aria-label="Refresh socials channels" onclick="socialsRefresh()">Refresh</button>
+</div>
+<div id="socials-channels" style="font-size:0.85em"></div>
+<div id="socials-peers" style="font-size:0.8em;opacity:0.85;margin:2px 0"></div>
+<div id="socials-setup-hint" style="font-size:0.78em;opacity:0.9;white-space:pre-wrap;user-select:all;display:none"></div>
+<details id="socials-config-wrap" style="font-size:0.84em">
+<summary style="cursor:pointer;opacity:0.85" data-tip="Per-channel setup: bot token, host/port, and credentials for each Social channel.">Channel settings (token / host)</summary>
+<div id="socials-config" style="margin-top:4px"></div>
+</details>
+<label class="hw-toggle" style="display:flex;gap:6px;align-items:center">
+<input aria-label="Toga auto-reply (opt-in)" id="toggle-socials-autoreply" onchange="socialsAutoReply(this.checked)" type="checkbox"/>
+<span class="hw-toggle-label" data-tip="When ON, Toga auto-replies to messages mentioning the wake word on CONNECTED channels. Off by default.">Toga auto-reply (opt-in)</span>
+</label>
+<!-- Per-channel threads: one tab per Social channel; the feed below shows only the active thread -->
+<div class="socials-threads" id="socials-threads" role="tablist" aria-label="Social channel threads"></div>
+<div id="socials-feed" style="flex:1 1 auto;min-height:200px;max-height:46vh;overflow:auto;font-size:0.82em;border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px;background:rgba(0,0,0,0.15)"></div>
+<!-- Thread maintenance: clear just the active thread, or arm a wipe of every channel -->
+<div class="socials-maint">
+<button class="toolbar-btn" id="socials-clear-thread" onclick="socialsClearThread()" disabled data-tip="Pick a channel thread to clear its messages">Clear this thread</button>
+<span class="socials-maint-spacer"></span>
+<label class="socials-deleteall" data-tip="When ticked, the next Delete clears messages from EVERY channel, not just the current thread">
+<input aria-label="Arm delete-all: clears every channel's messages" id="socials-deleteall-arm" onchange="socialsArmDeleteAll(this.checked)" data-tip="Tick to arm the Delete button to clear every channel" type="checkbox"/>
+<span>Delete all channels</span>
+</label>
+<button class="toolbar-btn danger" id="socials-delete-all" onclick="socialsDeleteAll()" data-tip="Clear messages from every Social channel (tick the checkbox first to enable)" disabled>Delete</button>
+</div>
+<div class="socials-warn" id="socials-deleteall-warn" role="alert" style="display:none">&#9888; Heads up: the next click of <b>Delete</b> clears messages from <b>every</b> channel, not just this thread.</div>
+<div style="display:flex;gap:4px">
+<select class="setting-select" id="socials-target" aria-label="Channel to send to" style="width:96px" data-tip="Channel to send to"></select>
+<input aria-label="message…" class="setting-select" id="socials-text" data-tip="Type a message to send to the selected Social channel." onkeydown="if(event.key==='Enter'){event.preventDefault();socialsSend();}" placeholder="message…" style="flex:1" type="text"/>
+<button class="toolbar-btn" aria-label="Send to channel" data-tip="Send your message to the selected Social channel." onclick="socialsSend()">Send</button>
+</div>
+</div>
+</aside>
+</div><!-- .app-body -->
+<!-- ── Modals (hidden by default) ----------------------------- -->
+<div id="modal-root"></div>
+<!-- External libs -->
+<!-- v2.1.11: vendored locally after Toga's WCAG audit pass so the UI works
+     fully offline. Both paths use leading slash so they resolve from /
+     regardless of the route the page was loaded under. -->
+<script src="/static/js/marked.min.js"></script>
+<script src="/static/js/highlight.min.js"></script>
+<!-- App scripts (order matters) -->
+<!-- Load first: wraps confirm/alert/prompt to clear the unclickable-UI bug
+     before any dialog can fire. -->
+<script src="/static/js/ui-unstick.js?v=2.11.12"></script>
+<!-- Accessible tooltips: replaces native title= (WCAG 1.4.13). Load early so
+     it is listening before the user can hover/focus anything. -->
+<script src="/static/js/a11y-tooltip.js?v=2.11.12"></script>
+<script src="/static/js/haptic.js"></script>
+<!-- v2.1.6: ?v=... cache-bust query strings force Electron's Chromium
+     cache to fetch fresh after edits. Bump these when shipping a UI
+     change so users don't have to hunt down Electron's userData cache. -->
+<script src="/static/js/games.js?v=2.11.16"></script>
+<script src="/static/js/socials.js?v=2.11.15"></script>
+<script src="/static/js/hardware.js?v=2.11.13"></script>
+<script src="/static/js/settings.js?v=2.11.15"></script>
+<script src="/static/js/chat.js?v=2.11.16"></script>
+<script src="/static/js/app.js?v=2.9.10"></script>
+<script src="/static/js/auth.js?v=2.11.15"></script>
+<script src="/static/js/skills.js?v=2.11.15"></script>
+<!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
+     during the WCAG-pass edit. Without this line, the IIFE in
+     command-palette.js never runs, the Ctrl+Shift+Space keydown listener
+     never attaches, and the palette is unreachable even though both the
+     JS file and its CSS file are on disk. -->
+<script src="/static/js/command-palette.js?v=2.11.16"></script>
+<!-- WCAG 3.3.3 - Error announcement region -->
+<div aria-atomic="true" aria-live="assertive" class="sr-only" id="error-announce" role="alert"></div>
+<div aria-live="polite" class="sr-only" id="error-live-region"></div>
+<!-- v2.1.11 fix: the .sr-only rule used to live as raw CSS bare in <body>
+     with no <style> wrapper, so the browser rendered it as literal text
+     and the rule never applied — meaning the two divs above were
+     visible on every page load instead of being SR-only. Wrapping it
+     in <style> restores the "screen-reader only" intent. -->
+<style>
+  .sr-only {
+    position: absolute;
+    width:    1px;
+    height:   1px;
+    padding:  0;
+    margin:  -1px;
+    overflow: hidden;
+    clip:     rect(0, 0, 0, 0);
+    border:   0;
+  }
+</style>
+<!-- First-run AI disclaimer acknowledgment (shown once per browser/device) -->
+<script>
+(function () {
+  try { if (localStorage.getItem('oai_disclaimer_ack') === '1') return; }
+  catch (e) { /* storage blocked -> just show it this load */ }
+  function show() {
+    if (document.getElementById('oai-disclaimer-overlay')) return;
+    var ov = document.createElement('div');
+    ov.id = 'oai-disclaimer-overlay';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.style.cssText = 'position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,0.80);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)';
+    ov.innerHTML =
+      '<div style="max-width:480px;margin:20px;background:#0b1430;border:1px solid rgba(240,165,0,0.35);border-radius:14px;padding:26px 26px 22px;box-shadow:0 20px 60px rgba(0,0,0,0.55);font-family:\'Segoe UI\',system-ui,sans-serif;color:#e9edf6">' +
+        '<div style="font-size:17px;letter-spacing:.14em;color:#f0a500;text-align:center;margin-bottom:14px">WELCOME TO VERIDIAN AI</div>' +
+        '<p style="font-size:13.5px;line-height:1.6;margin:8px 0">Toga is a <strong>local AI assistant</strong> and can make mistakes or produce inaccurate information &mdash; especially about events after its training cutoff.</p>' +
+        '<p style="font-size:13.5px;line-height:1.6;margin:8px 0">Always verify important answers against reliable sources. Toga does not provide professional legal, medical, or financial advice.</p>' +
+        '<button id="oai-disc-ok" style="margin-top:16px;width:100%;background:#f0a500;color:#0b1430;border:0;border-radius:9px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">I understand</button>' +
+      '</div>';
+    document.body.appendChild(ov);
+    var btn = document.getElementById('oai-disc-ok');
+    btn.focus();
+    btn.addEventListener('click', function () {
+      try { localStorage.setItem('oai_disclaimer_ack', '1'); } catch (e) {}
+      ov.remove();
+    });
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', show);
+  else show();
+})();
+</script>
+</body>
+</html>

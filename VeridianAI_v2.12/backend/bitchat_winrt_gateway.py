@@ -454,7 +454,7 @@ async def lifespan(app: FastAPI):
         # back to a central-only Broadcom, and this error was the ONLY sign
         # BitChat was down while everything else reported "ready".
         global _ble_error
-        _ble_error = str(exc)
+        _ble_error = "peripheral advertising failed"  # generic; full exception is logged below -> keeps exception text out of the /api/info & /health responses (defense-in-depth if the gateway is ever bound non-loopback)
         logger.error("[BLE] peripheral start failed: %s", exc)
         logger.error("[BLE] Sage will NOT be discoverable. If this adapter "
                      "doesn't support the BLE peripheral role, the central-"

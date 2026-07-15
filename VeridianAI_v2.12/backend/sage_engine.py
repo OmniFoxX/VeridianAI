@@ -13,6 +13,7 @@ v2.1.1 additions:
 """
 
 import json, os, re, subprocess, sys, tempfile, threading, time, urllib.request
+from net_guard import safe_urlopen
 import base64, mimetypes
 from datetime import datetime
 from pathlib import Path
@@ -966,7 +967,7 @@ def get_weather(location: str) -> str:
         return "Weather lookup failed: No location provided"
     url = f"https://wttr.in/{location.replace(' ', '+')}?format=j1"
     try:
-        with urllib.request.urlopen(url, timeout=5) as resp:
+        with safe_urlopen(url, timeout=5) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except Exception as e:
         return f"Weather lookup failed: {e}"

@@ -30,6 +30,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from net_guard import safe_urlopen
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -42,17 +43,17 @@ def _post_json(url: str, payload: dict, timeout: float) -> Optional[dict]:
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"}
     )
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with safe_urlopen(req, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _get_json(url: str, timeout: float) -> Optional[dict]:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    with safe_urlopen(url, timeout=timeout) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
 def _get_bytes(url: str, timeout: float) -> bytes:
-    with urllib.request.urlopen(url, timeout=timeout) as resp:
+    with safe_urlopen(url, timeout=timeout) as resp:
         return resp.read()
 
 
@@ -217,7 +218,7 @@ def generate_image(prompt: str, *, negative: Optional[str] = None,
                 base + "/history",
                 data=json.dumps({"delete": [prompt_id]}).encode("utf-8"),
                 headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(_dreq, timeout=10).read()
+            safe_urlopen(_dreq, timeout=10).read()
         except Exception:
             pass
         ddir.mkdir(parents=True, exist_ok=True)

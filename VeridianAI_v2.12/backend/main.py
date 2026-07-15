@@ -688,8 +688,15 @@ def save_config(cfg: dict):
 config = load_config()
 
 app = FastAPI(title="OracleAI", version="2.11.11", docs_url=None, redoc_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True,
-                   allow_methods=["*"], allow_headers=["*"])
+# CORS restricted to loopback origins. The app's own UI is served same-origin by
+# this backend (StaticFiles + index.html), so same-origin requests are unaffected;
+# this only stops an external website from making *credentialed* requests to the
+# local API (drive-by CSRF). Add origins via VERIDIAN_CORS_ORIGINS (comma-sep) if a
+# LAN browser needs access. (semgrep: wildcard-cors / HIPAA access control.)
+_cors_extra = [o.strip() for o in os.environ.get("VERIDIAN_CORS_ORIGINS", "").split(",") if o.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=_cors_extra,
+                   allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$",
+                   allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
 model_manager = ModelManager(config)
 plugin_manager = PluginManager(PLUGINS_DIR)
@@ -6005,9 +6012,9 @@ async def ws_chat(websocket: WebSocket):
                                     and user_request_text):
                                 try:
                                     import hashlib as _hlib
-                                    req_hash = _hlib.sha1(
+                                    req_hash = _hlib.sha256(
                                         user_request_text.encode("utf-8")
-                                    ).hexdigest()[:8]
+                                    ).hexdigest()[:8]  # non-crypto id; sha256 clears semgrep
                                     slug = re.sub(
                                         r"[^a-z0-9]+", "_",
                                         user_request_text.lower(),

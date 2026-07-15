@@ -33,6 +33,7 @@ import os
 import shutil
 import subprocess
 import urllib.request
+from net_guard import safe_urlopen
 import zipfile
 from typing import Callable, Optional
 
@@ -97,7 +98,7 @@ def _download(url: str, dest: str, progress_cb: Callable, lo: int, hi: int,
     """Stream `url` to `dest`, mapping progress into the [lo, hi] band."""
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "OracleAI-Setup/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
+        with safe_urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
             total = int(resp.headers.get("Content-Length") or 0)
             done = 0
             last = lo

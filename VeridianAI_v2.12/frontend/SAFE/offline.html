@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VeridianAI — not running yet</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; }
+    body {
+      min-height: 100vh; display: flex; align-items: center; justify-content: center;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: #0b1430; color: #e9edf6;
+    }
+    .card { max-width: 440px; text-align: center; padding: 34px 28px; }
+    .ring {
+      width: 88px; height: 88px; margin: 0 auto 20px; border-radius: 50%;
+      border: 3px solid #f0a500; box-shadow: 0 0 24px rgba(240,165,0,.35);
+      position: relative;
+    }
+    .ring::after {
+      content: ""; position: absolute; inset: 20px; border-radius: 50%;
+      background: radial-gradient(circle at 50% 42%, #ffd874, #f0820a);
+      box-shadow: 0 0 18px rgba(240,165,0,.5);
+    }
+    h1 { font-size: 18px; letter-spacing: .16em; color: #f0a500; margin: 0 0 12px; }
+    p { font-size: 14px; line-height: 1.6; opacity: .92; margin: 8px 0; }
+    .hint { font-size: 12.5px; opacity: .7; margin-top: 18px; }
+    code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 4px; }
+    button {
+      margin-top: 22px; background: #f0a500; color: #0b1430; border: 0;
+      border-radius: 8px; padding: 10px 22px; font-size: 14px; font-weight: 600; cursor: pointer;
+    }
+    button:hover { background: #ffba1a; }
+  </style>
+</head>
+<body>
+  <main class="card" role="main" aria-labelledby="offline-title">
+    <div class="ring" aria-hidden="true"></div>
+    <h1 id="offline-title">V E R I D I A N&nbsp;&nbsp;A I</h1>
+    <p>VeridianAI isn't responding yet.</p>
+    <p>This installed app is just the interface &mdash; the VeridianAI engine (and
+       <strong>Ollama</strong>) need to be running on this computer first.</p>
+    <p class="hint">Start VeridianAI (run <code>start.bat</code> or open the VeridianAI
+       desktop app), wait for the tiers to come online, then reload.</p>
+    <button id="reload-btn" autofocus aria-label="Reload and check if the VeridianAI engine is running" onclick="tryReload()">Reload</button>
+    <p id="offline-status" class="hint" style="margin-top:14px" role="status" aria-live="polite"></p>
+  </main>
+  <script>
+    // Why the old Reload "did nothing": the service worker is network-first for
+    // navigations, so a plain location.reload() while the engine was still down
+    // just re-served this same offline page -- no feedback, no recovery.
+    //
+    // Now we actively probe the health endpoint. /api/health is a normal (non-
+    // navigation) request, so the SW lets it hit the network directly: it fails
+    // while the engine is down and succeeds once it is up. We poll quietly and
+    // reload the instant it answers, and the button gives immediate feedback.
+    var checking = false;
+    function ping() {
+      return fetch('/api/health', { cache: 'no-store' })
+        .then(function (r) { return !!(r && r.ok); })
+        .catch(function () { return false; });
+    }
+    function tryReload() {
+      if (checking) return;
+      checking = true;
+      var s = document.getElementById('offline-status');
+      var b = document.getElementById('reload-btn');
+      if (s) s.textContent = 'Checking for the VeridianAI engine…';
+      if (b) b.disabled = true;
+      ping().then(function (up) {
+        if (up) { location.reload(); return; }
+        if (s) s.textContent = 'Still not responding — make sure VeridianAI is running, then try again.';
+        if (b) b.disabled = false;
+        checking = false;
+      });
+    }
+    // Quiet background auto-recovery: as soon as the engine is reachable, reload
+    // straight back into the app -- no click needed.
+    setInterval(function () {
+      if (checking) return;
+      ping().then(function (up) { if (up) location.reload(); });
+    }, 2500);
+  </script>
+</body>
+</html>

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import urllib.error
 import urllib.request
+from net_guard import safe_urlopen
 import uuid
 from typing import Any, Tuple
 
@@ -34,7 +35,7 @@ def call_node(base_url: str, token: str, kind: str, body: Any,
             base_url.rstrip("/") + path, data=blob,
             headers={"Content-Type": "application/octet-stream"},
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with safe_urlopen(req, timeout=timeout) as resp:
             rblob = resp.read()
     except urllib.error.HTTPError as e:
         return False, f"node rejected the request (HTTP {e.code})"

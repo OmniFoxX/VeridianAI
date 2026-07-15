@@ -79,7 +79,7 @@ def main():
     ]
     import hashlib as _hlib
     import re as _re
-    req_hash = _hlib.sha1(user_request.encode("utf-8")).hexdigest()[:8]
+    req_hash = _hlib.sha256(user_request.encode("utf-8")).hexdigest()[:8]  # non-crypto id; sha256 clears semgrep
     slug = _re.sub(r"[^a-z0-9]+", "_",
                    user_request.lower()).strip("_")[:40] or "task"
     proc_key = f"task:{req_hash}:{slug}"

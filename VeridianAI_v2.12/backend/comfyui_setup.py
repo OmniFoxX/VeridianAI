@@ -47,6 +47,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from net_guard import safe_urlopen
 import zipfile
 from pathlib import Path
 from typing import Callable, Optional
@@ -86,7 +87,7 @@ def _get_latest_release(progress_cb: Callable = _noop) -> dict:
             headers={"Accept": "application/vnd.github+json",
                      "User-Agent": "OracleAI-Setup/1.0"},
         )
-        with urllib.request.urlopen(req, timeout=20) as resp:
+        with safe_urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode("utf-8"))
 
         version = data.get("tag_name", "unknown")
@@ -137,7 +138,7 @@ def _download(url: str, dest_path: str, size_bytes: int,
         req = urllib.request.Request(
             url, headers={"User-Agent": "OracleAI-Setup/1.0"}
         )
-        with urllib.request.urlopen(req, timeout=60) as resp, \
+        with safe_urlopen(req, timeout=60) as resp, \
              open(dest_path, "wb") as f:
             downloaded = 0
             block      = 1024 * 256  # 256 KB chunks

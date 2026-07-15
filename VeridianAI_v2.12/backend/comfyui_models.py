@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import os
 import urllib.request
+from net_guard import safe_urlopen
 from typing import Callable, Optional
 
 # Ordered light -> heavy so the picker can show them in that order.
@@ -218,7 +219,7 @@ def download_model(key: str, comfy_home: str,
             head = urllib.request.Request(
                 url, method="HEAD",
                 headers={"User-Agent": "OracleAI-Setup/1.0"})
-            with urllib.request.urlopen(head, timeout=30) as r:
+            with safe_urlopen(head, timeout=30) as r:
                 expected = int(r.headers.get("Content-Length") or 0)
         except Exception:
             expected = 0
@@ -235,7 +236,7 @@ def download_model(key: str, comfy_home: str,
         tmp = dest + ".part"
         req = urllib.request.Request(
             url, headers={"User-Agent": "OracleAI-Setup/1.0"})
-        with urllib.request.urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
+        with safe_urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
             total = int(resp.headers.get("Content-Length") or expected or 0)
             done = 0
             last = 0

@@ -40,6 +40,7 @@ import os
 import re
 import time
 import urllib.request
+from net_guard import safe_urlopen
 from pathlib import Path
 from typing import Optional
 
@@ -115,7 +116,7 @@ def _save_constants(data: dict) -> None:
 def _fetch_upstream(url: str, timeout: float = 6.0) -> str:
     req = urllib.request.Request(
         url, headers={"User-Agent": "VeridianAI-drift-check"})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    with safe_urlopen(req, timeout=timeout) as resp:
         return resp.read().decode("utf-8", errors="replace")
 
 

@@ -95,7 +95,7 @@ def _guard():
         raise HTTPException(404, "skill sharing is disabled")
     s = _svc()
     if s is None:
-        raise HTTPException(503, "skill service unavailable: %s" % (_service_err or "init failed"))
+        raise HTTPException(503, "skill service unavailable")  # detail in _service_err (server-side), not leaked to client
     return s
 
 
@@ -111,28 +111,65 @@ def _safe_detail(exc, where=""):
     return "internal error (ref %s)" % _ref
 
 
-def _validate_external_url(url: str) -> None:
-    """Reject URLs pointing at loopback, private, or link-local addresses.
-    Prevents SSRF via user-supplied base_url/relay targets."""
+def _resolve_validated(url: str):
+    """Parse + validate a URL and return (scheme, host, port, ip, netloc).
+
+    Validates EVERY address `host` resolves to (getaddrinfo, not just gethostbyname's
+    first record -- closes the multi-A-record bypass) and returns the exact IP so the
+    caller can PIN it: the connection then uses the same address we validated, which
+    closes the DNS-rebinding TOCTOU (the name can't re-resolve to an internal IP
+    between the check and the request). Raises on any private/loopback/etc. address
+    or a resolution failure."""
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise HTTPException(400, "url must be http or https")
     host = parsed.hostname
     if not host:
         raise HTTPException(400, "url missing host")
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
     try:
-        resolved = socket.gethostbyname(host)
-        ip = ipaddress.ip_address(resolved)
-    except (socket.gaierror, ValueError):
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
         raise HTTPException(400, "could not resolve host")
-    if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
-            or ip.is_multicast or ip.is_unspecified):
-        # is_unspecified blocks 0.0.0.0 / :: (which route to localhost on many
-        # stacks); is_multicast blocks 224.0.0.0/4. NOTE: this resolves the host
-        # once for validation, so a determined attacker could still attempt DNS
-        # rebinding between this check and httpx's own lookup -- acceptable here
-        # because these endpoints are owner-only, but see remediation doc.
-        raise HTTPException(400, "target address not allowed")
+    ip_pin = None
+    for info in infos:
+        ip_s = info[4][0]
+        try:
+            ip = ipaddress.ip_address(ip_s)
+        except ValueError:
+            continue
+        # is_unspecified blocks 0.0.0.0 / ::; is_multicast blocks 224.0.0.0/4.
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            raise HTTPException(400, "target address not allowed")
+        if ip_pin is None:
+            ip_pin = ip_s
+    if ip_pin is None:
+        raise HTTPException(400, "could not resolve host")
+    return parsed.scheme, host, port, ip_pin, parsed.netloc
+
+
+def _validate_external_url(url: str) -> None:
+    """SSRF guard for the relay path (which routes through RelayClient rather than the
+    pinned GET below). Validates scheme + every resolved address."""
+    _resolve_validated(url)
+
+
+async def _pinned_get(client, base_url: str, path: str):
+    """GET base_url+path but CONNECT to the pre-validated IP, preserving the Host
+    header and (for https) SNI + certificate verification against the original
+    hostname. httpx is handed an IP literal, so it never re-resolves the name -- the
+    address we validated is exactly the address we talk to (DNS-rebinding safe).
+    Verified against httpx 0.28 for http and https (self-signed SNI round-trip)."""
+    scheme, host, port, ip, netloc = _resolve_validated(base_url)
+    ip_host = ("[%s]" % ip) if ":" in ip else ip   # bracket IPv6 literals
+    pinned_url = "%s://%s:%d%s" % (scheme, ip_host, port, path)
+    req = client.build_request("GET", pinned_url, headers={"Host": netloc})
+    if scheme == "https":
+        ext = dict(req.extensions)
+        ext["sni_hostname"] = host     # TLS SNI + cert check use the hostname, not the IP
+        req.extensions = ext
+    return await client.send(req)
 
 
 def _ratelimit(request):
@@ -237,12 +274,11 @@ async def skills_browse(payload: dict, request: Request):
     base = (payload.get("base_url") or "").strip().rstrip("/")
     if not base:
         raise HTTPException(400, "base_url required")
-    _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=20.0) as c:
-            # nosemgrep -- base is SSRF-validated by _validate_external_url above
-            # (rejects loopback/private/link-local/reserved/multicast/unspecified).
-            r = await c.get(base + "/api/skills/catalog")
+            # base validated AND the connection pinned to the validated IP by
+            # _pinned_get -- one resolution for both, so DNS-rebinding safe. nosemgrep
+            r = await _pinned_get(c, base, "/api/skills/catalog")
             if r.status_code != 200:
                 raise HTTPException(502, "peer returned %d" % r.status_code)
             data = r.json()
@@ -272,14 +308,12 @@ async def skills_fetch(payload: dict, request: Request):
     base = (payload.get("base_url") or "").strip().rstrip("/")
     if not base or not hid:
         raise HTTPException(400, "base_url and id required")
-    _validate_external_url(base)
     try:
         async with httpx.AsyncClient(timeout=30.0) as c:
-            # base is SSRF-validated by _validate_external_url() above (rejects private/
-            # loopback/link-local/reserved/multicast/unspecified); hid is URL-encoded;
-            # and these routes are owner-only. Neither scanner recognizes the validator.
+            # base validated + connection pinned to the validated IP by _pinned_get
+            # (one resolution -> DNS-rebinding safe); hid URL-encoded; owner-only.
             # codeql[py/full-ssrf]
-            r = await c.get(base + "/api/skills/object/" + quote(hid, safe=""))  # nosemgrep
+            r = await _pinned_get(c, base, "/api/skills/object/" + quote(hid, safe=""))  # nosemgrep
             if r.status_code != 200:
                 raise HTTPException(502, "peer returned %d" % r.status_code)
             obj = r.json()

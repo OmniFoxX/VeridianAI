@@ -122,22 +122,16 @@ async function loadDevAndBrowserToggles() {
     const r = await fetch("/api/devmode");
     const d = await r.json();
     setChecked("toggle-devmode", !!d.enabled);
-  } catch (e) {
-    /* leave default unchecked */
-  }
+  } catch (e) { /* leave default unchecked */ }
   try {
     const r = await fetch("/api/browser/config");
     const d = await r.json();
     setChecked("toggle-browser-cookies", !!d.persist_cookies);
-  } catch (e) {
-    /* leave default unchecked */
-  }
+  } catch (e) { /* leave default unchecked */ }
   try {
     const r = await fetch("/api/build/integrity");
     renderBuildStatus(await r.json());
-  } catch (e) {
-    /* leave default text */
-  }
+  } catch (e) { /* leave default text */ }
   loadMultiProfileToggle();
 }
 
@@ -159,18 +153,14 @@ async function loadMultiProfileToggle() {
     // the wake word field is hidden for them.
     const wwGroup = document.getElementById("wake-word-group");
     if (wwGroup) wwGroup.style.display = isOwner ? "" : "none";
-  } catch (e) {
-    /* leave hidden */
-  }
+  } catch (e) { /* leave hidden */ }
 }
 
 async function setMultiProfile(enabled) {
   await updateSetting("multiuser_enabled", !!enabled);
-  setStatus(
-    enabled
-      ? "Multi-Profile enabled — each person now signs in to their own profile"
-      : "Multi-Profile disabled — back to single-user mode",
-  );
+  setStatus(enabled
+    ? "Multi-Profile enabled — each person now signs in to their own profile"
+    : "Multi-Profile disabled — back to single-user mode");
 }
 window.setMultiProfile = setMultiProfile;
 
@@ -179,16 +169,13 @@ function renderBuildStatus(d) {
   if (!el) return;
   const s = (d && d.status) || "unknown";
   const map = {
-    official: ["✓ Official build — OmniFoxX, verified", "#3fbf6f"],
-    modified: [
-      "⚠ Modified build — differs from the signed manifest",
-      "#f0a500",
-    ],
-    foreign_key: ["⚠ Signed with a non-official key (not OmniFoxX)", "#f0a500"],
+    official:          ["✓ Official build — OmniFoxX, verified", "#3fbf6f"],
+    modified:          ["⚠ Modified build — differs from the signed manifest", "#f0a500"],
+    foreign_key:       ["⚠ Signed with a non-official key (not OmniFoxX)", "#f0a500"],
     signature_invalid: ["⚠ Manifest signature invalid", "#e0533d"],
-    no_manifest: ["• Unsigned build (no manifest yet)", "#99a0ad"],
-    no_pubkey: ["• No public key present", "#99a0ad"],
-    error: ["• Build check unavailable", "#99a0ad"],
+    no_manifest:       ["• Unsigned build (no manifest yet)", "#99a0ad"],
+    no_pubkey:         ["• No public key present", "#99a0ad"],
+    error:             ["• Build check unavailable", "#99a0ad"],
   };
   const pair = map[s] || ["• Build status: " + s, "#99a0ad"];
   let txt = pair[0];
@@ -216,10 +203,10 @@ async function setBrowserCookies(enabled) {
   if (enabled) {
     const ok = await window.oracleConfirm(
       "Let Toga's browser keep cookies between sessions?\n\n" +
-        "Bookmarks and history already persist. Cookies can also hold personal " +
-        "or session data (logins). They're stored only in this machine's " +
-        "per-user browser profile, and are not encrypted at rest. Enable?",
-      { title: "Browser cookies", okLabel: "Enable" },
+      "Bookmarks and history already persist. Cookies can also hold personal " +
+      "or session data (logins). They're stored only in this machine's " +
+      "per-user browser profile, and are not encrypted at rest. Enable?",
+      { title: "Browser cookies", okLabel: "Enable" }
     );
     if (!ok) {
       setChecked("toggle-browser-cookies", false);
@@ -321,11 +308,11 @@ function onBackendChange(val) {
  * restart is needed, the call is cheap and completes in <1s.
  */
 async function reloadModels() {
-  const sel = document.getElementById("model-select");
-  const secSel = document.getElementById("setting-secondary-model");
-  const terSel = document.getElementById("setting-tertiary-model");
-  const priSel = document.getElementById("setting-primary-model");
-  const status = document.getElementById("status-text");
+  const sel     = document.getElementById("model-select");
+  const secSel  = document.getElementById("setting-secondary-model");
+  const terSel  = document.getElementById("setting-tertiary-model");
+  const priSel  = document.getElementById("setting-primary-model");
+  const status  = document.getElementById("status-text");
   const refreshBtn = document.querySelector(".action-btn.secondary");
   if (!sel) return;
 
@@ -359,12 +346,7 @@ async function reloadModels() {
         // tier a model lives on. Falls back to just name if no tier info.
         // v2.12.0 rebrand: internal tier labels (Oracle/Sage/Daemon) stay stable
         // for routing/logs; users see functional names that never need renaming.
-        const TIER_DISPLAY = {
-          Oracle: "Reasoning",
-          Sage: "Agent",
-          Daemon: "Utility",
-          NPU: "NPU",
-        };
+        const TIER_DISPLAY = { Oracle: "Reasoning", Sage: "Agent", Daemon: "Utility", NPU: "NPU" };
         const tierLabel = m.tier ? `  [${TIER_DISPLAY[m.tier] || m.tier}]` : "";
         const sizeLabel = m.size ? "  (" + formatBytes(m.size) + ")" : "";
         opt.textContent = `${m.name}${tierLabel}${sizeLabel}`;
@@ -401,15 +383,8 @@ async function reloadModels() {
 
     // Surface tier restart feedback
     if (restarted_tiers && restarted_tiers.length > 0) {
-      const _TIER_DISPLAY = {
-        Oracle: "Reasoning",
-        Sage: "Agent",
-        Daemon: "Utility",
-        NPU: "NPU",
-      };
-      const names = restarted_tiers
-        .map((t) => `${_TIER_DISPLAY[t.tier] || t.tier} (ctx=${t.ctx_size})`)
-        .join(", ");
+      const _TIER_DISPLAY = { Oracle: "Reasoning", Sage: "Agent", Daemon: "Utility", NPU: "NPU" };
+      const names = restarted_tiers.map((t) => `${_TIER_DISPLAY[t.tier] || t.tier} (ctx=${t.ctx_size})`).join(", ");
       if (status) status.textContent = `Restarted: ${names}`;
       console.log("[Settings] Tiers restarted:", restarted_tiers);
     } else if (status) {
@@ -457,19 +432,12 @@ async function snLoadStatus() {
     const ru = document.getElementById("setting-remote-node-url");
     if (ru) ru.value = s.remote_node_url || "";
     const bind = document.getElementById("toggle-bind-lan");
-    if (bind)
-      bind.checked = !!(
-        s.host &&
-        s.host !== "127.0.0.1" &&
-        s.host !== "localhost"
-      );
+    if (bind) bind.checked = !!(s.host && s.host !== "127.0.0.1" && s.host !== "localhost");
     const off = document.getElementById("toggle-offload");
     if (off) off.checked = !!s.offload_enabled;
     const addr = document.getElementById("sn-lan-addr");
     if (addr) addr.textContent = (s.lan_ip || "?") + ":" + (s.app_port || 8000);
-  } catch (e) {
-    /* Toga Network section is optional */
-  }
+  } catch (e) { /* Toga Network section is optional */ }
 }
 
 async function snRevealToken() {
@@ -481,18 +449,13 @@ async function snRevealToken() {
     if (inp) inp.value = data.token || "";
     const box = document.getElementById("sn-token-box");
     if (box) box.style.display = "block";
-  } catch (e) {
-    setStatus("Could not reveal token");
-  }
+  } catch (e) { setStatus("Could not reveal token"); }
 }
 
 function snSetBind(toLan) {
   updateSetting("host", toLan ? "0.0.0.0" : "127.0.0.1");
-  setStatus(
-    toLan
-      ? "Bind set to LAN - RESTART VeridianAI to apply"
-      : "Bind set to localhost - restart to apply",
-  );
+  setStatus(toLan ? "Bind set to LAN - RESTART VeridianAI to apply"
+                  : "Bind set to localhost - restart to apply");
 }
 
 function snCopyToken() {
@@ -505,14 +468,10 @@ function snCopyToken() {
 async function snSetToken() {
   const inp = document.getElementById("sn-paste-token");
   const tok = ((inp && inp.value) || "").trim();
-  if (!tok) {
-    setStatus("Paste a token first");
-    return;
-  }
+  if (!tok) { setStatus("Paste a token first"); return; }
   try {
     const r = await fetch("/api/sage-network/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token: tok }),
     });
     const res = await r.json();
@@ -521,22 +480,12 @@ async function snSetToken() {
       if (fp) fp.textContent = res.fingerprint || "-";
       if (inp) inp.value = "";
       setStatus("Token set - fingerprint " + (res.fingerprint || ""));
-    } else {
-      setStatus("Could not set token");
-    }
-  } catch (e) {
-    setStatus("Could not set token");
-  }
+    } else { setStatus("Could not set token"); }
+  } catch (e) { setStatus("Could not set token"); }
 }
 
 async function snResetToken() {
-  if (
-    !(await window.oracleConfirm(
-      "Reset to a brand-new token? This BREAKS any existing pairing - every node will then need this new token.",
-      { title: "Reset token", okLabel: "Reset" },
-    ))
-  )
-    return;
+  if (!(await window.oracleConfirm("Reset to a brand-new token? This BREAKS any existing pairing - every node will then need this new token.", { title: "Reset token", okLabel: "Reset" }))) return;
   try {
     const r = await fetch("/api/sage-network/token/reset", { method: "POST" });
     const res = await r.json();
@@ -548,53 +497,30 @@ async function snResetToken() {
       const box = document.getElementById("sn-token-box");
       if (box) box.style.display = "block";
       setStatus("New token generated - share it with your other nodes");
-    } else {
-      setStatus("Could not reset token");
-    }
-  } catch (e) {
-    setStatus("Could not reset token");
-  }
+    } else { setStatus("Could not reset token"); }
+  } catch (e) { setStatus("Could not reset token"); }
 }
 
 async function snPairTest() {
-  const url = (
-    (document.getElementById("setting-remote-node-url") || {}).value || ""
-  ).trim();
+  const url = ((document.getElementById("setting-remote-node-url") || {}).value || "").trim();
   const out = document.getElementById("sn-pair-result");
-  if (!url) {
-    if (out) out.textContent = "Enter a remote node URL first.";
-    return;
-  }
+  if (!url) { if (out) out.textContent = "Enter a remote node URL first."; return; }
   if (out) out.textContent = "Testing...";
   try {
     const r = await fetch("/api/sage-network/pair-test", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+      method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ url }),
     });
     const res = await r.json();
     if (res.ok) {
       const m = res.remote || {};
-      const match = res.fingerprint_match
-        ? "fingerprints MATCH"
-        : "fingerprint MISMATCH (different token!)";
+      const match = res.fingerprint_match ? "fingerprints MATCH" : "fingerprint MISMATCH (different token!)";
       const models = (m.models || []).length;
-      if (out)
-        out.textContent =
-          'Reached "' +
-          (m.node_name || "node") +
-          '": ' +
-          match +
-          ", " +
-          models +
-          " models, comfyui: " +
-          (m.has_comfyui ? "yes" : "no");
+      if (out) out.textContent = "Reached \"" + (m.node_name || "node") + "\": " + match + ", " + models + " models, comfyui: " + (m.has_comfyui ? "yes" : "no");
     } else {
       if (out) out.textContent = "Pairing failed: " + (res.error || "unknown");
     }
-  } catch (e) {
-    if (out) out.textContent = "Pairing error: " + e.message;
-  }
+  } catch (e) { if (out) out.textContent = "Pairing error: " + e.message; }
 }
 
 async function loadPlugins() {
@@ -613,10 +539,9 @@ async function loadPlugins() {
         (p) => `
       <div class="plugin-card">
         <div class="plugin-header">
-          <span class="plugin-name" id="plugin-label-${p.id}">${p.name}</span>
+          <span class="plugin-name">${p.name}</span>
           <label class="toggle-switch">
             <input type="checkbox" ${p.enabled ? "checked" : ""}
-                   aria-labelledby="plugin-label-${p.id}" role="switch"
                    onchange="togglePlugin('${p.id}', this)">
             <span class="toggle-track"></span>
           </label>
@@ -654,8 +579,8 @@ function toggleTheme() {
   if (hlTheme) {
     hlTheme.href =
       next === "light"
-        ? "/static/css/hljs-github.css?v=11.9.0"
-        : "/static/css/hljs-github-dark-dimmed.css?v=11.9.0";
+        ? "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css"
+        : "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark-dimmed.min.css";
   }
   Haptic.vibrate(Haptic.PATTERNS.toggle);
 }
@@ -673,29 +598,15 @@ function toggleSidebar() {
 
 function switchPanel(name, btn) {
   document.title = `${name.charAt(0).toUpperCase() + name.slice(1)} - VeridianAI`;
-
-  document.querySelectorAll(".nav-tab").forEach((b) => {
-    b.classList.remove("active");
-    b.setAttribute("aria-selected", "false");
-    b.setAttribute("tabindex", "-1");
-  });
-
-  document.querySelectorAll(".panel").forEach((p) => {
-    p.classList.remove("active");
-    p.setAttribute("hidden", "hidden");
-  });
-
-  if (btn) {
-    btn.classList.add("active");
-    btn.setAttribute("aria-selected", "true");
-    btn.setAttribute("tabindex", "0");
-  }
-
+  document
+    .querySelectorAll(".nav-tab")
+    .forEach((b) => b.classList.remove("active"));
+  document
+    .querySelectorAll(".panel")
+    .forEach((p) => p.classList.remove("active"));
+  if (btn) btn.classList.add("active");
   const panel = document.getElementById(`panel-${name}`);
-  if (panel) {
-    panel.classList.add("active");
-    panel.removeAttribute("hidden");
-  }
+  if (panel) panel.classList.add("active");
 }
 
 /* --- Tavily Key ----------------------------------------------- */
@@ -729,13 +640,7 @@ async function saveTavilyKey() {
 }
 
 async function deleteTavilyKey() {
-  if (
-    !(await window.oracleConfirm(
-      "Are you sure you want to delete your Tavily API key? This cannot be undone.",
-      { title: "Delete Tavily key", okLabel: "Delete" },
-    ))
-  )
-    return;
+  if (!(await window.oracleConfirm("Are you sure you want to delete your Tavily API key? This cannot be undone.", { title: "Delete Tavily key", okLabel: "Delete" }))) return;
   try {
     await fetch("/api/tavily", { method: "DELETE" });
     loadTavilyStatus();
@@ -766,14 +671,7 @@ function renderVibeBar() {
 
 function toggleVibeBar() {
   const bar = document.getElementById("vibe-bar");
-  const toggle = document.getElementById("vibe-toggle");
-  if (bar) {
-    const isOpen = bar.classList.toggle("open");
-    if (toggle) {
-      toggle.classList.toggle("active", isOpen);
-      toggle.setAttribute("aria-pressed", String(isOpen));
-    }
-  }
+  if (bar) bar.classList.toggle("open");
 }
 
 function useVibePrompt(key) {

@@ -706,6 +706,7 @@ def _detect_npu() -> Dict[str, Any]:
     if not info["lemonade"]:
         try:
             import urllib.request
+            from net_guard import safe_urlopen
             port = 11438
             try:
                 from config import PORT_NPU_LLM
@@ -714,7 +715,7 @@ def _detect_npu() -> Dict[str, Any]:
                 pass
             req = urllib.request.Request(
                 f"http://127.0.0.1:{port}/v1/models", method="GET")
-            with urllib.request.urlopen(req, timeout=2) as resp:
+            with safe_urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     info["lemonade"] = True
                     info["lemonade_path"] = f"live on port {port}"
