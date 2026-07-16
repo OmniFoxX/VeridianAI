@@ -12,6 +12,11 @@ import threading
 import time
 from fastapi import Request, HTTPException
 
+# Canonical auth-cookie name (single source of truth). main.py and any
+# router doing its own cookie check (e.g. skill_api._owner_guard) import
+# THIS constant rather than re-declaring the literal.
+AUTH_COOKIE = "oai_session"
+
 _SESSIONS = {}
 _LOCK = threading.Lock()
 _DEFAULT_TTL = 7 * 24 * 3600  # 7 days

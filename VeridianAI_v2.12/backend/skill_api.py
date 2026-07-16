@@ -198,19 +198,17 @@ def _owner_guard(request: Request):
     if not mu:
         return
     import session as _session
-    u = _session.get_session(request.cookies.get(_OWNER_COOKIE))
-    if u and u.get("is_owner"):
+    # v2.12.9 delegated admin: owner, or a profile the owner granted the
+    # "skills" capability via Access Controls. owner_or_granted reads the
+    # cookie directly (no middleware dependency) and is fail-closed -- a
+    # broken policy store never mints admin powers.
+    # v2.12.10 REGRESSION FIX: this guard referenced an undefined
+    # _OWNER_COOKIE (NameError -> HTTP 500 on every manage/identity call
+    # in multi-user mode). skills.js reads a failed /api/skills/identity
+    # as "feature off", so the Aether toggle appeared to reset OFF after
+    # every restart even though config.json had skill_share_enabled=true.
+    if _session.owner_or_granted(request, _session.AUTH_COOKIE, "skills"):
         return
-    # v2.12.9 delegated admin: the owner can grant the "skills" capability
-    # to an assistant-manager profile via Access Controls (admin_grants).
-    # Lookup is fail-closed in access_policy.admin_granted -- a policy-store
-    # error must never mint admin powers.
-    try:
-        import access_policy as _ap
-        if u and _ap.admin_granted(u.get("username"), "skills"):
-            return
-    except Exception:
-        pass
     raise HTTPException(404)
 
 

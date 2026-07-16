@@ -3437,7 +3437,7 @@ async def health(request: Request):
 # --- Per-user auth (Phase 2): accounts, login, sessions ---------------------
 # A2a: the auth FLOW. Enforcement (gating middleware) is A2b and is OFF until
 # config.multiuser_enabled is set, so this changes nothing for a single-user run.
-_AUTH_COOKIE = "oai_session"
+from session import AUTH_COOKIE as _AUTH_COOKIE  # canonical name lives in session.py
 _AUTH_TTL = 7 * 24 * 3600
 from wan_guard import AbuseGuard
 _auth_guard = AbuseGuard(max_requests=30, window_sec=60, fail_threshold=6, ban_sec=900)

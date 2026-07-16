@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "34662dab23ee48bd8f3da68000d27fbf",
-    "built_utc": "2026-07-16T03:52:28.737779+00:00",
+    "build_id": "aceae4273f7b4834a7eb2bf0099b623f",
+    "built_utc": "2026-07-16T07:44:07.951411+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -90,7 +90,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "e85a8dec9886b8901ed236645b55d8d6d0fb7c24fe6919fea63eb0d1bf40889d",
+      "backend/main.py": "e5c8177ed25b3d2a03e02b740284be347456d24e3abf985144881aac2ada8693",
       "backend/mcp_handlers.py": "ed36501c18c4426bab3e40214af39f5233730ebc7bf26c7ba860353e9fdb657c",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -118,9 +118,9 @@
       "backend/sage_messaging_adapter.py": "b73ab78b01bdb8967e1f19125038d2f1ceb9ef1cc0c38bdff5c050ea16f995e8",
       "backend/sage_rag.py": "b6c08d57909851e7488c154c8aecc543f82943435cd2e17b8c0acf007e4ba56d",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
-      "backend/session.py": "05c22737763e1d2371ff282bc94cb440e4d26817451b3edab474c29a67b4883d",
+      "backend/session.py": "d3f303bd3ec9a15bea7caf967bc4c98c95eff196c75517fbb6a5b0142ee84229",
       "backend/shutdown_cleanup.py": "19365ddefe69c1054444e58bccfb6651894ddccacf202a1f58a3bf0eae671f29",
-      "backend/skill_api.py": "2df0610c6c266d36fce27f8f0704184b8752ad2de11c89cacb6925a67849f411",
+      "backend/skill_api.py": "efb23403dbb373a21ef9e020f5396fa30bb32e3192e64eb3677e9e66aa1ea8da",
       "backend/skill_gate.py": "eeda7884fc1ead95dee27b8415aef6fa46bc5efeb3228a5a87b0cab6efbf3441",
       "backend/skill_keys.py": "466c80e6c19077f7865039080ae50a721650bea1660223b7c3db6001305101b4",
       "backend/skill_service.py": "7d932412cef8780e280bfdb5ecaff03ee642c8f9a72e661bda779251bceb7b92",
@@ -216,7 +216,7 @@
       "frontend/SAFE/offline.html": "ac88e9cb27c56234a57b7240de73b3e326d4d54b8dd4f18d3a7a16340d68fee6",
       "frontend/SAFE/sw.js": "6231f99d9f1e54eb7d8028a0c14aa83b9ba02590d3792e4aac9672f29631d25c",
       "frontend/sw.js": "6231f99d9f1e54eb7d8028a0c14aa83b9ba02590d3792e4aac9672f29631d25c",
-      "LICENSES.chromium.html": "ca0a3f71df977796bf39a99472783c1ce9378bf4d8f4142a95048c3843980415",
+      "LICENSES.chromium.html": "5d545ce8065079f38a82472ab93bd62fcdf73cd319f0771ef51c45c7e243f1d4",
       "prep_distribution.bat": "92c09aa6ab453abf47bf73fd2d678de0abdcb7bb2c35e70f6fbfc3a752f13130",
       "rotate_api_key.bat": "93460b11635d3c7598f84343f4feea3f40ae5d2ba6e0709d2d4f5efb3e14fcfb",
       "rotate_api_key.py": "595512d34339664704ddc5b17f452a116fab3f90d0a84f5bac2c21bc282fba7d",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "VPPm59iUo4p50OeieIHu0m6nFMP0aYZEkVWP0eBnHxTzdR900LPW7xVGjWJRMYkzpVQLkeRuJMHXq/DU4yMEAw=="
+  "signature_b64": "Zlh1xj8oSP8h/VZJz8w4QM6lgKRCWBQrulWIeNbKewIyYyvSs1acq+94cEpztuwjt6NKzy7KSYTagS3WCwDlDg=="
 }
