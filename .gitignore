@@ -38,6 +38,10 @@ mlm_training_data/
 Thumbs.db
 KEY_ROTATION.md
 BUILD.md
+dyn_dispatch_core.dll
+onnx_custom_ops.dll
+onnxruntime_providers_ryzenai.dll
+onnxruntime_vitisai_ep.dll
 
 # Editor junk
 .vscode/

@@ -155,6 +155,13 @@ class InferenceSection:
     scheduler_aging_rate: float = 0.05
     scheduler_queue_limit: int = 24
     npu_enabled: bool = True
+    # v2.12.3: context size passed to Lemonade Server at spawn (--ctx-size).
+    # Lemonade v10.x auto-updated and defaults to 4096, which Toga's Sage
+    # system prompt overflows — the RyzenAI hybrid backend then wedges on
+    # the oversized prefill instead of erroring (silent infinite "thinking").
+    # 16384 matches the Sage llama tier's ctx. Pinned explicitly so a future
+    # Lemonade update changing its default can never break the tier again.
+    npu_ctx: int = 16384
     n_gpu_layers: int = -1
     temperature: float = 0.5
     max_tokens: int = -1               # -1 = unlimited sentinel
@@ -407,6 +414,7 @@ class OracleConfig:
             "openvino_enabled":   self.inference.openvino_enabled,
             "xe_cores_enabled":   self.inference.xe_cores_enabled,
             "npu_enabled":        self.inference.npu_enabled,
+            "npu_ctx":            self.inference.npu_ctx,
             "n_gpu_layers":       self.inference.n_gpu_layers,
             "temperature":        self.inference.temperature,
             "max_tokens":         self.inference.max_tokens,
@@ -534,6 +542,11 @@ class OracleConfig:
         cfg.inference.openvino_enabled = bool(_g("openvino_enabled", cfg.inference.openvino_enabled))
         cfg.inference.xe_cores_enabled = bool(_g("xe_cores_enabled", cfg.inference.xe_cores_enabled))
         cfg.inference.npu_enabled      = bool(_g("npu_enabled", cfg.inference.npu_enabled))
+        try:
+            cfg.inference.npu_ctx = max(
+                1024, int(_g("npu_ctx", cfg.inference.npu_ctx)))
+        except (TypeError, ValueError):
+            pass
         cfg.inference.n_gpu_layers     = int(_g("n_gpu_layers", cfg.inference.n_gpu_layers))
         cfg.inference.temperature      = float(_g("temperature", cfg.inference.temperature))
         cfg.inference.max_tokens       = _sanitize_max_tokens(_g("max_tokens", -1))

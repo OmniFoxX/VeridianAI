@@ -93,15 +93,16 @@ def _spawn(title: str, argv: list, extra_env: dict = None):
 # --- NPU tier (Ryzen AI via Lemonade Server) --------------------------------
 
 def _npu_tier_config():
-    """(enabled, port) from config.json. Defensive defaults: off, 11438."""
+    """(enabled, port, ctx) from config.json. Defensive defaults: off, 11438, 16384."""
     try:
         from config_store import OracleConfig
         cfg = OracleConfig.load(ROOT / "config.json")
         enabled = bool(getattr(cfg.inference, "npu_enabled", False))
         port = int(getattr(cfg.network.ports, "npu_llm", 11438) or 11438)
-        return enabled, port
+        ctx = int(getattr(cfg.inference, "npu_ctx", 16384) or 16384)
+        return enabled, port, ctx
     except Exception:
-        return False, 11438
+        return False, 11438, 16384
 
 
 def _find_lemonade():
@@ -173,7 +174,7 @@ def _resolve_ollama() -> str:
 
 
 def _spawn_npu_tier():
-    enabled, port = _npu_tier_config()
+    enabled, port, ctx = _npu_tier_config()
     if not enabled:
         print("[tier_launcher] NPU tier skipped (npu_enabled is off)")
         return
@@ -182,8 +183,13 @@ def _spawn_npu_tier():
         print("[tier_launcher] NPU tier skipped (Lemonade Server not installed — "
               "install AMD's Lemonade Server to run models on the Ryzen AI NPU)")
         return
-    print(f"[tier_launcher] NPU tier: Lemonade Server on :{port}")
-    _spawn("NPU-Lemonade", lemonade + ["serve", "--port", str(port)])
+    # v2.12.3: pin --ctx-size explicitly. Lemonade's v10.x auto-update reset
+    # its default to 4096, which the Sage system prompt overflows — the
+    # RyzenAI hybrid backend then hangs on prefill instead of erroring.
+    # Pinning here makes the tier immune to Lemonade default changes.
+    print(f"[tier_launcher] NPU tier: Lemonade Server on :{port} (ctx {ctx})")
+    _spawn("NPU-Lemonade", lemonade + ["serve", "--port", str(port),
+                                       "--ctx-size", str(ctx)])
 
 
 def main():
