@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "cf7d82ade41a4611869402e4e2809c16",
-    "built_utc": "2026-07-15T23:14:57.794211+00:00",
+    "build_id": "3e087f0f5d914af9b3fd5615e42bd9f2",
+    "built_utc": "2026-07-16T02:26:33.419492+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -58,7 +58,7 @@
       "backend/comfyui_models.py": "7a5d50558e9a6b36e8ca5980f677a9c28f6924c59bbae242017a4ae511464f11",
       "backend/comfyui_setup.py": "55e0bd71d47c965e71086cf7b6943526a8a88bbfad6f6c51291cc2e1e25f251c",
       "backend/config.py": "b8f539bcf839914783ced8deed65b9506ac7f96e51745757b62355708ace6a29",
-      "backend/config_store.py": "587fcf030caaa555f20f61bb160c62e15b5c6abd9e3d07648c8b86a0a32ea65f",
+      "backend/config_store.py": "c82612216e34340f0f50c014b3bc1450eb8e53ff9afb7f4228db1e008fed7b0b",
       "backend/context_fatigue_detector.py": "0e8bbbcc283b2f98c676b540dd1476e6bf6673291caa2bdf3499fe24aa6c8471",
       "backend/coordinator_signal.py": "c56fcabbd2a0d195a02aa4b9b142e9727bdd39dd0a49cdb836878fb6019c6319",
       "backend/craiid/archivist_compression_worker.py": "7f2e7554c48aeaccff69bdaa48151459e8b4501ee51368c114c8c3a80ac2287f",
@@ -147,7 +147,7 @@
       "backend/test_skill_store.py": "8a52ca7974d1ff438802874f9fe73b71ac41b9d1dd52fc93f5b2338ec715d426",
       "backend/test_skill_trust.py": "f3da7de5e2795bfd872a4cd1e14163c42c4fd631e5bbe723dce0e8af0409da82",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
-      "backend/tier_launcher.py": "e1c661f413f5033aeec0b3db3aad78b7035a6466675d5f6f99bd032b02f007ed",
+      "backend/tier_launcher.py": "ec70c80006982cb6b90fc8f6b86ef8ddf7660ab4614918a8982e35604094bb76",
       "backend/tier_lifecycle.py": "316038cd33cc339f90fe9175e504f8cbcf2febd4f196618b6db6946660635f4c",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
       "backend/train_plm_daemon_v2.py": "c6abb9bc4611a61641c00a13824328cbe52532d009e5de74b1639d473bd1141a",
@@ -226,5 +226,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "ZaQcIaHnolE525ksG7mAFLpChFGeHh/u/q/oqHuwT18c9xHT/+c1pnEJM/X+Nrz0fyFay1f1BcagWG/k5YjnCQ=="
+  "signature_b64": "WbPIiPkwwgRiY+YCT9xxoyL68df/XC9qAvQPxX+YtJS55vxM9Pn1uu6rD4I+5sPAtaSes8Zi8JwCcrNaxNitCg=="
 }
