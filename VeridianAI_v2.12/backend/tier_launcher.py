@@ -34,6 +34,7 @@ v2.11.12 NPU tier (Ryzen AI):
   live, and this launcher decides at boot whether the server itself runs.
 """
 import os
+import json
 import shutil
 import sys
 import subprocess
@@ -173,6 +174,36 @@ def _resolve_ollama() -> str:
     return "ollama"
 
 
+def _pin_lemonade_ctx(ctx: int) -> None:
+    """Best-effort: pin ctx_size in Lemonade Server's OWN config
+    (%USERPROFILE%\\.cache\\lemonade\\config.json — v10+ layout; the server
+    reads it at startup). Only touches the one key, only when it differs,
+    and never blocks the spawn on failure. If the file doesn't exist yet
+    (brand-new install), we skip rather than guess the schema — Lemonade
+    creates it on first run and the next boot picks the pin up."""
+    try:
+        home = os.environ.get("USERPROFILE") or str(Path.home())
+        cfgp = Path(home) / ".cache" / "lemonade" / "config.json"
+        if not cfgp.exists():
+            print(f"[tier_launcher] Lemonade config not found at {cfgp}; "
+                  "skipping ctx_size pin (first run?)")
+            return
+        raw = json.loads(cfgp.read_text(encoding="utf-8"))
+        if not isinstance(raw, dict):
+            return
+        try:
+            current = int(raw.get("ctx_size", -1))
+        except (TypeError, ValueError):
+            current = -1
+        if current == int(ctx):
+            return
+        raw["ctx_size"] = int(ctx)
+        cfgp.write_text(json.dumps(raw, indent=2), encoding="utf-8")
+        print(f"[tier_launcher] Lemonade ctx_size {current} -> {ctx} ({cfgp})")
+    except Exception as e:
+        print(f"[tier_launcher] could not pin Lemonade ctx_size: {e}")
+
+
 def _spawn_npu_tier():
     enabled, port, ctx = _npu_tier_config()
     if not enabled:
@@ -183,13 +214,15 @@ def _spawn_npu_tier():
         print("[tier_launcher] NPU tier skipped (Lemonade Server not installed — "
               "install AMD's Lemonade Server to run models on the Ryzen AI NPU)")
         return
-    # v2.12.3: pin --ctx-size explicitly. Lemonade's v10.x auto-update reset
-    # its default to 4096, which the Sage system prompt overflows — the
-    # RyzenAI hybrid backend then hangs on prefill instead of erroring.
-    # Pinning here makes the tier immune to Lemonade default changes.
+    # v2.12.3: pin Lemonade's ctx_size. Its v10.x auto-update loads models
+    # with a small default context (observed 4096), which the Sage system
+    # prompt overflows — the RyzenAI hybrid backend then hangs on prefill
+    # instead of erroring. v10's serve CLI accepts only --port/--host (no
+    # --ctx-size flag; passing one kills the spawn with a usage error), so
+    # the pin goes into Lemonade's own config.json before the spawn.
+    _pin_lemonade_ctx(ctx)
     print(f"[tier_launcher] NPU tier: Lemonade Server on :{port} (ctx {ctx})")
-    _spawn("NPU-Lemonade", lemonade + ["serve", "--port", str(port),
-                                       "--ctx-size", str(ctx)])
+    _spawn("NPU-Lemonade", lemonade + ["serve", "--port", str(port)])
 
 
 def main():
