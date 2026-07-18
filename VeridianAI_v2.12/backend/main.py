@@ -953,12 +953,22 @@ from starlette.concurrency import run_in_threadpool as _run_in_threadpool
 try:
     from voice_service import VoiceService
     voice_service = VoiceService({
-        "wake_word":          config.get("voice_wake_word", "Toga"),
-        "stt_engine":         config.get("voice_stt_engine", "whisper"),
-        "language":           config.get("voice_language", "en"),
-        "record_seconds":     config.get("voice_record_seconds", 6),
-        "wake_chunk_seconds": config.get("voice_wake_chunk_seconds", 3),
-        "model":              config.get("voice_whisper_model", "base"),
+        "wake_word":            config.get("voice_wake_word", "Toga"),
+        "stt_engine":           config.get("voice_stt_engine", "whisper"),
+        "language":             config.get("voice_language", "en"),
+        "record_seconds":       config.get("voice_record_seconds", 12),
+        "wake_chunk_seconds":   config.get("voice_wake_chunk_seconds", 4),
+        "model":                config.get("voice_whisper_model", "base"),
+        # VAD endpointing — longer hangover so full sentences aren't cut at 2–3 words.
+        "vad_enabled":          config.get("voice_vad_enabled", True),
+        "vad_max_seconds":      config.get("voice_vad_max_seconds", 45),
+        "vad_hangover_ms":      config.get("voice_vad_hangover_ms", 1600),
+        "vad_start_timeout":    config.get("voice_vad_start_timeout", 8),
+        "vad_min_speech_ms":    config.get("voice_vad_min_speech_ms", 400),
+        "vad_aggressiveness":   config.get("voice_vad_aggressiveness", 1),
+        "wake_listen_timeout":  config.get("voice_wake_listen_timeout", 60),
+        "wake_continue_if_short": config.get("voice_wake_continue_if_short", True),
+        "wake_short_word_limit":  config.get("voice_wake_short_word_limit", 4),
     })
     print(f"[VOICE] ready; capabilities={voice_service.status().get('capabilities')}")
 except Exception as _v_err:              # pragma: no cover

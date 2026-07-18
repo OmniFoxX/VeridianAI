@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f4b6b6cbc77341bf8869cca288301921",
-    "built_utc": "2026-07-18T07:21:55.174397+00:00",
+    "build_id": "665bc1a9ab364686902f0db722456b3d",
+    "built_utc": "2026-07-18T18:43:27.580860+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -92,7 +92,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "70103bf4676863ac4c8dca54b650269e4203ebb3de1f64ea199239f698781210",
+      "backend/main.py": "a181fcd6d7dc1dfa87dccd514c10b5afd63b54fd31c5fb50429dfa92a56ec431",
       "backend/mcp_handlers.py": "a99b93f599d09eaf784826290aeb6aef7a58852b9722e73b4fafd2981f656266",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -165,7 +165,7 @@
       "backend/verify_procedural_wiring.py": "306ac8688e1da573a97c517a7b1401b107909d5797cb417fe691cba78ae96701",
       "backend/verify_v214.py": "f8ecd9c6c2c71ef043a6b5b7f2406c18da8c2a08a9b70bb0e7cc7076194dcb77",
       "backend/verify_v215.py": "9d6a498384c66aace256b03965acb96ea31a95e97d66f1f613c2cfbd2bd1df7b",
-      "backend/voice_service.py": "2daeb86a1e7051cf83bdcc2240b3aed4cba0ac47caddc82e56015b1ff5f8fbac",
+      "backend/voice_service.py": "bd616fbea992a27f9a1e994f3474ae7c69b4852dfb7b8c5a4665b8306264e76b",
       "backend/wan_guard.py": "3abe5938b5a04b01c7db213a79b70212f74bf90cba4e6f5b627843f63e3a026e",
       "backend/winrt_advertise_test.py": "4608911bfd41e237697f43a2e235a0894a6d46eafb09a21456fb369b33d7e0bc",
       "bitchat-python/bitchat/bitchat.py": "393b824e04252ea843cf0943423568cd501a327a607b30d3aeae24b39f0b0bb0",
@@ -233,5 +233,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "FmwQa7p/JKxBYd+V6erloBTi7QBPZY5gbhM/AFVLJ85PPnpc8F3bKWhEOwNdF+Qq3MTBeCVQUb5t+GNk2HarDQ=="
+  "signature_b64": "cnOWuj1s9MbON0FPGZiqWjMp2KxqVh9UzhoxCJCuucp0MHQAjkmlFk6TaMe7hEm9yt1Eq/zSGJJ6jFuAvq1HAQ=="
 }

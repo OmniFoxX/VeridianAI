@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import importlib.util
 import queue
+import re
 import threading
 import time
 from typing import Optional
@@ -66,7 +67,7 @@ def probe_capabilities() -> dict:
 class _WhisperSTT:
     SAMPLE_RATE = 16_000
 
-    def __init__(self, model_name: str = "base", language: str = "en", vad_aggressiveness: int = 2):
+    def __init__(self, model_name: str = "base", language: str = "en", vad_aggressiveness: int = 1):
         import whisper                                   # lazy; raises if absent
         try:
             import torch
@@ -81,6 +82,7 @@ class _WhisperSTT:
             self._backend = "pyaudio"
         else:
             raise RuntimeError("no audio capture backend (pip install sounddevice)")
+        # 0–3; lower = more sensitive (keeps soft speech / trailing words).
         self._vad_aggr = max(0, min(int(vad_aggressiveness), 3))
 
     def _record(self, seconds: float):
@@ -109,11 +111,21 @@ class _WhisperSTT:
             return None
         if not self._has_speech(audio):                  # silence / background-noise gate
             return None
-        kwargs = {"fp16": self.device == "cuda"}
+        return self._whisper(audio)
+
+    def _whisper(self, audio) -> Optional[str]:
+        kwargs = {
+            "fp16": self.device == "cuda",
+            # Avoid chopping mid-phrase; condition on previous text off for short cmds.
+            "condition_on_previous_text": False,
+            "no_speech_threshold": 0.5,
+            "logprob_threshold": -1.0,
+            "compression_ratio_threshold": 2.6,
+        }
         if self.language:
             kwargs["language"] = self.language
         result = self.model.transcribe(audio, **kwargs)
-        del audio                                        # drop the buffer promptly
+        del audio
         text = (result.get("text") or "").strip()
         return text or None
 
@@ -146,11 +158,23 @@ class _WhisperSTT:
         floor = sorted(rms)[len(rms) // 5]               # ~20th percentile = ambient
         return max(rms) > max(floor * 3.0, 0.012)
 
-    def _record_voiced(self, max_seconds: float, start_timeout: float, hangover_ms: int):
+    def _record_voiced(self, max_seconds: float, start_timeout: float, hangover_ms: int,
+                       min_speech_ms: int = 400, pad_ms: int = 250):
         """Stream 30 ms frames and stop when the speaker pauses (VAD endpointing).
-        Returns the captured float32 speech, or None if nothing was said."""
+
+        Accessibility-minded defaults:
+          * hangover_ms — silence after speech before we treat the utterance as done
+            (short values cut mid-sentence; 1.5–2s is friendlier for pauses)
+          * min_speech_ms — don't allow hangover to fire until this much voiced
+            audio has been heard (avoids ending on a breath / partial word)
+          * pad_ms — keep a little audio after last voiced frame so trailing
+            consonants aren't clipped before Whisper runs
+
+        Returns the captured float32 speech, or None if nothing was said.
+        """
         import numpy as np
         frame = int(self.SAMPLE_RATE * 0.03)
+        frame_ms = 30
         vad = None
         if _installed("webrtcvad"):
             try:
@@ -171,8 +195,9 @@ class _WhisperSTT:
             if noise["floor"] is None:
                 noise["floor"] = r
             else:
+                # Track ambient floor carefully so soft speech still counts as voiced.
                 noise["floor"] = 0.95 * noise["floor"] + 0.05 * min(r, noise["floor"] * 1.5)
-            return r > max(noise["floor"] * 3.0, 0.012)
+            return r > max(noise["floor"] * 2.5, 0.008)
 
         if self._backend == "sounddevice":
             import sounddevice as sd
@@ -192,50 +217,62 @@ class _WhisperSTT:
                 s.stop_stream(); s.close(); pa.terminate()
 
         collected, started = [], False
-        voiced_frames, trailing_ms, waited_ms, elapsed_ms = 0, 0, 0, 0
+        voiced_ms, trailing_ms, waited_ms, elapsed_ms = 0, 0, 0, 0
+        pad_frames = max(0, int(pad_ms / frame_ms))
         try:
             while elapsed_ms < max_seconds * 1000:
                 fr = _read()
                 if fr is None or len(fr) == 0:
                     break
-                elapsed_ms += 30
+                elapsed_ms += frame_ms
                 is_v = _voiced(fr)
                 if not started:
-                    waited_ms += 30
+                    waited_ms += frame_ms
                     if is_v:
                         started = True
-                        collected.append(fr); voiced_frames += 1
+                        collected.append(fr)
+                        voiced_ms += frame_ms
                     elif waited_ms >= start_timeout * 1000:
                         break                            # nobody spoke
                 else:
                     collected.append(fr)
                     if is_v:
-                        voiced_frames += 1; trailing_ms = 0
+                        voiced_ms += frame_ms
+                        trailing_ms = 0
                     else:
-                        trailing_ms += 30
-                        if trailing_ms >= hangover_ms:
-                            break                        # speaker paused -> done
+                        trailing_ms += frame_ms
+                        # Only end after enough real speech AND a real pause.
+                        if voiced_ms >= min_speech_ms and trailing_ms >= hangover_ms:
+                            # Keep a short pad of the trailing silence frames so
+                            # Whisper sees the end of the last word cleanly.
+                            if pad_frames and len(collected) > pad_frames:
+                                # already appended unvoiced frames up to hangover;
+                                # trim excess beyond pad so we don't feed long silence
+                                excess = trailing_ms - pad_ms
+                                if excess > 0:
+                                    drop = int(excess / frame_ms)
+                                    if drop > 0 and drop < len(collected):
+                                        collected = collected[:-drop]
+                            break
         finally:
             try:
                 _close()
             except Exception:
                 pass
-        if not started or voiced_frames < 3 or not collected:
+        # Need a meaningful amount of voiced audio (~3 frames min was too easy
+        # to pass with a click; require ~min_speech_ms).
+        if not started or voiced_ms < min(min_speech_ms, 90) or not collected:
             return None
         return np.concatenate(collected)
 
-    def transcribe_voiced(self, max_seconds: float = 20.0,
-                          start_timeout: float = 6.0, hangover_ms: int = 800) -> Optional[str]:
-        audio = self._record_voiced(max_seconds, start_timeout, hangover_ms)
+    def transcribe_voiced(self, max_seconds: float = 30.0,
+                          start_timeout: float = 8.0, hangover_ms: int = 1600,
+                          min_speech_ms: int = 400) -> Optional[str]:
+        audio = self._record_voiced(max_seconds, start_timeout, hangover_ms,
+                                    min_speech_ms=min_speech_ms)
         if audio is None or len(audio) == 0:
             return None
-        kwargs = {"fp16": self.device == "cuda"}
-        if self.language:
-            kwargs["language"] = self.language
-        result = self.model.transcribe(audio, **kwargs)
-        del audio
-        text = (result.get("text") or "").strip()
-        return text or None
+        return self._whisper(audio)
 
 
 class _PocketSphinxSTT:
@@ -255,6 +292,12 @@ class _PocketSphinxSTT:
                 return txt
         return None
 
+    def transcribe_voiced(self, max_seconds: float = 30.0,
+                          start_timeout: float = 8.0, hangover_ms: int = 1600,
+                          min_speech_ms: int = 400) -> Optional[str]:
+        # PocketSphinx LiveSpeech already endpoints phrases; reuse that path.
+        return self.transcribe(max_seconds)
+
 
 def _build_engine(cfg: dict):
     """Return (engine, kind) per cfg + hardware, or raise RuntimeError w/ guidance."""
@@ -265,13 +308,28 @@ def _build_engine(cfg: dict):
             raise RuntimeError("audio backend missing — pip install sounddevice")
         return _WhisperSTT(model_name=cfg.get("model", "base"),
                            language=cfg.get("language", "en"),
-                           vad_aggressiveness=int(cfg.get("vad_aggressiveness", 2))), "whisper"
+                           vad_aggressiveness=int(cfg.get("vad_aggressiveness", 1))), "whisper"
     if caps["pocketsphinx"]:                              # legacy fallback
         return _PocketSphinxSTT(language=cfg.get("language", "en")), "pocketsphinx"
     if want == "whisper" and not caps["whisper"]:
         raise RuntimeError("Whisper not installed — pip install openai-whisper sounddevice")
     raise RuntimeError("no STT engine — pip install openai-whisper sounddevice "
                        "(or pocketsphinx for legacy hardware)")
+
+
+def _strip_wake(text: str, wake: str) -> str:
+    """Return text after the wake word (first match), punctuation-stripped edges."""
+    if not text:
+        return ""
+    low = text.lower()
+    w = (wake or "").lower().strip()
+    if not w or w not in low:
+        return text.strip()
+    after = low.split(w, 1)[1]
+    # Preserve original casing for the command portion by slicing the original.
+    idx = low.find(w)
+    after_orig = text[idx + len(w):]
+    return after_orig.strip(" \t\r\n.,!?:;—-")
 
 
 # ---------------------------------------------------------------------------
@@ -281,14 +339,23 @@ class VoiceService:
     def __init__(self, cfg: Optional[dict] = None):
         self.cfg = dict(cfg or {})
         self.wake_word          = (self.cfg.get("wake_word") or "Sage").strip()
-        self.record_seconds     = float(self.cfg.get("record_seconds", 6))
-        self.wake_chunk_seconds = float(self.cfg.get("wake_chunk_seconds", 3))
-        # VAD / silence-gating for endpointed push-to-talk. webrtcvad if installed,
+        self.record_seconds     = float(self.cfg.get("record_seconds", 12))
+        # Fallback only when VAD path is unavailable (legacy fixed window).
+        self.wake_chunk_seconds = float(self.cfg.get("wake_chunk_seconds", 4))
+        # VAD / silence-gating for endpointed capture. webrtcvad if installed,
         # adaptive energy gate otherwise; any failure falls back to a fixed window.
         self.vad_enabled        = bool(self.cfg.get("vad_enabled", True))
-        self.vad_max_seconds    = float(self.cfg.get("vad_max_seconds", 20))
-        self.vad_hangover_ms    = int(self.cfg.get("vad_hangover_ms", 800))
-        self.vad_start_timeout  = float(self.cfg.get("vad_start_timeout", 6))
+        # Longer defaults so full sentences (and slower speech) aren't cut off.
+        self.vad_max_seconds    = float(self.cfg.get("vad_max_seconds", 45))
+        self.vad_hangover_ms    = int(self.cfg.get("vad_hangover_ms", 1600))
+        self.vad_start_timeout  = float(self.cfg.get("vad_start_timeout", 8))
+        self.vad_min_speech_ms  = int(self.cfg.get("vad_min_speech_ms", 400))
+        # Wake loop: how long to wait for *any* speech while always-listening.
+        # Large on purpose so we don't thrash open/close the mic every few seconds.
+        self.wake_listen_timeout = float(self.cfg.get("wake_listen_timeout", 60))
+        # If wake+partial command was heard but looks truncated, keep listening.
+        self.wake_continue_if_short = bool(self.cfg.get("wake_continue_if_short", True))
+        self.wake_short_word_limit  = int(self.cfg.get("wake_short_word_limit", 4))
         self._engine = None
         self._engine_kind = None
         self._engine_err: Optional[str] = None
@@ -307,22 +374,35 @@ class VoiceService:
                 raise
         return self._engine
 
+    def _capture_utterance(self, *, max_seconds: Optional[float] = None,
+                           start_timeout: Optional[float] = None,
+                           hangover_ms: Optional[int] = None) -> Optional[str]:
+        """Record one spoken utterance (VAD preferred, fixed window fallback)."""
+        eng = self._get_engine()
+        max_s = float(max_seconds if max_seconds is not None else self.vad_max_seconds)
+        start_t = float(start_timeout if start_timeout is not None else self.vad_start_timeout)
+        hang = int(hangover_ms if hangover_ms is not None else self.vad_hangover_ms)
+        if self.vad_enabled and hasattr(eng, "transcribe_voiced"):
+            try:
+                return eng.transcribe_voiced(
+                    max_seconds=max_s,
+                    start_timeout=start_t,
+                    hangover_ms=hang,
+                    min_speech_ms=self.vad_min_speech_ms)
+            except Exception:
+                pass
+        # Fixed-window fallback (wake chunk / record_seconds).
+        secs = max(1.0, min(max_s if max_s <= 30 else self.record_seconds, 45.0))
+        return eng.transcribe(secs)
+
     # ---- push-to-talk -------------------------------------------------------
     def transcribe_once(self, seconds=None) -> Optional[str]:
         with self._mic_lock:
-            eng = self._get_engine()
             # Preferred: VAD-endpointed capture (records until you pause and trims
             # surrounding noise). Falls back to a fixed window on any problem.
-            if self.vad_enabled and hasattr(eng, "transcribe_voiced"):
-                try:
-                    return eng.transcribe_voiced(
-                        max_seconds=float(seconds or self.vad_max_seconds),
-                        start_timeout=self.vad_start_timeout,
-                        hangover_ms=self.vad_hangover_ms)
-                except Exception:
-                    pass
-            secs = max(1.0, min(float(seconds or self.record_seconds), 30.0))
-            return eng.transcribe(secs)
+            if seconds is not None:
+                return self._capture_utterance(max_seconds=float(seconds))
+            return self._capture_utterance()
 
     # ---- opt-in wake word ---------------------------------------------------
     @property
@@ -334,32 +414,81 @@ class VoiceService:
             return
         self._get_engine()                               # surface errors up front
         self._wake_stop.clear()
-        self._wake_thread = threading.Thread(target=self._wake_loop, daemon=True)
+        self._wake_thread = threading.Thread(target=self._wake_loop, daemon=True,
+                                             name="voice-wake")
         self._wake_thread.start()
 
     def stop_wake(self):
         self._wake_stop.set()
         self._wake_thread = None
 
+    def _looks_truncated(self, cmd: str) -> bool:
+        """Heuristic: very short after wake → user likely still speaking / cut off."""
+        if not cmd:
+            return True
+        words = re.findall(r"[a-z0-9']+", cmd.lower())
+        if len(words) <= self.wake_short_word_limit:
+            return True
+        # Trailing conjunctions / prepositions usually mean more is coming.
+        if words and words[-1] in {
+            "and", "or", "to", "the", "a", "an", "of", "for", "with", "please",
+            "open", "go", "then", "my", "into", "on", "in", "at", "from",
+        }:
+            return True
+        return False
+
     def _wake_loop(self):
-        wake = self.wake_word.lower()
+        """Always-listen wake word using full-utterance VAD capture.
+
+        Old behaviour recorded fixed 3s chunks, which is why only the first 2–3
+        words (or just the wake word) ever made it through. Now each listen is
+        endpointed: speak naturally, pause when done, we keep the whole phrase.
+        """
+        wake = self.wake_word.lower().strip()
         while not self._wake_stop.is_set():
             try:
+                # 1) Capture a full utterance while waiting for the wake word.
                 with self._mic_lock:
-                    heard = self._engine.transcribe(self.wake_chunk_seconds)
+                    heard = self._capture_utterance(
+                        max_seconds=self.vad_max_seconds,
+                        start_timeout=self.wake_listen_timeout,
+                        hangover_ms=self.vad_hangover_ms)
+                if self._wake_stop.is_set():
+                    break
                 if not heard:
                     continue
                 low = heard.lower()
                 if wake not in low:
                     continue
-                cmd = low.split(wake, 1)[1].strip()       # rest of this utterance
-                if not cmd:                               # wake word alone -> next chunk
+
+                cmd = _strip_wake(heard, wake)
+
+                # 2) Wake alone, or a clearly truncated partial → keep listening
+                #    with a shorter start timeout so the follow-on command is
+                #    captured without a long dead air wait.
+                need_more = (not cmd) or (
+                    self.wake_continue_if_short and self._looks_truncated(cmd)
+                )
+                if need_more:
                     with self._mic_lock:
-                        cmd = (self._engine.transcribe(self.record_seconds) or "").strip()
+                        more = self._capture_utterance(
+                            max_seconds=self.vad_max_seconds,
+                            # If we already have a few words, they may still be
+                            # mid-breath — wait a bit; if wake-only, wait longer.
+                            start_timeout=2.5 if cmd else self.vad_start_timeout,
+                            hangover_ms=self.vad_hangover_ms)
+                    if more:
+                        more = more.strip()
+                        # If they repeated the wake word, strip it again.
+                        if wake in more.lower():
+                            more = _strip_wake(more, wake)
+                        cmd = (cmd + " " + more).strip() if cmd else more
+
+                cmd = (cmd or "").strip()
                 if cmd:
                     self._commands.put({"text": cmd, "ts": time.time()})
             except Exception:
-                time.sleep(0.2)                           # transient -> keep listening
+                time.sleep(0.25)                         # transient -> keep listening
 
     def poll(self) -> dict:
         out = []
@@ -379,7 +508,14 @@ class VoiceService:
             "engine_error": self._engine_err,
             "wake_active": self.wake_active,
             "wake_word": self.wake_word,
-            "vad": {"enabled": self.vad_enabled, "webrtcvad": _installed("webrtcvad")},
+            "vad": {
+                "enabled": self.vad_enabled,
+                "webrtcvad": _installed("webrtcvad"),
+                "max_seconds": self.vad_max_seconds,
+                "hangover_ms": self.vad_hangover_ms,
+                "start_timeout": self.vad_start_timeout,
+                "min_speech_ms": self.vad_min_speech_ms,
+            },
             # Which interpreter is actually running the app — install deps into
             # THIS one (the #1 cause of "I installed it but it's not detected").
             "python": sys.executable,
