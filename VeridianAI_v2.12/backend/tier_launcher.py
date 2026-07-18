@@ -175,18 +175,22 @@ def _resolve_ollama() -> str:
 
 
 def _pin_lemonade_ctx(ctx: int) -> None:
-    """Best-effort: pin ctx_size in Lemonade Server's OWN config
-    (%USERPROFILE%\\.cache\\lemonade\\config.json — v10+ layout; the server
-    reads it at startup). Only touches the one key, only when it differs,
-    and never blocks the spawn on failure. If the file doesn't exist yet
-    (brand-new install), we skip rather than guess the schema — Lemonade
-    creates it on first run and the next boot picks the pin up."""
+    """Best-effort: pin ctx_size in the config of the Lemonade instance WE
+    spawn. v10's CLI is `lemond [cache_dir] [--port]` — our argv
+    `serve --port N` (run with cwd=ROOT) makes v10 read `serve` as the
+    CACHE DIR positional, so this instance's config lives at
+    ROOT/serve/config.json (self-contained in the project — accidental
+    but useful, and why the user-level %USERPROFILE%\\.cache\\lemonade
+    config does NOT govern our tier). Only touches the one key, only when
+    it differs, and never blocks the spawn on failure. If the file doesn't
+    exist yet (very first boot — Lemonade creates it with defaults on
+    first run), we skip rather than guess the schema; the pin lands on
+    the next boot."""
     try:
-        home = os.environ.get("USERPROFILE") or str(Path.home())
-        cfgp = Path(home) / ".cache" / "lemonade" / "config.json"
+        cfgp = ROOT / "serve" / "config.json"
         if not cfgp.exists():
             print(f"[tier_launcher] Lemonade config not found at {cfgp}; "
-                  "skipping ctx_size pin (first run?)")
+                  "skipping ctx_size pin (first boot? pin applies next boot)")
             return
         raw = json.loads(cfgp.read_text(encoding="utf-8"))
         if not isinstance(raw, dict):
