@@ -1194,9 +1194,37 @@ def verify_written_file(path: str) -> str:
         pass
     if not any(_rp == a or _rp.startswith(a + os.sep) for a in _allowed):
         return f"[VERIFY FAILED] Path is outside the allowed directories: {path}"
+    _resolve_note = ""
     try:
         if not os.path.exists(path):
-            return f"[VERIFY FAILED] File not found: {path}"
+            # v2.13.4 ROOT-CAUSE FIX (multi-day false-negative class):
+            # save_to_downloads writes ONLY into DOWNLOADS_DIR, but models
+            # reconstruct verify paths relative to project root ("File
+            # not found: E:\...\<name>" while the file sits in
+            # downloads\). Before failing, check downloads for: the
+            # basename, the sanitized basename, and the sanitized FULL
+            # path (save_to_downloads flattens path separators to '_',
+            # so "E:\...\downloads\x.txt" was saved as
+            # "E__..._downloads_x.txt"). Same containment rule applies.
+            _base = os.path.basename(path.replace("\\", "/"))
+            _cands = [_base,
+                      re.sub(r'[^\w\-.]', '_', _base),
+                      re.sub(r'[^\w\-.]', '_', path.strip())]
+            for _cn in _cands:
+                _cand = str(DOWNLOADS_DIR / _cn)
+                _crp = os.path.realpath(_cand)
+                if (os.path.exists(_cand)
+                        and any(_crp == a or _crp.startswith(a + os.sep)
+                                for a in _allowed)):
+                    path = _cand
+                    _resolve_note = (" [note: path auto-resolved to "
+                                     "downloads folder]")
+                    print(f"[VERIFY] auto-resolved to downloads: "
+                          f"{_cand}")
+                    break
+            else:
+                return (f"[VERIFY FAILED] File not found: {path} "
+                        f"(also checked downloads/ for '{_base}')")
 
         with open(path, "r", encoding="utf-8", errors="replace") as f:
             content = f.read()
@@ -1223,7 +1251,7 @@ def verify_written_file(path: str) -> str:
             f"Path:   {path}\n"
             f"Size:   {size} bytes\n"
             f"Lines:  {lines}\n"
-            f"Syntax: {syntax}"
+            f"Syntax: {syntax}{_resolve_note}"
         )
 
     except Exception as e:
@@ -1644,13 +1672,37 @@ def save_to_downloads(filename: str, content: str) -> dict:
             path.resolve().relative_to(DOWNLOADS_DIR.resolve())
         except ValueError:
             return {"success": False, "error": "Path escapes downloads directory"}
+        # v2.13.4 backup-before-overwrite: retry loops (historically
+        # triggered by the verify path false-negative) silently destroyed
+        # prior versions. Timestamped .bak, pruned to the 3 most recent
+        # per file. Backup failure never blocks the save itself.
+        backup_name = ""
+        if path.exists():
+            try:
+                import shutil as _sh
+                import time as _t
+                backup_name = f"{safe_name}.{int(_t.time())}.bak"
+                _sh.copy2(path, DOWNLOADS_DIR / backup_name)
+                baks = sorted(DOWNLOADS_DIR.glob(f"{safe_name}.*.bak"))
+                for old in baks[:-3]:
+                    try:
+                        old.unlink()
+                    except OSError:
+                        pass
+            except Exception as _bk_e:
+                print(f"[SAVE] backup-before-overwrite failed "
+                      f"(continuing): {_bk_e}")
+                backup_name = ""
         path.write_text(content, encoding="utf-8")
-        return {
+        out = {
             "success": True,
             "filename": safe_name,
             "path": str(path),
             "size": path.stat().st_size,
         }
+        if backup_name:
+            out["backup"] = backup_name
+        return out
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -1764,6 +1816,129 @@ def _is_in_markdown_code_context(text: str, pos: int) -> bool:
     return segment.count("`") % 2 == 1
 
 
+def _tag_fills_code_fence(text: str, tag_start: int, tag_end: int):
+    """If the fenced code block containing ``tag_start`` consists SOLELY
+    of the tag ``text[tag_start:tag_end+1]`` (plus an optional language
+    word on the fence line and surrounding whitespace), return the
+    fence's ``(start, end_exclusive)`` span. Else ``None``.
+
+    v2.13 (2026-07-17 Bug B): local models (the same family that emits
+    [GENERATE_IMAGE] open/close forms) sometimes wrap their ACTUAL tool
+    action in a markdown fence. A fence containing ONLY a complete tag
+    is an invocation, not a teaching example -- real examples come with
+    surrounding prose, which this check preserves as pedagogical.
+    Never raises.
+    """
+    try:
+        fences = []
+        i = 0
+        while True:
+            j = text.find("```", i)
+            if j == -1:
+                break
+            fences.append(j)
+            i = j + 3
+        for k in range(0, len(fences) - 1, 2):
+            o, c = fences[k], fences[k + 1]
+            if not (o < tag_start < c):
+                continue
+            inner = text[o + 3:c]
+            nl = inner.find("\n")
+            if nl != -1 and re.fullmatch(r"[\w+-]*[ \t]*", inner[:nl]):
+                inner = inner[nl + 1:]   # drop language token line
+            if inner.strip() == text[tag_start:tag_end + 1].strip():
+                return (o, c + 3)
+            return None
+        return None
+    except Exception:
+        return None
+
+
+# v2.13 (2026-07-17 Bug B): orphan-tag detection. A tool tag that fails
+# to parse (malformed, truncated mid-tag, unbalanced brackets) previously
+# leaked into chat as literal text with ZERO signal anywhere -- no
+# dispatch, no hash-chain entry, no warning. main.py now runs outgoing
+# final-answer text through this before streaming, and surfaces a
+# visible warning when bare (non-pedagogical) tag text is present.
+# SEARCH_GENERAL/SEARCH_MEMORY/REMEMBER_FAIL listed before their
+# prefixes so the alternation matches the longest name.
+_ORPHAN_TAG_RE = re.compile(
+    r"\[(SAVE_FILE|VERIFY_FILE|CODE|SEARCH_GENERAL|SEARCH_MEMORY|SEARCH|"
+    r"WEATHER|BROWSE|WEB_SEARCH|REMEMBER_FAIL|REMEMBER|RECALL|PRIORITISE|"
+    r"GENERATE_IMAGE|LINT_EXPR|PARSE_EXPR)\s*[:\]]", re.I)
+
+
+_KNOWN_TAG_NAMES = (
+    "SAVE_FILE", "VERIFY_FILE", "CODE", "SEARCH_GENERAL", "SEARCH_MEMORY",
+    "SEARCH", "WEATHER", "BROWSE", "WEB_SEARCH", "REMEMBER_FAIL",
+    "REMEMBER", "RECALL", "PRIORITISE", "GENERATE_IMAGE", "LINT_EXPR",
+    "PARSE_EXPR", "TASK_DONE",
+)
+
+
+def detect_orphan_tool_tags(text: str):
+    """Tool-tag markers present BARE (outside code spans/fences) in
+    outgoing chat text -- tags that look like they were meant to execute
+    but did not. Pedagogical examples inside code context are NOT
+    reported. Returns a sorted list of tag names; unclosed fragments are
+    suffixed " (partial)" (v2.13.3, premature-EOS-mid-tag incident:
+    task 1182 stopped naturally at "[VERIFY_FILE: greeting.txt|").
+    Also catches tags cut mid-NAME ("[VERIFY_FI") by prefix-matching
+    known tag names at end-of-text. Never raises."""
+    out = set()
+    try:
+        for m in _ORPHAN_TAG_RE.finditer(text or ""):
+            if _is_in_markdown_code_context(text, m.start()):
+                continue
+            name = m.group(1).upper()
+            # closing bracket anywhere after the opener = complete-ish;
+            # otherwise the tag never closed before end-of-turn.
+            if "]" in text[m.end():]:
+                out.add(name)
+            else:
+                out.add(name + " (partial)")
+        # mid-name cut at end of text: "[VERIFY_FI" prefixes a known tag
+        # but never reaches the ":" the main pattern requires.
+        t = (text or "").rstrip()
+        m2 = re.search(r"\[([A-Z_]{2,})$", t)
+        if m2 and not _is_in_markdown_code_context(t, m2.start()):
+            frag = m2.group(1).upper()
+            for n in _KNOWN_TAG_NAMES:
+                if n != frag and n.startswith(frag):
+                    out.add(n + " (partial)")
+                    break
+    except Exception:
+        pass
+    return sorted(out)
+
+
+def detect_partial_tag_at_end(text: str):
+    """Return the trailing fragment if `text` ENDS inside an unclosed
+    known tool tag (premature EOS mid-tag), else None.
+
+    v2.13.3: used by the agentic loop to treat a natural-EOS-mid-tag
+    exactly like a cap-truncated step -- inject a re-emit note and
+    continue, instead of ending the turn with the action undone. Only
+    known tag names (or prefixes of them, for mid-name cuts) qualify,
+    so prose like "[NOTE" can't false-positive. A `]` anywhere after
+    the opener disqualifies (ambiguous -- left to the orphan warning).
+    Never raises."""
+    try:
+        t = (text or "").rstrip()
+        m = re.search(r"\[([A-Za-z_]{2,})(:[^\]]*)?$", t)
+        if not m:
+            return None
+        if _is_in_markdown_code_context(t, m.start()):
+            return None
+        name = m.group(1).upper()
+        for n in _KNOWN_TAG_NAMES:
+            if n == name or n.startswith(name):
+                return t[m.start():][:80]
+        return None
+    except Exception:
+        return None
+
+
 def parse_agent_actions(text: str, return_ranges: bool = False):
     """Parse tool action tags from model output.
 
@@ -1829,16 +2004,27 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
             # tool invocation. Advance the scanner past the tag but do
             # NOT consume its range (so the example stays visible in
             # chat) and do NOT dispatch any action.
+            _fence_span = None
             if _is_in_markdown_code_context(text, start):
+                # v2.13 Bug B exception: a fence containing ONLY this
+                # complete tag is the model fencing its ACTION, not an
+                # example -- unwrap and dispatch (consuming the fence).
+                if depth == 0:
+                    _fence_span = _tag_fills_code_fence(text, start, end)
+                if _fence_span is None:
+                    print(
+                        f"[PARSER] Skipping pedagogical {tag_name} tag at "
+                        f"pos {start}: {text[start:start+50]!r}"
+                    )
+                    # If we found a clean close `]`, advance past it.
+                    # Otherwise just advance past the marker text so we
+                    # do not loop on the same position.
+                    scan_idx = (end + 1) if depth == 0 else (start + len(marker))
+                    continue
                 print(
-                    f"[PARSER] Skipping pedagogical {tag_name} tag at "
-                    f"pos {start}: {text[start:start+50]!r}"
+                    f"[PARSER] Unwrapping fenced {tag_name} tag at pos "
+                    f"{start} (fence contains only the tag -> invocation)"
                 )
-                # If we found a clean close `]`, advance past it.
-                # Otherwise just advance past the marker text so we
-                # do not loop on the same position.
-                scan_idx = (end + 1) if depth == 0 else (start + len(marker))
-                continue
 
             if depth == 0:
                 # Found the matching close bracket
@@ -1877,8 +2063,10 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
                         )
                 else:
                     actions_with_pos.append((start, action_type, content))
-                consumed_ranges.append((start, end + 1))
-                scan_idx = end + 1
+                # Consume the WHOLE fence when we unwrapped one, so the
+                # final-answer cleanup doesn't leave empty ``` ``` husks.
+                consumed_ranges.append(_fence_span or (start, end + 1))
+                scan_idx = _fence_span[1] if _fence_span else end + 1
             else:
                 # Unbalanced - try a fallback: look for a newline-terminated `]`
                 # which is a common multi-line code block terminator.
@@ -1958,12 +2146,25 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
             # the bracket-balanced path above -- tags inside markdown
             # code spans or fenced blocks are examples, not invocations.
             # Skip without consuming so the example stays visible.
+            _sfence = None
             if _is_in_markdown_code_context(text, m.start()):
+                # v2.13 Bug B exception -- same rule as the bracket-
+                # balanced path: fence containing only the tag = action.
+                _sfence = _tag_fills_code_fence(text, m.start(),
+                                                m.end() - 1)
+                if _sfence is None:
+                    print(
+                        f"[PARSER] Skipping pedagogical "
+                        f"{action_type.upper()} "
+                        f"tag at pos {m.start()}: "
+                        f"{text[m.start():m.end()]!r}"
+                    )
+                    continue
                 print(
-                    f"[PARSER] Skipping pedagogical {action_type.upper()} "
-                    f"tag at pos {m.start()}: {text[m.start():m.end()]!r}"
+                    f"[PARSER] Unwrapping fenced {action_type.upper()} "
+                    f"tag at pos {m.start()} (fence contains only the "
+                    f"tag -> invocation)"
                 )
-                continue
             payload = m.group(1).strip()
             # v2.1.5 defensive: skip prompt-template echoes for query-style
             # tags (SEARCH, WEATHER, BROWSE, etc.) — but NEVER skip the
@@ -1979,12 +2180,15 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
                     f"placeholder: {payload!r}"
                 )
                 # Still record the range so final-answer cleanup strips it.
-                consumed_ranges.append((m.start(), m.end()))
+                # (_sfence replaces the tag span when a fence was unwrapped
+                # -- ranges must never overlap, cleanup strips them
+                # sequentially in reverse order.)
+                consumed_ranges.append(_sfence or (m.start(), m.end()))
                 continue
             actions_with_pos.append((m.start(), action_type, payload))
             # v2.1.5: also track the range so the final-answer cleanup can
             # surgically remove the whole tag (not just [TASK_DONE]).
-            consumed_ranges.append((m.start(), m.end()))
+            consumed_ranges.append(_sfence or (m.start(), m.end()))
 
     # Sort by position to preserve the original order in model output
     actions_with_pos.sort(key=lambda x: x[0])
@@ -2543,6 +2747,18 @@ def handle_tool_call(tool_name: str, **kwargs) -> str:
     on failure. Never raises — agent loops can splice the result straight
     into a tool-results block.
     """
+    # ── CUSTOMS gate (v2.13): this dispatcher currently has no production
+    # callers, but "invocable from anywhere" makes it a latent bypass --
+    # guard it so any future caller is border-inspected too.
+    try:
+        import customs_daemon as _customs
+        _c = _customs.inspect(tool_name, dict(kwargs), origin="ipc_bridge")
+        if not _c.allowed:
+            return f"[ERROR] {_c.correction}"
+        if _c.verdict in ("pass", "repaired") and isinstance(_c.args, dict):
+            kwargs = _c.args
+    except ImportError:
+        pass
     if tool_name == "browse":
         url = kwargs.get("url")
         if not url:

@@ -572,10 +572,43 @@ class ModelManager:
     # =======================================================================
     async def generate_full(self, messages: List[Dict],
                             model_id: Optional[str],
-                            options: Dict) -> str:
+                            options: Dict,
+                            on_token=None) -> str:
+        """Collect a full non-streaming response.
+
+        v2.13 (2026-07-17 runaway incident): non-streaming callers (the
+        agentic loop above all) were a blind spot — no watchdog feed, no
+        console visibility. `on_token` (zero-arg, e.g. watchdog.record_token)
+        is called per token so stall/runaway detection sees this path.
+        Periodic [GEN SNAPSHOT] lines give raw-stream visibility without
+        full verbosity: token count always; content tail only when
+        gen_snapshot_content=true (privacy default: counts, not content).
+        """
         result = ""
+        n = 0
+        last_snap = 0
+        try:
+            snap_every = int(self.config.get("gen_snapshot_every_tokens",
+                                             2048))
+        except (TypeError, ValueError):
+            snap_every = 2048
+        snap_content = bool(self.config.get("gen_snapshot_content", False))
         async for token in self.generate(messages, model_id, options):
             result += token
+            n += 1
+            if on_token is not None:
+                try:
+                    on_token()
+                except Exception:
+                    pass
+            if snap_every > 0 and (n - last_snap) >= snap_every:
+                last_snap = n
+                if snap_content:
+                    print(f"[GEN SNAPSHOT] n={n} chars={len(result)} "
+                          f"tail={result[-120:]!r}", flush=True)
+                else:
+                    print(f"[GEN SNAPSHOT] n={n} chars={len(result)}",
+                          flush=True)
         return result
 
     # -------------------------------------------------------------------

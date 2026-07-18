@@ -94,7 +94,11 @@ def _procedural_memory():
 # Server identity (returned from initialize handshake)
 # ---------------------------------------------------------------------------
 
-MCP_SERVER_NAME = "oracleai-sage"
+# v2.12.0 rebrand: name shown in MCP client configs comes from branding.py.
+try:
+    from branding import MCP_SERVER_NAME
+except Exception:
+    MCP_SERVER_NAME = "veridianai-toga"
 MCP_SERVER_VERSION = "2.11.11"
 MCP_PROTOCOL_VERSION = "2025-03-26"  # MCP spec version this implementation targets
 
@@ -166,7 +170,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
     {
         "name": "search_memory",
         "description": (
-            "Keyword-search past OracleAI conversation archives. Memory "
+            "Keyword-search past VeridianAI conversation archives. Memory "
             "READ only -- no chain writes. Returns matching archive "
             "excerpts."
         ),
@@ -235,7 +239,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
     {
         "name": "code",
         "description": (
-            "Execute Python in OracleAI's sandboxed subprocess. "
+            "Execute Python in VeridianAI's sandboxed subprocess. "
             "Returns labelled stdout + stderr. UTF-8 throughout. "
             "DOWNLOADS_DIR / BASE_DIR are exposed as variables. "
             "Pass RAW Python only -- no markdown fences, no language tag."
@@ -287,7 +291,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
         "description": (
             "Look up a procedural-memory entry by key (fuzzy match). "
             "Returns the stored procedure or 'not found'. Use to check "
-            "whether OracleAI has learned a pattern for this task before."
+            "whether VeridianAI has learned a pattern for this task before."
         ),
         "inputSchema": {
             "type": "object",
@@ -305,7 +309,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
         "description": (
             "Record a SUCCESSFUL procedure in procedural memory. Chain-"
             "witnessed via the Fernet+SHA3 hash chain. Use for insights "
-            "or patterns you want OracleAI to recall in future sessions."
+            "or patterns you want VeridianAI to recall in future sessions."
         ),
         "inputSchema": {
             "type": "object",
@@ -327,7 +331,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
         "description": (
             "Record an UNSUCCESSFUL approach in procedural memory. "
             "Local-only (NOT chain-witnessed). Use for dead-ends you "
-            "want OracleAI to avoid in future."
+            "want VeridianAI to avoid in future."
         ),
         "inputSchema": {
             "type": "object",
@@ -735,6 +739,21 @@ def call_tool(name: str, arguments: Dict[str, Any] | None = None) -> Dict[str, A
             f"Available: {sorted(_DISPATCH.keys())}",
             is_error=True,
         )
+    # ── CUSTOMS gate (v2.13): single chokepoint for ALL MCP-invoked
+    # tools (HTTP route + stdio server both funnel through call_tool).
+    # inspect() is internally fail-closed and a no-op when
+    # customs_enabled=false. Bounce/reject comes back as an MCP error
+    # envelope so the calling model corrects its own call (Tier 3).
+    try:
+        import customs_daemon as _customs
+    except ImportError:
+        _customs = None
+    if _customs is not None:
+        _c = _customs.inspect(name, arguments, origin="mcp")
+        if not _c.allowed:
+            return _result_text(_c.correction, is_error=True)
+        if _c.verdict in ("pass", "repaired") and isinstance(_c.args, dict):
+            arguments = _c.args
     try:
         return fn(arguments)
     except Exception as e:

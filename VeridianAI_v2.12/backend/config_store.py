@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-config_store.py — OracleAI unified config layer (#68, schema v2)
+config_store.py — VeridianAI unified config layer (#68, schema v2)
 -----------------------------------------------------------------
 Single source of truth for user-tunable runtime configuration.
 
@@ -154,6 +154,13 @@ class InferenceSection:
     scheduler_enabled: bool = True
     scheduler_aging_rate: float = 0.05
     scheduler_queue_limit: int = 24
+    # v2.13 runaway-generation guards (2026-07-17 task-759 incident):
+    # count-based ceilings that complement the time-based stall knobs
+    # (which are deliberately huge to tolerate cold loads). -1 disables.
+    agentic_step_max_tokens: int = 8192   # server-side decode cap per agentic step
+    runaway_token_limit: int = 100000     # per-turn watchdog abort ceiling
+    gen_snapshot_every_tokens: int = 2048  # [GEN SNAPSHOT] cadence; 0/-1 off
+    gen_snapshot_content: bool = True     # include content tail (privacy: off)
     npu_enabled: bool = True
     # v2.12.3: context size passed to Lemonade Server at spawn (--ctx-size).
     # Lemonade v10.x auto-updated and defaults to 4096, which Toga's Sage
@@ -206,6 +213,9 @@ class SageSection:
     agentic_mode: bool = True
     web_search_enabled: bool = True
     code_exec_enabled: bool = True
+    # v2.13 Customs: universal tool-call sanitizer (customs_daemon.py).
+    # Default OFF until the CRAIID regression suite passes clean.
+    customs_enabled: bool = True
     privacy_mode: bool = False
     # v2.12.1 personalization: the assistant's NAME (persona self-reference)
     # and the voice/socials WAKE WORD. assistant_name is per-user capable
@@ -428,6 +438,10 @@ class OracleConfig:
             "ollama_read_timeout_sec":  self.timeouts.ollama_read_sec,
             "stall_token_timeout_sec":  self.timeouts.stall_token_sec,
             "stall_tool_timeout_sec":   self.timeouts.stall_tool_sec,
+            "agentic_step_max_tokens":  self.inference.agentic_step_max_tokens,
+            "runaway_token_limit":      self.inference.runaway_token_limit,
+            "gen_snapshot_every_tokens": self.inference.gen_snapshot_every_tokens,
+            "gen_snapshot_content":     self.inference.gen_snapshot_content,
             # prompts
             "system_prompt_file":  self.prompts.system_prompt_file,
             "force_prompt_tier":   self.prompts.force_prompt_tier,
@@ -444,6 +458,7 @@ class OracleConfig:
             "agentic_mode":            self.sage.agentic_mode,
             "web_search_enabled":      self.sage.web_search_enabled,
             "code_exec_enabled":       self.sage.code_exec_enabled,
+            "customs_enabled":         self.sage.customs_enabled,
             "privacy_mode":            self.sage.privacy_mode,
             # v2.12.1 personalization
             "assistant_name":          self.sage.assistant_name,
@@ -563,6 +578,10 @@ class OracleConfig:
         cfg.timeouts.ollama_read_sec  = int(_g("ollama_read_timeout_sec", cfg.timeouts.ollama_read_sec))
         cfg.timeouts.stall_token_sec  = int(_g("stall_token_timeout_sec", cfg.timeouts.stall_token_sec))
         cfg.timeouts.stall_tool_sec   = int(_g("stall_tool_timeout_sec",  cfg.timeouts.stall_tool_sec))
+        cfg.inference.agentic_step_max_tokens = int(_g("agentic_step_max_tokens", cfg.inference.agentic_step_max_tokens))
+        cfg.inference.runaway_token_limit     = int(_g("runaway_token_limit",     cfg.inference.runaway_token_limit))
+        cfg.inference.gen_snapshot_every_tokens = int(_g("gen_snapshot_every_tokens", cfg.inference.gen_snapshot_every_tokens))
+        cfg.inference.gen_snapshot_content    = bool(_g("gen_snapshot_content",   cfg.inference.gen_snapshot_content))
 
         # prompts — v1 stored full system_prompt as inline string. The
         # migrator (Phase D) writes that string to a file and stores the
@@ -591,6 +610,7 @@ class OracleConfig:
         cfg.sage.agentic_mode       = bool(_g("agentic_mode",       cfg.sage.agentic_mode))
         cfg.sage.web_search_enabled = bool(_g("web_search_enabled", cfg.sage.web_search_enabled))
         cfg.sage.code_exec_enabled  = bool(_g("code_exec_enabled",  cfg.sage.code_exec_enabled))
+        cfg.sage.customs_enabled    = bool(_g("customs_enabled",    cfg.sage.customs_enabled))
         cfg.sage.privacy_mode       = bool(_g("privacy_mode",       cfg.sage.privacy_mode))
         # v2.12.1 personalization — sanitized: printable, no quotes/brackets
         # (they'd break prompt framing and tag parsing), max 24 chars.

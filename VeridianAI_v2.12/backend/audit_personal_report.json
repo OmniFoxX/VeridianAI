@@ -1,7 +1,7 @@
 {
   "meta": {
-    "archives_dir": "E:\\OracleAI_v2.9.10\\archives",
-    "plm_path": "E:\\OracleAI_v2.9.10\\backend\\mlm_training_data\\sage_plm.pt",
+    "archives_dir": "**\\VeridianAI_v2.12\\archives",
+    "plm_path": "**\\VeridianAI_v2.12\\backend\\mlm_training_data\\sage_plm.pt",
     "sessions_processed": 101,
     "sessions_skipped": 0,
     "total_user_tokens": 212687,

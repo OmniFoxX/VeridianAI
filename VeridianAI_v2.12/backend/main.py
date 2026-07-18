@@ -260,9 +260,18 @@ class _StallWatchdog:
     the duration of one Sage run.
     """
 
-    def __init__(self, token_timeout_sec: float, tool_timeout_sec: float):
+    def __init__(self, token_timeout_sec: float, tool_timeout_sec: float,
+                 runaway_token_limit: int = -1):
         self.token_timeout    = token_timeout_sec
         self.tool_timeout     = tool_timeout_sec
+        # v2.13 runaway guard (2026-07-17 incident, task 759): the stall
+        # timers catch SILENCE; this catches the OPPOSITE — unbounded
+        # generation where the model never emits EOS and decodes toward a
+        # 256k ctx for hours. Count-based, so slow models can't false-
+        # fire it (which is why the time knobs got cranked to 10h).
+        # -1 disables (project sentinel convention).
+        self.runaway_limit    = int(runaway_token_limit)
+        self.token_count      = 0
         # Initialize last_token_ts to "now" so the time-to-first-token
         # is part of the budget. Cold-load is the user's responsibility
         # to size correctly via stall_token_timeout_sec and the
@@ -276,6 +285,7 @@ class _StallWatchdog:
 
     def record_token(self):
         self.last_token_ts = time.time()
+        self.token_count  += 1
 
     def record_tool_call(self, tool_name: str):
         self.pending_tool_ts = time.time()
@@ -298,6 +308,23 @@ class _StallWatchdog:
             if self._stop:
                 return
             now = time.time()
+
+            # v2.13 runaway ceiling — checked FIRST: a runaway stream
+            # constantly refreshes last_token_ts, so the time-based
+            # checks below can never catch it.
+            if 0 < self.runaway_limit < self.token_count:
+                self.stalled = True
+                self.stall_reason = (
+                    f"Runaway generation: {self.token_count} tokens this "
+                    f"turn (limit {self.runaway_limit}) with no "
+                    f"end-of-turn. Aborting so the model slot is freed. "
+                    f"Raise runaway_token_limit if this was legitimate."
+                )
+                try:
+                    await on_stall(self.stall_reason)
+                except Exception:
+                    pass
+                return
 
             tok_gap = now - self.last_token_ts
             if tok_gap > self.token_timeout:
@@ -686,6 +713,28 @@ def save_config(cfg: dict):
 
 
 config = load_config()
+
+# ── Customs (v2.13): universal tool-call sanitizer ("border inspection").
+# NOT the max_tokens=-1 sanitizer. Feature-flagged OFF by default
+# (customs_enabled). Wired here so every dispatch path (agentic loop,
+# PRIORITISE sub-dispatcher, MCP, image executor, Build Battle gate)
+# shares ONE gate + the existing hash-chain audit log in sage_data.
+import customs_daemon  # noqa: E402
+customs_daemon.set_runtime(config.get, DATA_DIR)
+
+# ── Intent-fidelity guardrails Part 1 (v2.13.2): scope tags on standing
+# instructions + requested/opportunistic action classification.
+import intent_scope  # noqa: E402
+
+
+def _customs_run(tool, args, fn, origin="prioritise"):
+    """Gate + run for sub-dispatchers that expect a string result.
+    On bounce/reject the correction text IS the result (visible failure,
+    never a silent no-op)."""
+    _c = customs_daemon.inspect(tool, args, origin)
+    if not _c.allowed:
+        return _c.correction
+    return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
 app = FastAPI(title="OracleAI", version="2.11.11", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
@@ -2876,7 +2925,7 @@ async def api_upload(request: Request, file: UploadFile = File(...)):
 
 
 # --- Image generation (manual trigger; ComfyUI) ------------------------------
-async def _generate_full_routed(messages, model_id, options):
+async def _generate_full_routed(messages, model_id, options, on_token=None):
     """generate_full with Sage Network offload, used by the AGENTIC loop so its
     per-step inference can run on the remote node too (orchestration + tools stay
     local; inference goes remote). model_id=None on offload -> the desktop picks.
@@ -2897,15 +2946,31 @@ async def _generate_full_routed(messages, model_id, options):
                 return _res["content"]
     except Exception:
         pass
-    return await model_manager.generate_full(messages, model_id, options)
+    return await model_manager.generate_full(messages, model_id, options,
+                                             on_token=on_token)
 
 
-async def _generate_image_routed(prompt, downloads_dir=None, **opts):
+async def _generate_image_routed(prompt, downloads_dir=None,
+                                 _customs_cleared=False, **opts):
     """Generate an image, OFFLOADING to a configured remote node (the desktop)
     when one is set - so a GPU-less client still makes images, via the encrypted
     node channel. Falls back to local ComfyUI if no remote is set or it is
     unreachable. Always saves the result into THIS machine's downloads. Returns a
     comfyui_client-style result dict."""
+    # ── CUSTOMS gate (v2.13): THE image executor -- covers the text→image
+    # intercept and /api/generate-image. (Node surface has its own gate in
+    # api_node_generate_image; it calls comfyui_client directly.)
+    # _customs_cleared=True is passed ONLY by the agentic elif branch,
+    # whose payload already cleared the loop-top gate this call -- avoids
+    # a duplicate audit entry per image. Internal kwarg, not client data.
+    if not _customs_cleared:
+        _c = customs_daemon.inspect(
+            "generate_image", {"prompt": str(prompt or "")},
+            origin="image_exec")
+        if not _c.allowed:
+            return {"success": False, "error": _c.correction}
+        if _c.verdict == "repaired":
+            prompt = _c.args.get("prompt", prompt)
     import node_trust
     _dl = Path(downloads_dir) if downloads_dir else DOWNLOADS_DIR
     remote = (config.get("remote_node_url") or "").strip()
@@ -3259,6 +3324,18 @@ async def api_node_generate_image(request: Request):
         raise HTTPException(403, "unauthorized")
     body = env["body"]
     prompt = (body.get("prompt") or "").strip()
+    # ── CUSTOMS gate (v2.13): this endpoint calls comfyui_client
+    # DIRECTLY (not _generate_image_routed -- routing here would loop on
+    # offload), so it needs its own gate. Remote-peer origin.
+    _c = customs_daemon.inspect(
+        "generate_image", {"prompt": prompt}, origin="node")
+    if not _c.allowed:
+        result = {"success": False, "error": _c.correction}
+        return Response(
+            content=node_server.seal_response(env, False, result, token),
+            media_type="application/octet-stream")
+    if _c.verdict == "repaired":
+        prompt = _c.args.get("prompt", prompt)
     if not prompt:
         result = {"success": False, "error": "empty prompt"}
     else:
@@ -4100,6 +4177,14 @@ async def _bb_run_gate(candidate_code, test_content, module_name, test_filename,
     returns (passed, raw_output). Off-thread so the event loop is not blocked."""
     import base64 as _b64
     import asyncio as _aio
+    # ── CUSTOMS gate (v2.13): model-produced candidate code enters the
+    # sandbox through here. Structure check only (Customs never needs to
+    # understand the code -- that's the gate test's job).
+    _c = customs_daemon.inspect(
+        "code", {"code": str(candidate_code or ""), "timeout": int(timeout)},
+        origin="build_battle")
+    if not _c.allowed:
+        return False, "[CUSTOMS] " + (_c.correction or "candidate rejected")
     cb = _b64.b64encode((candidate_code or "").encode("utf-8")).decode("ascii")
     tb = _b64.b64encode((test_content or "").encode("utf-8")).decode("ascii")
     driver = (
@@ -4578,7 +4663,12 @@ async def ws_chat(websocket: WebSocket):
             # across turns.
             _stall_tok = float(config.get("stall_token_timeout_sec", 56000.0))
             _stall_tool = float(config.get("stall_tool_timeout_sec", 56000.0))
-            watchdog = _StallWatchdog(_stall_tok, _stall_tool)
+            try:
+                _runaway = int(config.get("runaway_token_limit", 100000))
+            except (TypeError, ValueError):
+                _runaway = 100000
+            watchdog = _StallWatchdog(_stall_tok, _stall_tool,
+                                      runaway_token_limit=_runaway)
 
             async def _on_stall(reason):
                 """Callback fired by the watchdog when a stall is detected.
@@ -4778,13 +4868,26 @@ async def ws_chat(websocket: WebSocket):
                         "turns in this install. Use them to guide tool "
                         "choices; prefer successful patterns, avoid dead-"
                         "ends. Do not mention this section to the user.",
+                        "SCOPE RULES (v2.13.2): entries carrying a "
+                        "[scope: ...] marker obey it EXACTLY. Unmarked "
+                        "entries are reference notes — treat them as "
+                        "observe-only: do NOT apply them to the task in "
+                        "progress unless the current user request "
+                        "invokes them.",
                     ]
                     if recent_succ:
                         lines.append("")
                         lines.append("What worked (successful procedures):")
                         for k, v in recent_succ:
                             val = str(v.get("value", ""))[:200]
-                            lines.append(f"  - {k}: {val}")
+                            _psc = (v.get("metadata") or {}).get("scope")
+                            if _psc:
+                                lines.append(
+                                    f"  - {k}: {val}\n    [scope: "
+                                    + intent_scope.scope_gloss(_psc)
+                                    + "]")
+                            else:
+                                lines.append(f"  - {k}: {val}")
                     if recent_fail:
                         lines.append("")
                         lines.append("Dead-ends (unsuccessful — do not retry "
@@ -4946,6 +5049,16 @@ async def ws_chat(websocket: WebSocket):
 
                     sage_engine._tavily_call_count = 0  # line 375 — reset Tavily counter per response
 
+                    # v2.13.1 (Bug A): a cap-truncated step whose tail has
+                    # no parseable tags must not end the turn with garbage
+                    # -- give the model up to 2 continuation chances.
+                    _trunc_continues = 0
+                    # v2.13.2 intent classification turn state: per-file
+                    # save history + lazily-fetched scoped-instruction
+                    # names (for causal citation on opportunistic flags).
+                    _turn_saves = {}
+                    _turn_scoped_instr = None
+
                     for step in range(1, max_steps + 1):
                         if model_manager._abort:
                             aborted = True
@@ -5041,14 +5154,100 @@ async def ws_chat(websocket: WebSocket):
                                 f"[CODE:], [SAVE_FILE:], [SEARCH:], or "
                                 f"other tool calls as you need.]\n"
                             )
+                            # v2.13.1 (Bug A): saved-but-unverified nudge.
+                            # The classic drop: save succeeds, the step
+                            # cap (or the model's own eagerness) skips
+                            # VERIFY_FILE, and the next step happily
+                            # declares [TASK_DONE]. Make the missing
+                            # verify explicit and deterministic.
+                            _saved_ok = [
+                                k[5:] for k, v in tool_results_acc.items()
+                                if k.startswith("save:")
+                                and str(v).startswith("Saved ")]
+                            _verified_any = any(
+                                k.startswith("verify_file:")
+                                for k in tool_results_acc)
+                            if _saved_ok and not _verified_any:
+                                tool_text += (
+                                    "[REMINDER: file(s) saved this turn "
+                                    "but NOT yet verified: "
+                                    + ", ".join(_saved_ok[:5]) +
+                                    ". Emit [VERIFY_FILE: <filename>] for "
+                                    "each BEFORE emitting [TASK_DONE].]\n"
+                                )
                             step_messages.append({
                                 "role": "user", "content": tool_text,
                             })
 
                         # ── Non-streaming call for this agentic step ──
+                        # v2.13 runaway fix (task-759 incident): cap the
+                        # SERVER-side decode for agentic steps. A step's
+                        # job is a tool tag or a final answer — never 256k
+                        # tokens. Without this, max_tokens=-1 (unlimited
+                        # policy) + no stop sequences + a model that skips
+                        # EOS = hours of silent decode. The cap ends the
+                        # request cleanly; the loop then proceeds with
+                        # whatever was generated (tags parse, done-handler
+                        # runs). -1 disables. on_token feeds the watchdog
+                        # so this path is no longer invisible to it.
                         try:
+                            _step_opts = dict(options)
+                            try:
+                                _step_cap = int(config.get(
+                                    "agentic_step_max_tokens", 8192))
+                            except (TypeError, ValueError):
+                                _step_cap = 8192
+                            if _step_cap > 0:
+                                try:
+                                    _cur_max = int(
+                                        _step_opts.get("max_tokens") or -1)
+                                except (TypeError, ValueError):
+                                    _cur_max = -1
+                                _step_opts["max_tokens"] = (
+                                    _step_cap if _cur_max <= 0
+                                    else min(_cur_max, _step_cap))
+                            _step_tok = {"n": 0}
+
+                            def _on_step_tok(_c=_step_tok):
+                                _c["n"] += 1
+                                watchdog.record_token()
                             step_text = await _generate_full_routed(
-                                step_messages, model_id, options)
+                                step_messages, model_id, _step_opts,
+                                on_token=_on_step_tok)
+                            # v2.13.1 (Bug A): DETECT cap trips instead of
+                            # silently "proceeding with what was generated".
+                            # The truncation note rides tool_results_acc
+                            # into the next step's prompt, so the model
+                            # re-emits whatever tags got cut (the dropped
+                            # VERIFY_FILE after a save, classically).
+                            _cap_eff = _step_opts.get("max_tokens")
+                            _step_truncated = (
+                                isinstance(_cap_eff, int) and _cap_eff > 0
+                                and _step_tok["n"] >= _cap_eff)
+                            if _step_truncated:
+                                print(f"[STEP CAP] step {step} hit the "
+                                      f"{_cap_eff}-token cap -- response "
+                                      f"truncated; injecting continuation "
+                                      f"note.", flush=True)
+                                tool_results_acc[
+                                    f"step_truncated:step{step}"] = (
+                                    f"[SYSTEM NOTE] Your step-{step} "
+                                    f"response was TRUNCATED at {_cap_eff} "
+                                    f"tokens. Any tool tags after the "
+                                    f"cutoff never executed. Re-emit them "
+                                    f"NOW, compactly (e.g. if a file saved "
+                                    f"but was not verified, emit "
+                                    f"[VERIFY_FILE: <filename>]). Do NOT "
+                                    f"re-save files that already report "
+                                    f"success above.")
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "system",
+                                    "output": (
+                                        f"⚠️ Step {step} hit the "
+                                        f"{_cap_eff}-token cap — asking "
+                                        f"the model to continue."),
+                                })
                         except Exception as e:
                             await websocket.send_json({
                                 "type": "error",
@@ -5096,7 +5295,72 @@ async def ws_chat(websocket: WebSocket):
                         # If the model emitted nothing parseable, stream raw
                         # text as the final answer (matches old behavior).
                         if not actions:
+                            # v2.13.1 (Bug A): truncated step + nothing
+                            # parseable -> continue the loop (the
+                            # step_truncated note is already in
+                            # tool_results_acc) instead of dumping a
+                            # cut-off tail as the "final answer".
+                            # v2.13.3 (task-1182): same remedy when the
+                            # model VOLUNTARILY stopped mid-tag (natural
+                            # EOS, truncated=0, no cap trip) -- ending
+                            # inside an unclosed known tag gets a re-emit
+                            # note and a continuation chance too.
+                            _partial = (
+                                None if _step_truncated
+                                else sage_engine.detect_partial_tag_at_end(
+                                    step_text))
+                            if ((_step_truncated or _partial)
+                                    and _trunc_continues < 2):
+                                _trunc_continues += 1
+                                if _partial:
+                                    print(f"[PARTIAL TAG] step {step} "
+                                          f"ended mid-tag "
+                                          f"({_partial!r}) -- continuing "
+                                          f"({_trunc_continues}/2).",
+                                          flush=True)
+                                    tool_results_acc[
+                                        f"partial_tag:step{step}"] = (
+                                        f"[SYSTEM NOTE] Your step-{step} "
+                                        f"response STOPPED mid-tag: "
+                                        f"'{_partial}' has no closing "
+                                        f"bracket, so nothing executed. "
+                                        f"Emit the COMPLETE tag now with "
+                                        f"its closing bracket (e.g. "
+                                        f"[VERIFY_FILE: <path>]), then "
+                                        f"finish the task.")
+                                    await websocket.send_json({
+                                        "type": "tool_result",
+                                        "tool": "system",
+                                        "output": (
+                                            f"⚠️ Step {step} ended "
+                                            f"mid-tag — asking the model "
+                                            f"to re-emit it completely."),
+                                    })
+                                else:
+                                    print(f"[STEP CAP] step {step} "
+                                          f"truncated with no parseable "
+                                          f"actions -- continuing "
+                                          f"({_trunc_continues}/2).",
+                                          flush=True)
+                                continue
                             clean = step_text.strip()
+                            # v2.13.1 (Bug B): unexecuted-tag signal.
+                            _orph = sage_engine.detect_orphan_tool_tags(
+                                clean)
+                            if _orph:
+                                print(f"[PARSER WARNING] unexecuted "
+                                      f"tool-tag text in final answer: "
+                                      f"{_orph}", flush=True)
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "parser",
+                                    "output": (
+                                        "⚠️ This response contains tool-"
+                                        "tag text that was NOT executed ("
+                                        + ", ".join(_orph) +
+                                        ") — likely malformed or cut off. "
+                                        "Nothing ran for those tags."),
+                                })
                             for chunk in _chunk_text(clean, 4):
                                 if model_manager._abort:
                                     aborted = True
@@ -5123,6 +5387,73 @@ async def ws_chat(websocket: WebSocket):
                                 aborted = True
                                 break
                             result = None  # set by handlers; read after
+
+                            # ── CUSTOMS gate (v2.13) ──────────────────
+                            # Single validation chokepoint for ALL tag-
+                            # dispatched tools. Shape-preserving: repaired
+                            # content flows into the handlers unchanged.
+                            # Bounce/reject text goes into tool_results_acc
+                            # so the model sees and fixes its own mistake
+                            # (Tier 3), or the user sees a real failure
+                            # (Tier 4). No-op when customs_enabled=false.
+                            # ── Intent classification (v2.13.2) ──────
+                            # BEFORE the Customs gate so the label rides
+                            # the same hash-chain event. Deterministic
+                            # rules + reason string; opportunistic
+                            # actions get a chat ⚠️ like [STEP CAP] and
+                            # [PARSER WARNING]. Never blocks dispatch.
+                            _int_label, _int_reason = "requested", ""
+                            try:
+                                if _turn_scoped_instr is None:
+                                    _turn_scoped_instr = (
+                                        intent_scope
+                                        .scoped_instruction_names(
+                                            procedural.get_all()))
+                                _int_target, _int_content = "", ""
+                                if (action_type == "save_file"
+                                        and isinstance(content, tuple)):
+                                    _int_target = content[0]
+                                    _int_content = content[1]
+                                elif isinstance(content, str):
+                                    _int_target = content[:120]
+                                _int_label, _int_reason = (
+                                    intent_scope.classify_action(
+                                        action_type, _int_target,
+                                        user_request_text,
+                                        _turn_saves, tool_results_acc,
+                                        _turn_scoped_instr,
+                                        _int_content))
+                                if _int_label == "opportunistic":
+                                    print(f"[INTENT] opportunistic "
+                                          f"{action_type}: "
+                                          f"{_int_reason}", flush=True)
+                                    await websocket.send_json({
+                                        "type": "tool_result",
+                                        "tool": "intent",
+                                        "output": (
+                                            f"⚠️ Opportunistic action "
+                                            f"({action_type}): "
+                                            f"{_int_reason}"),
+                                    })
+                            except Exception as _int_e:
+                                print(f"[INTENT] classifier skipped: "
+                                      f"{_int_e}")
+
+                            _cst = customs_daemon.inspect_tag(
+                                action_type, content, origin="agentic",
+                                intent=_int_label)
+                            if not _cst.allowed:
+                                executed_any = True
+                                tool_results_acc[
+                                    f"customs:{action_type}:step{step}"
+                                ] = _cst.message
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": action_type,
+                                    "output": _cst.message,
+                                })
+                                continue
+                            content = _cst.content
 
                             if action_type in ("search",
                                                "search_general") and web_ok:
@@ -5356,11 +5687,29 @@ async def ws_chat(websocket: WebSocket):
                                         fname, fcontent)
                                     if save_result.get("success"):
                                         result = f"Saved {save_result['filename']} to downloads ({save_result['size']} bytes)"
+                                        # v2.13.4: surface the safety net
+                                        if save_result.get("backup"):
+                                            result += (
+                                                f" — previous version "
+                                                f"backed up as "
+                                                f"{save_result['backup']}")
                                     else:
                                         result = f"Save failed: {save_result.get('error', 'unknown')}"
                                 except Exception as e:
+                                    save_result = {}
                                     result = f"Save error: {e}"
                                 tool_results_acc[f"save:{fname}"] = result
+                                # v2.13.2: per-file history for intent
+                                # classification (retry vs redo drift).
+                                # v2.13.4: + resolved absolute path, so
+                                # verify_file auto-chains to where the
+                                # save ACTUALLY wrote.
+                                _turn_saves.setdefault(fname, []).append({
+                                    "content": fcontent,
+                                    "ok": result.startswith("Saved "),
+                                    "path": (save_result or {}).get(
+                                        "path", ""),
+                                })
                                 await websocket.send_json({
                                     "type": "tool_result",
                                     "tool": "save_file",
@@ -5392,7 +5741,7 @@ async def ws_chat(websocket: WebSocket):
                                     "message": f"Generating image: {_gen_prompt[:80]}",
                                 })
                                 try:
-                                    _img = await _generate_image_routed(_gen_prompt, downloads_dir=str(_downloads_dir_for_ns(_ws_ns)))
+                                    _img = await _generate_image_routed(_gen_prompt, downloads_dir=str(_downloads_dir_for_ns(_ws_ns)), _customs_cleared=True)
                                 except Exception as _ge:
                                     _img = {"success": False, "error": str(_ge)}
                                 if _img.get("success"):
@@ -5483,6 +5832,42 @@ async def ws_chat(websocket: WebSocket):
                                 # missing files. Truth, not vibes.
                                 executed_any = True
                                 vpath = str(content).strip()
+                                # v2.13.4 ROOT-CAUSE FIX: auto-chain to
+                                # the exact absolute path this turn's
+                                # save actually wrote, instead of letting
+                                # the model reconstruct it (the multi-day
+                                # wrong-directory false-negative). Match
+                                # by save name, basename, or the
+                                # sanitizer-flattened form.
+                                try:
+                                    _vbase = vpath.replace(
+                                        "\\", "/").rsplit("/", 1)[-1]
+                                    _vsan = re.sub(r'[^\w\-.]', '_',
+                                                   vpath)
+                                    for _sf, _hist in _turn_saves.items():
+                                        if not _hist or not _hist[-1].get(
+                                                "ok"):
+                                            continue
+                                        _sp = _hist[-1].get("path", "")
+                                        if not _sp:
+                                            continue
+                                        _spn = _sp.replace(
+                                            "\\", "/").rsplit("/", 1)[-1]
+                                        if (_sf in (vpath, _vbase)
+                                                or _spn in (vpath, _vbase)
+                                                or _spn == _vsan):
+                                            if _sp != vpath:
+                                                print(
+                                                    f"[VERIFY] auto-"
+                                                    f"chained {vpath!r} "
+                                                    f"-> {_sp!r} (path "
+                                                    f"from this turn's "
+                                                    f"save)", flush=True)
+                                                vpath = _sp
+                                            break
+                                except Exception as _vc_e:
+                                    print(f"[VERIFY] auto-chain skipped: "
+                                          f"{_vc_e}")
                                 await websocket.send_json({
                                     "type": "tool_call",
                                     "tool": "verify_file",
@@ -5588,6 +5973,15 @@ async def ws_chat(websocket: WebSocket):
                                             "Use [REMEMBER:key|description]."
                                         )
                                     else:
+                                        # v2.13.2 sub-task 1: classify +
+                                        # persist the instruction's scope
+                                        # (default observe_only) so it's
+                                        # inspectable later, not re-
+                                        # inferred fresh each time.
+                                        _scope, _sphrase = (
+                                            intent_scope.classify_scope(
+                                                p_desc,
+                                                user_request_text))
                                         is_new = procedural.add_procedure(
                                             key=p_key,
                                             value=p_desc,
@@ -5595,6 +5989,9 @@ async def ws_chat(websocket: WebSocket):
                                             metadata={
                                                 "source": "tag",
                                                 "step": step,
+                                                "scope": _scope,
+                                                "scope_matched":
+                                                    _sphrase or "",
                                             },
                                         )
                                         entry = (
@@ -5609,6 +6006,7 @@ async def ws_chat(websocket: WebSocket):
                                                 if is_new else "updated")
                                         result = (
                                             f"REMEMBER ok: {verb} '{p_key}' "
+                                            f"[scope: {_scope}] "
                                             f"(chain_hash "
                                             f"{chash[:12] + '…' if chash else 'n/a'})"
                                         )
@@ -5773,8 +6171,11 @@ async def ws_chat(websocket: WebSocket):
                                         q = s.split(":", 1)[-1].strip(
                                             ) if ":" in s else s
                                         return ("news", lambda q=q: (
-                                            sage_engine.web_search(
-                                                q, search_type="news")))
+                                            _customs_run(
+                                                "search", {"query": q},
+                                                lambda a: sage_engine.web_search(
+                                                    a["query"],
+                                                    search_type="news"))))
                                     if (sl.startswith("search general")
                                             or sl.startswith("general ")
                                             or sl.startswith("search:")
@@ -5782,22 +6183,31 @@ async def ws_chat(websocket: WebSocket):
                                         q = s.split(":", 1)[-1].strip(
                                             ) if ":" in s else s
                                         return ("general", lambda q=q: (
-                                            sage_engine.web_search(
-                                                q,
-                                                search_type="general")))
+                                            _customs_run(
+                                                "search_general",
+                                                {"query": q},
+                                                lambda a: sage_engine.web_search(
+                                                    a["query"],
+                                                    search_type="general"))))
                                     if sl.startswith("weather"):
                                         loc = s.split(
                                             None, 1)[-1] if " " in s \
                                             else s
                                         return ("weather", lambda l=loc: (
-                                            sage_engine.get_weather(l)))
+                                            _customs_run(
+                                                "weather", {"location": l},
+                                                lambda a: sage_engine.get_weather(
+                                                    a["location"]))))
                                     if (sl.startswith("browse")
                                             or sl.startswith("http")):
                                         url = s.split(
                                             None, 1)[-1] if " " in s \
                                             else s
                                         return ("browse", lambda u=url: (
-                                            sage_engine.browse_url(u)))
+                                            _customs_run(
+                                                "browse", {"url": u},
+                                                lambda a: sage_engine.browse_url(
+                                                    a["url"]))))
                                     return (None, lambda s=s: (
                                         f"(unrecognised subtask: "
                                         f"{s})"))
@@ -5996,6 +6406,25 @@ async def ws_chat(websocket: WebSocket):
                         # final answer is just prose.
                         if has_done:
                             clean = _stream_clean_final_answer()
+                            # v2.13.1 (Bug B): unexecuted-tag signal on
+                            # the done path too (parsed spans are already
+                            # stripped; anything tag-like left is a leak).
+                            _orph = sage_engine.detect_orphan_tool_tags(
+                                clean)
+                            if _orph:
+                                print(f"[PARSER WARNING] unexecuted "
+                                      f"tool-tag text in final answer: "
+                                      f"{_orph}", flush=True)
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "parser",
+                                    "output": (
+                                        "⚠️ This response contains tool-"
+                                        "tag text that was NOT executed ("
+                                        + ", ".join(_orph) +
+                                        ") — likely malformed or cut off. "
+                                        "Nothing ran for those tags."),
+                                })
                             for chunk in _chunk_text(clean, 4):
                                 if model_manager._abort:
                                     aborted = True
@@ -6054,6 +6483,24 @@ async def ws_chat(websocket: WebSocket):
                         if not executed_any:
                             # Tags present but no enabled tool matched —
                             # stream the raw text as the final answer
+                            # v2.13.1 (Bug B): unexecuted-tag signal.
+                            _orph = sage_engine.detect_orphan_tool_tags(
+                                step_text)
+                            if _orph:
+                                print(f"[PARSER WARNING] unexecuted "
+                                      f"tool-tag text in final answer: "
+                                      f"{_orph}", flush=True)
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "parser",
+                                    "output": (
+                                        "⚠️ This response contains tool-"
+                                        "tag text that was NOT executed ("
+                                        + ", ".join(_orph) +
+                                        ") — likely disabled tools, "
+                                        "malformed tags, or a cut-off "
+                                        "response."),
+                                })
                             for chunk in _chunk_text(step_text, 4):
                                 full_response += chunk
                                 await websocket.send_json({
