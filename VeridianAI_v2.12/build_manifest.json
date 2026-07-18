@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "74bb6d64b3034322a9fa8bd3c7f746e7",
-    "built_utc": "2026-07-18T19:01:17.292823+00:00",
+    "build_id": "c21158c2ef814120a6564b68e5756eaf",
+    "built_utc": "2026-07-18T20:22:07.257263+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -154,7 +154,7 @@
       "backend/test_skill_trust.py": "f3da7de5e2795bfd872a4cd1e14163c42c4fd631e5bbe723dce0e8af0409da82",
       "backend/test_tag_parser_v213.py": "2984de9a3e4cab988d9d36583024d6157a2bba6fd73b6f21e0d9de71bbfc74a2",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
-      "backend/tier_launcher.py": "fcc020de83ca65435284527e8f8a73a0970fc4769754261174e9be244fb0e057",
+      "backend/tier_launcher.py": "23c5882de7d1f6b903c2bd931f31f629c1efca44b5a6e00fa4b70bf06fb8d9f9",
       "backend/tier_lifecycle.py": "316038cd33cc339f90fe9175e504f8cbcf2febd4f196618b6db6946660635f4c",
       "backend/time_manager.py": "2919e2a1cba0932fb4256bc952a073bdf7d35f753f968bc54804365983f21108",
       "backend/train_plm_daemon_v2.py": "c6abb9bc4611a61641c00a13824328cbe52532d009e5de74b1639d473bd1141a",
@@ -233,5 +233,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "da6uFEbWbJ7Opc2WQrKsuDOGU0o9lrup/IkWUbpo+a663vKXwTstGeSe+ixTEWkGvLcAFe4jzBpWoUK+9nOnDQ=="
+  "signature_b64": "KinfytdWgyvOP5PlXJzhQysdzVv1hfqNs7kOtvwnyDh2PXDatEgR9LJgyS/PFKF1rEaGg5xITC9ERGtnhJOQDg=="
 }
