@@ -47,7 +47,7 @@ Filter/select these and dismiss with reason **False positive**.
 
 | Alert | File:line | Why it's safe |
 |-------|-----------|---------------|
-| #7 | skill_api.py:233 | `_validate_external_url(base)` runs first (blocks private/loopback/link-local/reserved/multicast/unspecified); owner-only route |
+| #7, #64, # | skill_api.py:233 | `_validate_external_url(base)` runs first (blocks private/loopback/link-local/reserved/multicast/unspecified); owner-only route |
 | #5, #6 | relay_client.py:22, 32 | `relay` is validated in `skill_api` before `RelayClient` is built. Left the transport unrestricted **on purpose** so local/LAN Aether relays keep working |
 
 **Path injection** (these specific alert numbers — the rest of this rule were fixed above):
