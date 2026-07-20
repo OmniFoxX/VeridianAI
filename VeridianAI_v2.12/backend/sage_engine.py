@@ -383,6 +383,25 @@ def _safe_archive_name(filename):
     return name
 
 
+def _archive_path(name, ns=None):
+    """Resolve an already-sanitised archive *name* to a concrete path and confirm
+    it stays inside this namespace's archive folder. Defence-in-depth on top of
+    _safe_archive_name: the fully resolved candidate is compared against the
+    resolved archive root, so anything that escapes the folder (a stray '..', an
+    absolute name, or a symlink) yields None instead of ever reaching a
+    filesystem sink. HIPAA: one user's crafted input can never touch another
+    namespace's PHI archives, even if a future caller forgets to sanitise."""
+    folder = _archive_folder(ns)
+    try:
+        target = (folder / name).resolve()
+        root = folder.resolve()
+        if target == root or root in target.parents:
+            return target
+    except Exception:
+        pass
+    return None
+
+
 def load_chat_memory(ns=None) -> list:
     mf = _memory_file(ns)
     if mf.exists():
@@ -436,7 +455,8 @@ def set_archive_title(filename: str, title, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    if not (_archive_folder(ns) / name).exists():
+    path = _archive_path(name, ns)
+    if not path or not path.exists():
         return {"success": False, "error": "Archive not found"}
     title = (title or "").strip()[:_MAX_TITLE_LEN] if isinstance(title, str) else ""
     try:
@@ -448,7 +468,11 @@ def set_archive_title(filename: str, title, ns=None) -> dict:
         _save_titles(titles, ns)
         return {"success": True, "filename": name, "custom_title": title or None}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        # Log detail server-side only; never hand raw exception text (paths,
+        # internals) back to the caller. Generic message keeps the response
+        # clean and accessible (WCAG 3.3.1) without leaking implementation.
+        print(f"[ARCHIVE] set_archive_title failed for {name!r}: {e}")
+        return {"success": False, "error": "Could not update the archive title."}
 
 
 def _suggest_fork_title(history: list, ns=None, *, max_scan: int = 40):
@@ -603,8 +627,8 @@ def load_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    path = _archive_folder(ns) / name
-    if not path.exists():
+    path = _archive_path(name, ns)
+    if not path or not path.exists():
         return {"success": False, "error": "Archive not found"}
     try:
         data = atrest.load_json_auto(path.read_bytes())
@@ -623,15 +647,17 @@ def load_archive(filename: str, ns=None) -> dict:
         return {"success": True, "message": f"Loaded {name} ({len(data)} messages)",
                 "history": data}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        # Server-side detail only; caller gets a generic, non-leaky message.
+        print(f"[ARCHIVE] load_archive failed for {name!r}: {e}")
+        return {"success": False, "error": "Could not load that archive."}
 
 
 def delete_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "File not found"}
-    path = _archive_folder(ns) / name
-    if path.exists():
+    path = _archive_path(name, ns)
+    if path and path.exists():
         path.unlink()
         # v2.12.9: a deleted archive takes its custom title with it (best
         # effort -- a title-store hiccup must never fail the delete).

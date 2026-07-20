@@ -3960,8 +3960,32 @@ async def api_auth_users_mfa_reset(request: Request, payload: dict):
     if not target or not _users.user_exists(target):
         raise HTTPException(404, "no such user")
     r = _mfa.reset_user(target)
-    print(f"[AUTH] {s.get('username')} reset MFA for '{target}'"
-          f" (had_mfa={r.get('had_mfa')})")
+    # --- Security-audit event (HIPAA §164.312(b) audit controls) --------------
+    # WHO reset WHOSE MFA, and the outcome -- full accountability, retained on
+    # purpose. It is written to the tamper-evident hash-chain audit log (the same
+    # sink customs_daemon uses), NEVER to clear-text stdout. Only event metadata
+    # is recorded: reset_user() returns just {success, had_mfa}, so no MFA secret,
+    # seed or token is ever read here and none is ever handed to a logger. The
+    # sensitive detail (account names) is Fernet-encrypted at rest via atrest
+    # before it touches the log; the chain hashes the ciphertext, so tamper-
+    # evidence still holds without the key.
+    try:
+        import atrest as _atrest
+        from handoff_guard import HandoffGuard
+        _detail = _atrest.dump_json_encrypted({
+            "action": "mfa_reset",
+            "actor": s.get("username"),
+            "target": target,
+            "had_mfa": bool(r.get("had_mfa")),
+            "outcome": "success" if r.get("success") else "failure",
+        }).decode("utf-8")
+        HandoffGuard(DATA_DIR).audit("auth", _detail)
+    except Exception as _audit_err:
+        # An audit-sink hiccup must never fail the reset; surface the gap through
+        # the logger (not print, no identifiers) so it stays visible.
+        import logging as _logging
+        _logging.getLogger("veridian").warning(
+            "[AUTH] MFA-reset audit append failed: %r", _audit_err)
     return {"ok": True, "username": target}
 
 
