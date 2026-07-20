@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "645da9d777294fd58f1c5bdb0f233e77",
-    "built_utc": "2026-07-20T05:03:20.019300+00:00",
+    "build_id": "1450a58acfa34ca690d6f94006999dd8",
+    "built_utc": "2026-07-20T19:52:09.912523+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -92,7 +92,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "c6b1f866213307d80d8a61102ebc285aaf0d15cd3d6d85bf54de9e59a5bcbf5c",
+      "backend/main.py": "8e7ad14658e6b431fdcd705d22ebabd94e3112dd6f40803111a7a491a4f0b08a",
       "backend/mcp_handlers.py": "a99b93f599d09eaf784826290aeb6aef7a58852b9722e73b4fafd2981f656266",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -118,7 +118,7 @@
       "backend/request_scheduler.py": "1ae318e130d4c7330dbd631f6619337f71e26d68f398b1c9fd591fc9803e9f82",
       "backend/sage_daemon.py": "5038174a4fb52cb7a62d834c99a51386766534b92e2cbaa4f46640c3821ba4ab",
       "backend/sage_daemon_client.py": "2ec56533c7e00a0022c046b3936626e5a63532931b5d6f6076275f6d1005be6b",
-      "backend/sage_engine.py": "e20e82b8eaf753074e613abfed6d9d8e8485338d3830710e0eff64fc0ccd3d8f",
+      "backend/sage_engine.py": "b89558da401025981473737d75477df88129bd88df5335ebba7c873e7ed54394",
       "backend/sage_messaging_adapter.py": "b73ab78b01bdb8967e1f19125038d2f1ceb9ef1cc0c38bdff5c050ea16f995e8",
       "backend/sage_rag.py": "b6c08d57909851e7488c154c8aecc543f82943435cd2e17b8c0acf007e4ba56d",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
@@ -239,5 +239,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "6Q7Zkky9O6s2qFBpizsxa3YJJ3IVTa3070ktvZtAvMNsqlDoxy+TbSuizNTQJCz1SLlPRJCh5s8mpXKx5XZNDA=="
+  "signature_b64": "4R6ZNc0cxJFmD+bmtdt39UWr7N4bLom37NrsLLw7puIDfC/Lh0HVb/uehOK5S9jEdny+qnl2m/W9p7F5NFgZDg=="
 }

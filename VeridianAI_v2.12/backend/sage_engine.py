@@ -321,6 +321,11 @@ def user_data_dir(ns):
     if not ns:
         return None
     from config import DATA_DIR
+    # SECURITY: callers pass `ns` only after _safe_ns() has constrained it to
+    # _NS_RE (^[A-Za-z0-9_-]{1,64}$); it cannot contain a slash, backslash, dot or
+    # colon, so no '../' or absolute-path traversal is possible via the namespace
+    # segment below. (Archive routes now apply _safe_ns() like the upload/download
+    # routes already did.)
     return DATA_DIR / "users" / str(ns)
 
 
@@ -383,25 +388,6 @@ def _safe_archive_name(filename):
     return name
 
 
-def _archive_path(name, ns=None):
-    """Resolve an already-sanitised archive *name* to a concrete path and confirm
-    it stays inside this namespace's archive folder. Defence-in-depth on top of
-    _safe_archive_name: the fully resolved candidate is compared against the
-    resolved archive root, so anything that escapes the folder (a stray '..', an
-    absolute name, or a symlink) yields None instead of ever reaching a
-    filesystem sink. HIPAA: one user's crafted input can never touch another
-    namespace's PHI archives, even if a future caller forgets to sanitise."""
-    folder = _archive_folder(ns)
-    try:
-        target = (folder / name).resolve()
-        root = folder.resolve()
-        if target == root or root in target.parents:
-            return target
-    except Exception:
-        pass
-    return None
-
-
 def load_chat_memory(ns=None) -> list:
     mf = _memory_file(ns)
     if mf.exists():
@@ -455,8 +441,15 @@ def set_archive_title(filename: str, title, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    path = _archive_path(name, ns)
-    if not path or not path.exists():
+    folder = _archive_folder(ns)
+    target = folder / name
+    # Path-traversal barrier, kept in the SAME scope as the sink below. CodeQL
+    # models startswith() on a RESOLVED path against a trusted prefix as a path
+    # sanitizer; a check hidden in a helper is not carried across the return
+    # boundary. Trailing os.sep defeats the '.../archives_evil' sibling-prefix trap.
+    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+        return {"success": False, "error": "Archive not found"}
+    if not target.exists():
         return {"success": False, "error": "Archive not found"}
     title = (title or "").strip()[:_MAX_TITLE_LEN] if isinstance(title, str) else ""
     try:
@@ -627,11 +620,16 @@ def load_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    path = _archive_path(name, ns)
-    if not path or not path.exists():
+    folder = _archive_folder(ns)
+    target = folder / name
+    # Same traversal barrier as set_archive_title -- guard sits with its sinks
+    # (exists + read_bytes), so CodeQL's startswith path-sanitizer applies here.
+    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+        return {"success": False, "error": "Archive not found"}
+    if not target.exists():
         return {"success": False, "error": "Archive not found"}
     try:
-        data = atrest.load_json_auto(path.read_bytes())
+        data = atrest.load_json_auto(target.read_bytes())
         # v2.12.8 session provenance: append the boundary marker so the model
         # knows the restored turns are a PRIOR session. Config-gated
         # (session_boundary_markers, default ON); the try/except keeps a
@@ -656,9 +654,14 @@ def delete_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "File not found"}
-    path = _archive_path(name, ns)
-    if path and path.exists():
-        path.unlink()
+    folder = _archive_folder(ns)
+    target = folder / name
+    # Same traversal barrier as set_archive_title -- guard sits with its sinks
+    # (exists + unlink) in this scope so the startswith sanitizer is recognised.
+    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+        return {"success": False, "error": "File not found"}
+    if target.exists():
+        target.unlink()
         # v2.12.9: a deleted archive takes its custom title with it (best
         # effort -- a title-store hiccup must never fail the delete).
         try:

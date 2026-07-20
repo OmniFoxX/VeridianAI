@@ -2569,12 +2569,12 @@ def _uploads_dir_for_ns(ns):
 
 @app.get("/api/archives")
 async def api_list_archives(request: Request):
-    return {"archives": sage_engine.get_archives(_session_ns(request))}
+    return {"archives": sage_engine.get_archives(_safe_ns(_session_ns(request)))}
 
 
 @app.post("/api/archives/save")
 async def api_archive_chat(request: Request):
-    ns = _session_ns(request)
+    ns = _safe_ns(_session_ns(request))
     history = sage_engine.load_chat_memory(ns)
     return sage_engine.archive_conversation(history, ns)
 
@@ -2584,7 +2584,7 @@ async def api_load_archive(payload: dict, request: Request):
     fn = payload.get("filename", "")
     if not fn:
         raise HTTPException(400, "filename required")
-    return sage_engine.load_archive(fn, _session_ns(request))
+    return sage_engine.load_archive(fn, _safe_ns(_session_ns(request)))
 
 
 @app.post("/api/archives/delete")
@@ -2592,7 +2592,7 @@ async def api_delete_archive(payload: dict, request: Request):
     fn = payload.get("filename", "")
     if not fn:
         raise HTTPException(400, "filename required")
-    return sage_engine.delete_archive(fn, _session_ns(request))
+    return sage_engine.delete_archive(fn, _safe_ns(_session_ns(request)))
 
 
 @app.post("/api/archives/title")
@@ -2605,7 +2605,7 @@ async def api_set_archive_title(payload: dict, request: Request):
     if not fn:
         raise HTTPException(400, "filename required")
     return sage_engine.set_archive_title(fn, payload.get("title", ""),
-                                         _session_ns(request))
+                                         _safe_ns(_session_ns(request)))
 
 
 # ============================================================================
