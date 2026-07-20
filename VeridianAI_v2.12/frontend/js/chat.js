@@ -1442,6 +1442,10 @@ function oraclePrompt(message, opts) {
       resolve(val);
     };
     var inp = document.getElementById("oracle-prompt-input");
+    // v2.12.9: optional prefill (opts.value) for edit-style prompts, e.g.
+    // archive rename / fork-title suggestion. Selected on focus so typing
+    // replaces it in one keystroke; absent = the old empty-input behavior.
+    if (inp && opts.value != null) inp.value = String(opts.value);
     onKey = function (e) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -1462,7 +1466,10 @@ function oraclePrompt(message, opts) {
     document.getElementById("oracle-prompt-cancel").onclick = function () {
       finish(null);
     };
-    if (inp) inp.focus();
+    if (inp) {
+      inp.focus();
+      if (opts.value != null) inp.select();
+    }
   });
 }
 window.oraclePrompt = oraclePrompt;
@@ -1738,6 +1745,26 @@ async function archiveChat() {
     if (result.success) {
       setStatus(`Chat archived: ${result.timestamp}`);
       _clearMessagesNow(); // it's safely archived now -> wipe without re-confirming
+      // v2.12.9 fork-aware titling: the backend noticed this conversation
+      // shares its opening with an existing archive (a reloaded-then-
+      // diverged thread), so identical previews are guaranteed. Offer a
+      // title drawn from the first divergent message; accept, edit, or
+      // cancel (cancel = no title, exactly the old behavior).
+      if (result.suggested_title && result.filename) {
+        const t = await oraclePrompt(
+          "This chat shares its opening with an earlier archive, so their previews will look identical. Title this branch?",
+          { title: "Name this branch", okLabel: "Save title", value: result.suggested_title },
+        );
+        if (t !== null && t.trim()) {
+          try {
+            await fetch("/api/archives/title", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ filename: result.filename, title: t.trim() }),
+            });
+          } catch {} // best effort -- the archive itself is already safe
+        }
+      }
     } else {
       setStatus(`Archive failed: ${result.error}`);
     }
@@ -1789,24 +1816,67 @@ async function refreshArchiveList() {
         '<div class="loading-placeholder">No archives found</div>';
       return;
     }
+    // v2.12.9 custom titles: forks of one conversation share their opening,
+    // so first-sentence previews are identical across them. custom_title
+    // (optional, backend sidecar) becomes the primary label when set; unset
+    // archives render exactly as before. The rename control is a real
+    // <button> (global :focus-visible outline = WCAG 2.4.7) with a specific
+    // accessible name per 4.1.2 -- built right per the toggle-switch lesson.
+    window._archiveIndex = {};
     container.innerHTML = archives
-      .map(
-        (a) => `
+      .map((a) => {
+        window._archiveIndex[a.filename] = a;
+        const when = a.timestamp.replace("_", " ");
+        const label = a.custom_title ? escapeHtml(a.custom_title) : when;
+        return `
       <div class="archive-item" data-filename="${a.filename}" onclick="selectArchive(this, '${a.filename}')">
         <div class="archive-item-header">
-          <span>${a.timestamp.replace("_", " ")}</span>
-          <span>${a.message_count} msgs</span>
+          <span class="archive-item-title">${label}</span>
+          <span class="archive-item-side">
+            <button type="button" class="archive-rename-btn"
+              aria-label="Rename chat archive ${when}"
+              data-tip="Rename this archive"
+              onclick="event.stopPropagation();renameArchive('${a.filename}')">&#9998;</button>
+            <span>${a.message_count} msgs</span>
+          </span>
         </div>
-        <div class="archive-item-meta">${formatBytes(a.size)}</div>
+        <div class="archive-item-meta">${a.custom_title ? when + " \u00b7 " : ""}${formatBytes(a.size)}</div>
         ${a.preview ? `<div class="archive-preview-text">${a.preview.map((p) => `<b>${p.role}:</b> ${escapeHtml(p.content)}`).join("<br>")}</div>` : ""}
       </div>
-    `,
-      )
+    `;
+      })
       .join("");
   } catch {
     container.innerHTML =
       '<div class="loading-placeholder">Could not load archives</div>';
   }
+}
+
+/* v2.12.9: set/clear an archive's optional display title. oraclePrompt
+   replaces #modal-root (it owns that container), so the Load Archive dialog
+   is re-opened afterwards either way -- same list, fresh data. */
+async function renameArchive(filename) {
+  const a = (window._archiveIndex || {})[filename] || {};
+  const title = await oraclePrompt(
+    "Custom title for this archive.\nLeave empty and save to go back to the automatic preview.",
+    { title: "Rename chat archive", okLabel: "Save", value: a.custom_title || "" },
+  );
+  if (title !== null) {
+    try {
+      const resp = await fetch("/api/archives/title", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename, title: title.trim() }),
+      });
+      const result = await resp.json();
+      setStatus(result.success
+        ? (title.trim() ? "Archive renamed" : "Archive title cleared")
+        : `Rename failed: ${result.error}`);
+    } catch {
+      setStatus("Rename error");
+    }
+  }
+  showLoadArchive();
 }
 
 function selectArchive(el, filename) {

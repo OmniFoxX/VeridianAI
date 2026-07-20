@@ -30,3 +30,10 @@ cryptography>=3.0
 # libheif in its wheels (Windows included), so usually no separate system install.
 pillow-heif>=0.13.0
 Pillow>=9.0.0
+# FIDO2 / passkeys (v2.13.5 auth policy): Yubico's own python-fido2, used by
+# backend/mfa.py to talk to security keys DIRECTLY (WindowsClient/CTAP2-HID),
+# bypassing Electron's file:// secure-context limitation. Pure-Python wheel.
+# The backend boots fine without it -- FIDO2 endpoints just report "not
+# installed" -- but it ships by default so YubiKey enrollment works
+# out of the box.
+fido2>=1.1.3

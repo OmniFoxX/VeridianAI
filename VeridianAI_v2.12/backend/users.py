@@ -149,12 +149,32 @@ def set_access(username, access):
     return {"success": True, "username": x.get("username")}
 
 
-def create_user(username, password, *, is_owner=False):
+def _check_policy(username, password):
+    """NIST 800-63B policy gate (length + reject-list; NO composition rules).
+    Returns None if the password passes, else an error dict. Fail-open ONLY if
+    the policy module itself is broken/missing -- account creation must never
+    hard-brick an install over a policy bug."""
+    try:
+        import password_policy
+        v = password_policy.validate(password, username=username)
+        if not v["ok"]:
+            return {"success": False, "error": " ".join(v["errors"]),
+                    "policy_errors": v["errors"]}
+    except ImportError:
+        pass
+    return None
+
+
+def create_user(username, password, *, is_owner=False, enforce_policy=True):
     username = (username or "").strip()
     if not username:
         return {"success": False, "error": "username required"}
     if not (password or ""):
         return {"success": False, "error": "password required"}
+    if enforce_policy:
+        bad = _check_policy(username, password)
+        if bad:
+            return bad
     store = _load()
     if _find(store, username) is not None:
         return {"success": False, "error": "user already exists"}
@@ -180,9 +200,13 @@ def verify_user(username, password):
     return {"success": False, "error": "invalid credentials"}
 
 
-def set_password(username, new_password):
+def set_password(username, new_password, *, enforce_policy=True):
     if not (new_password or ""):
         return {"success": False, "error": "password required"}
+    if enforce_policy:
+        bad = _check_policy(username, new_password)
+        if bad:
+            return bad
     store = _load()
     x = _find(store, username)
     if x is None:

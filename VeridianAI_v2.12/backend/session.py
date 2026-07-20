@@ -47,9 +47,13 @@ def owner_or_granted(request: Request, cookie_name: str, cap: str = None) -> boo
     return False
 
 
-def create_session(user, ttl=_DEFAULT_TTL):
+def create_session(user, ttl=_DEFAULT_TTL, must_change=False):
     """Create a session for a verified user dict ({username, ns, is_owner}). Returns
-    the opaque token to hand back as an HttpOnly cookie."""
+    the opaque token to hand back as an HttpOnly cookie.
+
+    must_change=True marks a session whose password FAILED the current policy
+    at login (legacy weak password): the session is valid but the middleware
+    confines it to the auth surface until the password is changed."""
     token = secrets.token_urlsafe(32)
     with _LOCK:
         _SESSIONS[token] = {
@@ -58,6 +62,7 @@ def create_session(user, ttl=_DEFAULT_TTL):
             "is_owner": bool(user.get("is_owner", False)),
             "created": _now(),
             "expires": _now() + int(ttl),
+            "must_change": bool(must_change),
         }
     return token
 

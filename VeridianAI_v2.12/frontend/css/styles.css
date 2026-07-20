@@ -2097,6 +2097,38 @@ pre:hover .copy-btn {
   color: var(--text-faint);
   margin-top: 2px;
 }
+/* v2.12.9 archive rename affordance. A real <button>, so the global
+   :focus-visible rule (gold outline + glow, WCAG 2.4.7) applies for free;
+   24x24 minimum hit target per the v2.12.7 target-size pass. */
+.archive-item-side {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.archive-item-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  padding-right: 8px;
+}
+.archive-rename-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  min-width: 24px;
+  min-height: 24px;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+.archive-rename-btn:hover {
+  color: var(--gold);
+  background: var(--gold-glow2);
+}
+
 .archive-preview-text {
   font-size: 11px;
   color: var(--text-muted);

@@ -2595,6 +2595,19 @@ async def api_delete_archive(payload: dict, request: Request):
     return sage_engine.delete_archive(fn, _session_ns(request))
 
 
+@app.post("/api/archives/title")
+async def api_set_archive_title(payload: dict, request: Request):
+    # v2.12.9 custom archive titles: optional display label stored in a
+    # per-namespace sidecar (sage_engine._TITLES_FILE), never the filename.
+    # Empty title clears the entry -> the browser falls back to the
+    # first-sentence preview exactly as before the feature existed.
+    fn = payload.get("filename", "")
+    if not fn:
+        raise HTTPException(400, "filename required")
+    return sage_engine.set_archive_title(fn, payload.get("title", ""),
+                                         _session_ns(request))
+
+
 # ============================================================================
 # v2.2 (2026-05-31) -- OpenAI-compatible + MCP routes for Continue.dev / IDE
 # integration. Session 1 scope: working MCP (HTTP + stdio share dispatcher),
@@ -3557,9 +3570,11 @@ async def api_auth_status(request: Request):
                 _ends = min(_ends, _rem)
             return {"authenticated": True, "username": s["username"],
                     "is_owner": s["is_owner"], "needs_setup": False,
-                    "multiuser": _mu, "ends_in": _ends}
+                    "multiuser": _mu, "ends_in": _ends,
+                    "must_change": bool(s.get("must_change"))}
         return {"authenticated": True, "username": s["username"],
-                "is_owner": s["is_owner"], "needs_setup": False, "multiuser": _mu}
+                "is_owner": s["is_owner"], "needs_setup": False, "multiuser": _mu,
+                "must_change": bool(s.get("must_change"))}
     return {"authenticated": False, "needs_setup": not _users.any_users(),
             "multiuser": _mu}
 
@@ -3624,9 +3639,35 @@ async def api_auth_login(payload: dict, request: Request):
         # Arm the between-sessions cooldown (no-op unless the policy sets
         # BOTH session_minutes and cooldown_minutes).
         _ap.note_login(r["username"], _ttl)
-    tok = _session.create_session(r, ttl=_ttl)
+    # NIST 800-63B login-time recheck: the ONLY moment we legitimately hold the
+    # plaintext is now, so grade the (correct) password against the CURRENT
+    # policy. Legacy weak passwords ('1', 'a', ...) still sign in -- but the
+    # session is minted must_change=True, which the gate middleware confines to
+    # the auth surface until the password is upgraded. This is the
+    # "prompt for change on evidence of compromise" clause, not rotation.
+    _must_change = False
+    try:
+        import password_policy as _pp
+        _must_change = not _pp.validate(payload.get("password", ""),
+                                        username=r["username"])["ok"]
+    except Exception:
+        _must_change = False
+    # MFA: if this account enrolled a second factor, do NOT mint a session yet.
+    # Hand back a short-lived challenge token; /api/auth/mfa/verify (TOTP or
+    # recovery code) or /api/auth/fido2/verify (security key) finishes login.
+    try:
+        import mfa as _mfa
+        _methods = _mfa.enabled_methods(r["username"])
+    except Exception:
+        _methods = []
+    if _methods:
+        _tok = _mfa.begin_challenge(r, must_change=_must_change, ttl=_ttl)
+        return JSONResponse({"success": False, "mfa_required": True,
+                             "methods": _methods, "mfa_token": _tok})
+    tok = _session.create_session(r, ttl=_ttl, must_change=_must_change)
     resp = JSONResponse({"success": True, "username": r["username"],
-                         "is_owner": r["is_owner"]})
+                         "is_owner": r["is_owner"],
+                         "must_change": _must_change})
     # Session cookie (NO max_age) so it's discarded when the browser/app closes
     # -> reopening requires a fresh sign-in. Server session still expires via TTL.
     resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
@@ -3677,6 +3718,170 @@ async def api_auth_change_password(payload: dict, request: Request):
     resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
                     secure=_cookie_secure(request))
     return resp
+
+
+# --- Password policy + MFA + FIDO2 endpoints (v2.13.5 auth policy) -------------
+# Design notes live in docs/security/AUTH_POLICY.md. Everything verifies
+# LOCALLY (blocklist file, TOTP math, stored FIDO2 public keys) -- auth never
+# needs the internet, consistent with VeridianAI's local-first stance.
+
+def _require_session(request: Request):
+    import session as _session
+    s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
+    if s is None:
+        raise HTTPException(401, "not signed in")
+    return s
+
+
+def _mint_session_response(user, ttl, must_change, request: Request):
+    """Shared tail of the two second-factor verify endpoints: mint the real
+    session and set the cookie exactly like /api/auth/login does."""
+    import session as _session
+    tok = _session.create_session(user, ttl=(ttl or _AUTH_TTL),
+                                  must_change=must_change)
+    resp = JSONResponse({"success": True, "username": user.get("username"),
+                         "is_owner": bool(user.get("is_owner")),
+                         "must_change": bool(must_change)})
+    resp.set_cookie(_AUTH_COOKIE, tok, httponly=True, samesite="lax",
+                    secure=_cookie_secure(request))
+    return resp
+
+
+@app.post("/api/auth/password-check")
+async def api_auth_password_check(payload: dict):
+    """Live feedback for the (non-blocking) strength meter. Advisory here;
+    the SAME validator enforces at create/change time. The password is graded
+    in memory and never logged or stored."""
+    import password_policy as _pp
+    return _pp.validate(payload.get("password", ""),
+                        username=payload.get("username") or None)
+
+
+@app.get("/api/auth/mfa/status")
+async def api_auth_mfa_status(request: Request):
+    s = _require_session(request)
+    import mfa as _mfa
+    return _mfa.status(s["username"])
+
+
+@app.post("/api/auth/mfa/totp/begin")
+async def api_auth_totp_begin(request: Request):
+    s = _require_session(request)
+    import mfa as _mfa
+    return _mfa.totp_begin(s["username"])
+
+
+@app.post("/api/auth/mfa/totp/confirm")
+async def api_auth_totp_confirm(payload: dict, request: Request):
+    s = _require_session(request)
+    import mfa as _mfa
+    r = _mfa.totp_confirm(s["username"], payload.get("code", ""))
+    if not r.get("success"):
+        raise HTTPException(400, r.get("error", "could not confirm code"))
+    return r  # recovery_codes present iff this enrollment minted them
+
+
+@app.post("/api/auth/mfa/totp/disable")
+async def api_auth_totp_disable(payload: dict, request: Request):
+    s = _require_session(request)
+    import users as _users
+    import mfa as _mfa
+    # Destructive MFA ops re-verify the password (session alone isn't enough).
+    if not _users.verify_user(s["username"], payload.get("password", "")).get("success"):
+        raise HTTPException(401, "password is incorrect")
+    return _mfa.totp_disable(s["username"])
+
+
+@app.post("/api/auth/mfa/recovery/regenerate")
+async def api_auth_recovery_regenerate(payload: dict, request: Request):
+    s = _require_session(request)
+    import users as _users
+    import mfa as _mfa
+    if not _users.verify_user(s["username"], payload.get("password", "")).get("success"):
+        raise HTTPException(401, "password is incorrect")
+    r = _mfa.regenerate_recovery(s["username"])
+    if not r.get("success"):
+        raise HTTPException(400, r.get("error", "could not regenerate codes"))
+    return r
+
+
+@app.post("/api/auth/mfa/verify")
+async def api_auth_mfa_verify(payload: dict, request: Request):
+    """Second login step: TOTP code or recovery code against a pending
+    challenge token from /api/auth/login."""
+    import mfa as _mfa
+    _ip = request.client.host if request.client else "?"
+    if _auth_guard.is_banned(_ip):
+        raise HTTPException(429, "too many failed attempts; try again shortly")
+    rec = _mfa.peek_challenge(payload.get("mfa_token", ""))
+    if rec is None:
+        raise HTTPException(401, "sign-in step expired; start over")
+    method = (payload.get("method") or "totp").strip().lower()
+    code = payload.get("code", "")
+    ok = (_mfa.verify_recovery(rec["username"], code) if method == "recovery"
+          else _mfa.verify_totp(rec["username"], code))
+    if not ok:
+        _auth_guard.record_failure(_ip)
+        raise HTTPException(401, "that code didn't verify")
+    _auth_guard.record_success(_ip)
+    rec = _mfa.consume_challenge(payload.get("mfa_token", ""))  # burn the token
+    if rec is None:
+        raise HTTPException(401, "sign-in step expired; start over")
+    return _mint_session_response(rec["user"], rec.get("ttl"),
+                                  rec.get("must_change"), request)
+
+
+@app.post("/api/auth/fido2/register")
+async def api_auth_fido2_register(payload: dict, request: Request):
+    """Enroll a security key for the signed-in user. BLOCKS until the key is
+    touched (native Windows dialog / raw CTAP elsewhere) -- so it runs in a
+    worker thread, keeping the event loop free."""
+    s = _require_session(request)
+    import mfa as _mfa
+    from starlette.concurrency import run_in_threadpool
+    r = await run_in_threadpool(_mfa.fido2_register, s["username"],
+                                payload.get("label"), payload.get("pin") or None)
+    if not r.get("success"):
+        raise HTTPException(400, r.get("error", "could not enroll security key"))
+    return r  # recovery_codes present iff this enrollment minted them
+
+
+@app.post("/api/auth/fido2/remove")
+async def api_auth_fido2_remove(payload: dict, request: Request):
+    s = _require_session(request)
+    import users as _users
+    import mfa as _mfa
+    if not _users.verify_user(s["username"], payload.get("password", "")).get("success"):
+        raise HTTPException(401, "password is incorrect")
+    r = _mfa.fido2_remove(s["username"], payload.get("id", ""))
+    if not r.get("success"):
+        raise HTTPException(400, r.get("error", "could not remove key"))
+    return r
+
+
+@app.post("/api/auth/fido2/verify")
+async def api_auth_fido2_verify(payload: dict, request: Request):
+    """Second login step, security-key flavor: local assertion against our
+    stored public keys. Blocks for the touch -> worker thread."""
+    import mfa as _mfa
+    _ip = request.client.host if request.client else "?"
+    if _auth_guard.is_banned(_ip):
+        raise HTTPException(429, "too many failed attempts; try again shortly")
+    rec = _mfa.peek_challenge(payload.get("mfa_token", ""))
+    if rec is None:
+        raise HTTPException(401, "sign-in step expired; start over")
+    from starlette.concurrency import run_in_threadpool
+    r = await run_in_threadpool(_mfa.fido2_authenticate, rec["username"],
+                                payload.get("pin") or None)
+    if not r.get("success"):
+        _auth_guard.record_failure(_ip)
+        raise HTTPException(401, r.get("error", "security key check failed"))
+    _auth_guard.record_success(_ip)
+    rec = _mfa.consume_challenge(payload.get("mfa_token", ""))
+    if rec is None:
+        raise HTTPException(401, "sign-in step expired; start over")
+    return _mint_session_response(rec["user"], rec.get("ttl"),
+                                  rec.get("must_change"), request)
 
 
 # --- Owner-only user management (multi-user) ----------------------------------
@@ -3740,6 +3945,24 @@ async def api_auth_users_delete(request: Request, payload: dict):
         except Exception as _wipe_err:
             print(f"[USERS] data wipe failed for {target}: {_wipe_err}")
     return {"ok": True, "wiped": wiped, "users": _users.list_users()}
+
+
+@app.post("/api/auth/users/mfa-reset")
+async def api_auth_users_mfa_reset(request: Request, payload: dict):
+    """Owner-driven MFA reset: the lost-YubiKey / lost-phone escape hatch.
+    Clears every second factor for the target account (password stays), so
+    they can sign in and re-enroll. The OWNER's own escape hatch is their
+    recovery codes -- or, with physical access, tools/reset_mfa.py."""
+    s = _require_owner(request)
+    import users as _users
+    import mfa as _mfa
+    target = (payload.get("username") or "").strip()
+    if not target or not _users.user_exists(target):
+        raise HTTPException(404, "no such user")
+    r = _mfa.reset_user(target)
+    print(f"[AUTH] {s.get('username')} reset MFA for '{target}'"
+          f" (had_mfa={r.get('had_mfa')})")
+    return {"ok": True, "username": target}
 
 
 # --- v2.13 Access Controls (owner-only): parental / manager restrictions ------
@@ -3829,6 +4052,13 @@ async def _session_gate(request: Request, call_next):
         return JSONResponse(
             {"error": "authentication required", "needs_login": True},
             status_code=401)
+    # A must_change session (legacy weak password detected at login) is
+    # confined to the auth surface: the ONLY way forward is the change-password
+    # flow. Enforced server-side so a hand-crafted client can't skip the modal.
+    if _s.get("must_change"):
+        return JSONResponse(
+            {"error": "password change required", "must_change": True},
+            status_code=403)
     request.state.user = _s
     return await call_next(request)
 

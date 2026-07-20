@@ -398,6 +398,117 @@ def save_chat_memory(history: list, ns=None):
     _memory_file(ns).write_text(json.dumps(history, indent=2), encoding="utf-8")
 
 
+# --- v2.12.9 custom archive titles -----------------------------------------
+# WHY A SIDECAR: archive files are (encrypted) plain LISTS of messages, and
+# several independent readers depend on that shape (CRAIID compression
+# validation, context_fatigue_detector, keyword/semantic search). Wrapping
+# archives in a metadata envelope would break every one of them, so the
+# optional custom title lives in ONE per-namespace sidecar index instead:
+# .archive_titles.dat in the archive folder, atrest-encrypted, mapping
+# filename -> title. Deliberately NOT named *.json and dot-prefixed so no
+# existing glob("*.json") / glob("archive_*.json") reader ever sees it, and
+# _safe_archive_name (which requires archive_*.json) can never reach it.
+# Archive FILENAMES are untouched -- they stay the unique, sortable
+# date-time scheme. An archive with no entry here behaves exactly as before.
+_TITLES_FILE = ".archive_titles.dat"
+_MAX_TITLE_LEN = 120
+
+
+def _load_titles(ns=None) -> dict:
+    p = _archive_folder(ns) / _TITLES_FILE
+    if not p.exists():
+        return {}
+    try:
+        d = atrest.load_json_auto(p.read_bytes())
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _save_titles(titles: dict, ns=None):
+    (_archive_folder(ns) / _TITLES_FILE).write_bytes(
+        atrest.dump_json_encrypted(titles))
+
+
+def set_archive_title(filename: str, title, ns=None) -> dict:
+    """Set (or clear, with an empty string) the optional display title for an
+    archive. Clearing restores the automatic first-sentence preview."""
+    name = _safe_archive_name(filename)
+    if not name:
+        return {"success": False, "error": "Archive not found"}
+    if not (_archive_folder(ns) / name).exists():
+        return {"success": False, "error": "Archive not found"}
+    title = (title or "").strip()[:_MAX_TITLE_LEN] if isinstance(title, str) else ""
+    try:
+        titles = _load_titles(ns)
+        if title:
+            titles[name] = title
+        else:
+            titles.pop(name, None)
+        _save_titles(titles, ns)
+        return {"success": True, "filename": name, "custom_title": title or None}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
+def _suggest_fork_title(history: list, ns=None, *, max_scan: int = 40):
+    """Fork-aware title suggestion. When a conversation about to be archived
+    shares its opening with an existing archive (i.e. it's a fork of a
+    reloaded thread), every first-sentence preview looks identical -- the
+    ONLY distinguishing text is where the branches diverge. Find the longest
+    common message-prefix against recent archives; if it's substantial and
+    something follows it, suggest the first divergent user line as a title.
+    Returns None whenever this isn't confidently a fork (never raises):
+    suggesting nothing is always safe, suggesting nonsense is not."""
+    try:
+        if not history or len(history) < 3:
+            return None
+        folder = _archive_folder(ns)
+        if not folder.exists():
+            return None
+
+        def _key(m):
+            return (m.get("role", ""), (m.get("content") or "").strip())
+
+        mine = [_key(m) for m in history]
+        best = 0
+        files = [f for f in sorted(folder.iterdir(), reverse=True)
+                 if f.name.startswith("archive_") and f.suffix == ".json"]
+        for f in files[:max_scan]:
+            try:
+                other = atrest.load_json_auto(f.read_bytes())
+            except Exception:
+                continue
+            if not isinstance(other, list):
+                continue
+            n = 0
+            for a, b in zip(mine, (_key(m) for m in other)):
+                if a != b:
+                    break
+                n += 1
+            if n > best:
+                best = n
+        # A fork = a substantial shared opening (3+ messages, so "every chat
+        # starts with hi" can't trip it) AND divergent content after it.
+        if best < 3 or best >= len(mine):
+            return None
+        for m in history[best:]:
+            if m.get("role") == "user" and (m.get("content") or "").strip():
+                line = m["content"].strip().splitlines()[0]
+                for stop in (". ", "? ", "! "):
+                    i = line.find(stop)
+                    if i > 0:
+                        line = line[:i + 1]
+                        break
+                line = line.strip().rstrip(".")
+                if len(line) > 60:
+                    line = line[:57].rstrip() + "..."
+                return line or None
+        return None
+    except Exception:
+        return None
+
+
 def archive_conversation(history: list, ns=None) -> dict:
     if not history:
         return {"success": False, "error": "No messages to archive"}
@@ -406,10 +517,14 @@ def archive_conversation(history: list, ns=None) -> dict:
         # sort naturally in the user's file browser. The archive's
         # internal timestamps (inside the JSON) use TimeManager.iso_z.
         ts = TimeManager.local_display(fmt="%Y%m%d_%H%M%S")
+        # v2.12.9: suggest BEFORE writing, or the just-saved file would match
+        # its own full length and mask the real fork ancestor.
+        suggested = _suggest_fork_title(history, ns)
         path = _archive_folder(ns) / f"archive_{ts}.json"
         path.write_bytes(atrest.dump_json_encrypted(history))
         save_chat_memory([], ns)
-        return {"success": True, "file": str(path), "timestamp": ts}
+        return {"success": True, "file": str(path), "filename": path.name,
+                "timestamp": ts, "suggested_title": suggested}
     except Exception as e:
         return {"success": False, "error": str(e)}
 
@@ -419,12 +534,16 @@ def get_archives(ns=None) -> list:
     folder = _archive_folder(ns)
     if not folder.exists():
         return archives
+    titles = _load_titles(ns)
     for f in sorted(folder.iterdir(), reverse=True):
         if f.name.startswith("archive_") and f.suffix == ".json":
             try:
                 data = atrest.load_json_auto(f.read_bytes())
                 archives.append({
                     "filename": f.name,
+                    # v2.12.9: optional display title (sidecar; None = unset
+                    # -> the UI falls back to the first-sentence preview).
+                    "custom_title": titles.get(f.name),
                     "timestamp": f.name.replace("archive_", "").replace(".json", ""),
                     "message_count": len(data),
                     "size": f.stat().st_size,
@@ -514,6 +633,15 @@ def delete_archive(filename: str, ns=None) -> dict:
     path = _archive_folder(ns) / name
     if path.exists():
         path.unlink()
+        # v2.12.9: a deleted archive takes its custom title with it (best
+        # effort -- a title-store hiccup must never fail the delete).
+        try:
+            titles = _load_titles(ns)
+            if name in titles:
+                titles.pop(name)
+                _save_titles(titles, ns)
+        except Exception:
+            pass
         return {"success": True}
     return {"success": False, "error": "File not found"}
 

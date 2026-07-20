@@ -235,7 +235,27 @@ def _window_state(window: Tuple[int, int], now_min: int) -> Tuple[bool, int]:
 
 
 def _fmt_window(s: str) -> str:
-    return s.replace("-", " to ")
+    """Human 12-hour rendering for login-screen messages:
+        "11:00-01:00" -> "11:00 AM to 1:00 AM (overnight)"
+    Raw 24-hour "11:00 to 01:00" proved ambiguous in the field (v2.12.9,
+    Todd): an AM/PM slip in the native time picker (1:00 PM saved where
+    1:00 AM was meant) produced a rejection message that READ like the
+    intended window, so the misconfiguration was invisible. AM/PM plus an
+    explicit "(overnight)" tag makes the stored window unmistakable.
+    Falls back to the old rendering on malformed input (never raises)."""
+    w = _parse_window(s)
+    if w is None:
+        return s.replace("-", " to ")
+
+    def _clock(m: int) -> str:
+        h, mm = divmod(m, 60)
+        return "%d:%02d %s" % (h % 12 or 12, mm, "AM" if h < 12 else "PM")
+
+    start, end = w
+    out = _clock(start) + " to " + _clock(end)
+    if start > end:
+        out += " (overnight)"
+    return out
 
 
 # ---------------------------------------------------------------------------
