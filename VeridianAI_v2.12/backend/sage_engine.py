@@ -441,15 +441,17 @@ def set_archive_title(filename: str, title, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    folder = _archive_folder(ns)
-    target = folder / name
-    # Path-traversal barrier, kept in the SAME scope as the sink below. CodeQL
-    # models startswith() on a RESOLVED path against a trusted prefix as a path
-    # sanitizer; a check hidden in a helper is not carried across the return
-    # boundary. Trailing os.sep defeats the '.../archives_evil' sibling-prefix trap.
-    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+    # Path-traversal barrier. `target` is the os.path.realpath STRING that is BOTH
+    # checked (startswith) and consumed at the sink -- one and the same dataflow
+    # node, which is what CodeQL's path sanitizer requires. (Checking
+    # str(x.resolve()) while a sink uses the Path `x` are graph-distinct nodes;
+    # realpath is a normalisation, not a path-expression sink of its own.)
+    # Trailing os.sep stops the '.../archives_evil' sibling-prefix trap.
+    trusted_root = os.path.realpath(str(_archive_folder(ns)))
+    target = os.path.realpath(os.path.join(trusted_root, name))
+    if not target.startswith(trusted_root + os.sep):
         return {"success": False, "error": "Archive not found"}
-    if not target.exists():
+    if not os.path.exists(target):
         return {"success": False, "error": "Archive not found"}
     title = (title or "").strip()[:_MAX_TITLE_LEN] if isinstance(title, str) else ""
     try:
@@ -620,16 +622,18 @@ def load_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
-    folder = _archive_folder(ns)
-    target = folder / name
-    # Same traversal barrier as set_archive_title -- guard sits with its sinks
-    # (exists + read_bytes), so CodeQL's startswith path-sanitizer applies here.
-    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+    # Same-node realpath barrier as set_archive_title: `target` is checked and
+    # consumed as one dataflow node; the sinks (exists + read) use that exact
+    # string, so CodeQL's startswith path sanitizer covers them.
+    trusted_root = os.path.realpath(str(_archive_folder(ns)))
+    target = os.path.realpath(os.path.join(trusted_root, name))
+    if not target.startswith(trusted_root + os.sep):
         return {"success": False, "error": "Archive not found"}
-    if not target.exists():
+    if not os.path.exists(target):
         return {"success": False, "error": "Archive not found"}
     try:
-        data = atrest.load_json_auto(target.read_bytes())
+        with open(target, "rb") as _f:
+            data = atrest.load_json_auto(_f.read())
         # v2.12.8 session provenance: append the boundary marker so the model
         # knows the restored turns are a PRIOR session. Config-gated
         # (session_boundary_markers, default ON); the try/except keeps a
@@ -654,14 +658,15 @@ def delete_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "File not found"}
-    folder = _archive_folder(ns)
-    target = folder / name
-    # Same traversal barrier as set_archive_title -- guard sits with its sinks
-    # (exists + unlink) in this scope so the startswith sanitizer is recognised.
-    if not str(target.resolve()).startswith(str(folder.resolve()) + os.sep):
+    # Same-node realpath barrier as set_archive_title: `target` is checked and
+    # consumed as one dataflow node; the sinks (exists + remove) use that exact
+    # string, so CodeQL's startswith path sanitizer covers them.
+    trusted_root = os.path.realpath(str(_archive_folder(ns)))
+    target = os.path.realpath(os.path.join(trusted_root, name))
+    if not target.startswith(trusted_root + os.sep):
         return {"success": False, "error": "File not found"}
-    if target.exists():
-        target.unlink()
+    if os.path.exists(target):
+        os.remove(target)
         # v2.12.9: a deleted archive takes its custom title with it (best
         # effort -- a title-store hiccup must never fail the delete).
         try:
