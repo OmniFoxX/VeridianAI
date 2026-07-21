@@ -462,8 +462,24 @@ class ModelManager:
                 continue
             for m in res:
                 mid = m.get("id")
-                if not mid or mid in seen_ids:
+                if not mid:
                     continue
+                if mid in seen_ids:
+                    # v2.12.4: same display id served by two tiers (e.g. an
+                    # Ollama model and a Lemonade model sharing a name).
+                    # Previously the later tier's model was silently DROPPED
+                    # from the picker — it looked "not loaded" and could
+                    # never be selected. Qualify it with the tier label
+                    # instead so both stay pickable and routable.
+                    alt = f"{mid} [{tier[1]}]"
+                    if alt in seen_ids:
+                        continue
+                    raw = m.get("raw_id")
+                    if raw:
+                        # keep the real-id mapping for the qualified name too
+                        self._openai_real_ids[alt] = raw
+                    m = {**m, "id": alt, "name": alt}
+                    mid = alt
                 seen_ids.add(mid)
                 new_routing[mid] = tier
                 merged.append(m)
@@ -517,7 +533,21 @@ class ModelManager:
             raw_id = m.get("id", "")
             if not raw_id:
                 continue
-            stem = Path(raw_id).stem if raw_id else raw_id
+            # v2.12.4: Path().stem chopped the id at its LAST DOT, which is
+            # correct for llama-server (id = model FILE PATH, e.g.
+            # ...\Qwen3-8B.Q4_K_M.gguf -> drop ".gguf") but mangles Lemonade
+            # model NAMES that merely contain dots — v11 ids like
+            # "Qwen3.5-4B-GGUF" displayed as "Qwen3", and two Qwen3.5
+            # variants collapsed into one id (the second was dropped by the
+            # picker's dedupe, looking "not loaded"/unselectable). Only drop
+            # the directory part and a known model-file EXTENSION; a bare
+            # model name keeps its dots.
+            base = Path(raw_id).name if raw_id else raw_id
+            stem = base
+            for _ext in (".gguf", ".bin", ".safetensors"):
+                if base.lower().endswith(_ext):
+                    stem = base[: -len(_ext)]
+                    break
             display_id = stem or raw_id
             # v2.11.12d: remember the raw id so _gen_llama_server can send
             # what the server actually calls the model (Lemonade needs it).
@@ -1041,6 +1071,28 @@ class ModelManager:
             if isinstance(m, dict) else m
             for m in messages
         ]
+        # v2.12.4: strict chat templates (Qwen3.5-era) hard-require exactly
+        # ONE system message, at position 0. llama.cpp otherwise aborts with
+        # "Unable to generate parser for this template" (HTTP 400) before
+        # generating anything. Sage turns can legitimately carry extra
+        # system-role entries (session boundary markers, injected context),
+        # so merge every system message into a single leading one for
+        # OpenAI-protocol tiers. Order is preserved; non-system messages are
+        # untouched. No-op for the common one-leading-system case.
+        _sys_texts = [str(m.get("content", "")) for m in messages
+                      if isinstance(m, dict) and m.get("role") == "system"]
+        _first_is_sys = bool(messages) and isinstance(messages[0], dict) \
+            and messages[0].get("role") == "system"
+        if len(_sys_texts) > 1 or (_sys_texts and not _first_is_sys):
+            _rest = [m for m in messages
+                     if not (isinstance(m, dict) and m.get("role") == "system")]
+            messages = [{
+                "role": "system",
+                "content": "\n\n".join(t for t in _sys_texts if t),
+            }] + _rest
+            print(f"[LLAMA-SERVER] merged {len(_sys_texts)} system message(s) "
+                  f"into one leading system turn (strict-template compat, "
+                  f"tier={tier_label})")
         # v2.11.12d: send the server's REAL model id, not the display stem.
         # Critical for the Lemonade/NPU tier ('org/model' ids); a no-op for
         # llama-server, which ignores the model field.
@@ -1154,11 +1206,21 @@ class ModelManager:
                                     return
                         except Exception:
                             pass
+                        _head = " ".join(_raw_lines)[:200]
                         print(
                             f"[LLAMA-SERVER WARN] tier={tier_label} "
                             f"model={model_id} returned no stream tokens; "
-                            f"body head: {' '.join(_raw_lines)[:200]!r}"
+                            f"body head: {_head!r}"
                         )
+                        # v2.12.4: surface it in the chat too. This path used
+                        # to end the turn SILENTLY (message sent, instantly
+                        # the user's turn again, no clue why) — e.g. Lemonade
+                        # answering 200 with an {"error": ...} body after a
+                        # version change. Ghosting the user hides real
+                        # incompatibilities; a visible one-liner gets them
+                        # (and us) straight to the cause.
+                        yield (f"[{tier_label}: server returned no tokens — "
+                               f"{_head[:120]}]")
                     return
 
         for attempt in range(max_attempts):
