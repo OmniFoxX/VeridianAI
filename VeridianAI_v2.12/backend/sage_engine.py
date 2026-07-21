@@ -545,7 +545,8 @@ def archive_conversation(history: list, ns=None) -> dict:
         return {"success": True, "file": str(path), "filename": path.name,
                 "timestamp": ts, "suggested_title": suggested}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[ARCHIVE] archive_conversation failed: {e}")   # server-side only
+        return {"success": False, "error": "Could not save the archive."}
 
 
 def get_archives(ns=None) -> list:
@@ -1606,10 +1607,11 @@ def daemon_status() -> dict:
         response["reachable"] = True
         return response
     except Exception as e:
+        print(f"[DAEMON] status comms error: {e}")   # server-side only
         return {
             "enabled": True,
             "reachable": False,
-            "reason": f"comms error: {str(e)[:120]}",
+            "reason": "daemon communication error",
         }
 
 
@@ -1866,7 +1868,8 @@ def save_to_downloads(filename: str, content: str) -> dict:
             out["backup"] = backup_name
         return out
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[DOWNLOADS] save_to_downloads failed: {e}")   # server-side only
+        return {"success": False, "error": "Could not save the file."}
 
 
 # ===============================================================================
@@ -2421,7 +2424,8 @@ def set_tavily_key(key: str) -> dict:
         TAVILY_KEY_FILE.write_bytes(_atrest.encrypt_bytes(TAVILY_API_KEY.encode("utf-8")))
         return {"success": True}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[TAVILY] set_tavily_key failed: {e}")   # server-side only; never logs the key
+        return {"success": False, "error": "Could not save the API key."}
 
 
 def get_tavily_key_info() -> dict:
@@ -2436,7 +2440,8 @@ def delete_tavily_key() -> dict:
         if TAVILY_KEY_FILE.exists(): TAVILY_KEY_FILE.unlink()
         return {"success": True}
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        print(f"[TAVILY] delete_tavily_key failed: {e}")   # server-side only
+        return {"success": False, "error": "Could not remove the API key."}
 
 
 # ===============================================================================
