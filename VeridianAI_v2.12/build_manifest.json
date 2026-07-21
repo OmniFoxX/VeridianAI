@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "98026da3e5984976858f2eff26ffb907",
-    "built_utc": "2026-07-21T04:22:44.480288+00:00",
+    "build_id": "680394e08949470491faef7af619c211",
+    "built_utc": "2026-07-21T05:28:31.572009+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -37,7 +37,7 @@
       "backend/_ws_bridge.py": "d7d4f9ce72132c413a463843fa6c96006c69ce23492eb77f56bc0f03eaeeaf02",
       "backend/access_policy.py": "9cfcf2c1b6c093634cef183d55c546dcbebedb1967d52631ae7242c4bc011282",
       "backend/aiq_nudge.py": "3aaed5f006f83e85979625a0ba505b0786d4293bbd6101c376e7463426eabf39",
-      "backend/atrest.py": "f1acaddee0085f463dbe082e7239e0bd6bd2909ca36a3fd266276aa794607152",
+      "backend/atrest.py": "d5aab8224f0793af38bbf260ac318b750dba0e1d419bd55ca6cac52288c4a53a",
       "backend/auth.py": "2d6ec92c400f41ee42a82d8c78d314829e45b257097788ed115cfaae8c01beff",
       "backend/bitchat_ble_gateway.py": "fb2d55989dae26845950a608ac55fc30f70dfad208e9adb2207ef238bc576d71",
       "backend/bitchat_bridge.py": "c53ef9ac51e91b72d68f3f862c546f4ce7cd234d994938000991519dc812fbcc",
@@ -84,7 +84,7 @@
       "backend/devmode.py": "33fd835f91d2d0ff579fec80f74c31959c17014056afb1cf31b82ab6333ac418",
       "backend/expression_engine.py": "33364b9d2d2c8cda432db5187769c5c83041d6c9c3d00198cd096e08714d3fc8",
       "backend/fatigue_injector.py": "cdb3a5443e5526e2bfde9d75dff4015366993b4693f66545756d204947849c5b",
-      "backend/handoff_guard.py": "d342c78cac7f28a4d10a6102e10b6932a5acce71ff62bc257ebd90011632fef3",
+      "backend/handoff_guard.py": "08be5e455827c2d1b45d60e274c533e9fb9c6032f4e63d575b5be39e7e3445e6",
       "backend/hw_utils.py": "47d5e749086142aff9f4baed8b9cb688d56b3125376a5ac24d032c994d297599",
       "backend/infer_plm_daemon_v2.py": "ed9deb5a0474871f876dccd90a88887d346b2ac4958e5c68468b503ad4761e7c",
       "backend/intent_scope.py": "b439f6749ec6eaa167b757718c97bfe353913d04ab64d739c318c0c1e5459775",
@@ -92,7 +92,7 @@
       "backend/ipc_bridge.py": "9b11e951ef42048aa466fa11511a1da9b1c7ddba51a9fd06d106c11ab5e5bfe4",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
-      "backend/main.py": "8e7ad14658e6b431fdcd705d22ebabd94e3112dd6f40803111a7a491a4f0b08a",
+      "backend/main.py": "8c0e44b3787254e753e28936415ec0eaa4056c4d1763d434ef5d6c7c0756d955",
       "backend/mcp_handlers.py": "a99b93f599d09eaf784826290aeb6aef7a58852b9722e73b4fafd2981f656266",
       "backend/mcp_server.py": "53479c708b78ea6bedd574b4e9d4fc06ca087fc6836ddcc084bfeda27eea7446",
       "backend/memory_logger_surprise.py": "9246d87c3bcfcff709cae8f0db1aa535751cf2e9f26d89193c8b002203a22b63",
@@ -239,5 +239,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "uTwsn5LrJXg2kaCucbvu4w7eT/zlnWzCbjlZlx173qJQ5HW4Pe5DvUqqOqFNpKoEej1IBQ511fpp8C838/BdDg=="
+  "signature_b64": "xyX02uuyVjwxj9B9d8mHqtt4j892DFw+DR6DA30Swv1Vk7CigV/vk7oUN4ZXemCyYW4zJtZVq7bgg1CqEiGRAw=="
 }

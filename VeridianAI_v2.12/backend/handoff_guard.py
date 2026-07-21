@@ -355,9 +355,29 @@ class HandoffGuard:
     # Tamper-evident audit log (hash chain)
     # ------------------------------------------------------------------
     def audit(self, event: str, detail: str = "") -> None:
-        """Append a hash-chained audit record. Append-only; each record
-        binds to its predecessor, so deletion or edit of any past record
-        breaks the chain and is detectable by :meth:`verify_audit`."""
+        """Append a hash-chained audit record. Append-only; each record binds to
+        its predecessor, so deletion, reordering, or truncation of any past record
+        breaks the chain and is detectable by :meth:`verify_audit`.
+
+        v2.13 confidentiality (encrypt-then-hash): a NEW record ("v": 1) encrypts
+        `detail` with the app's Fernet key (via atrest) and the chain hashes the
+        CIPHERTEXT, not the plaintext. Reasoning: Fernet is authenticated, so its
+        own HMAC catches per-entry content tampering the instant the entry is
+        decrypted -- the hash chain's distinct job is catching deletion /
+        reordering / truncation, which it does over ciphertext WITHOUT the key.
+        Legacy plaintext records (no "v" key) are left byte-for-byte as-is and still
+        verify under the old method; the chain continues unbroken across the
+        boundary (the first v1 record's `prev` is just the last legacy record's
+        hash -- no special handling needed).
+
+        KEY CO-LOCATION -- accepted, documented limitation: the audit-encryption key
+        (atrest's .atrest_key) is co-located with this log in sage_data, consistent
+        with .handoff_key's existing co-location. This defends against
+        leaked-project-folder, lower-privilege, and corruption scenarios per
+        atrest's stated threat model. It does NOT defend against a same-user
+        attacker with full sage_data read access. If that threat model changes,
+        revisit key placement (see the design discussion recorded with this work).
+        """
         prev = "0" * 64
         try:
             if self.audit_log.exists():
@@ -366,20 +386,43 @@ class HandoffGuard:
                     prev = json.loads(last).get("hash", prev)
         except Exception:
             pass
-        rec = {
-            "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
-            "event": event,
-            "detail": detail,
-            "prev": prev,
-        }
-        rec["hash"] = hashlib.sha256(
-            (prev + rec["ts"] + event + detail).encode("utf-8")
-        ).hexdigest()
+        ts = time.strftime("%Y-%m-%dT%H:%M:%S")
+        try:
+            import atrest
+            # `detail` arrives as canonical JSON from callers (sort_keys); encrypt
+            # its bytes -> a urlsafe-base64 Fernet token stored as `ct`.
+            ct = atrest.encrypt_bytes((detail or "").encode("utf-8")).decode("ascii")
+            rec: Dict[str, Any] = {"v": 1, "ts": ts, "event": event,
+                                   "ct": ct, "prev": prev}
+            rec["hash"] = hashlib.sha256(
+                self._chain_input_v1(prev, ts, event, ct).encode("utf-8")
+            ).hexdigest()
+        except Exception as e:
+            # Encryption unavailable (missing key/lib): never fall back to writing
+            # sensitive detail in the clear. Redact it, but still record the event
+            # (type + timestamp) so the trail and the chain stay intact.
+            print(f"[HANDOFF_GUARD] audit encryption unavailable, "
+                  f"recording event without detail: {e}")
+            safe = "[detail redacted: audit encryption unavailable]"
+            rec = {"ts": ts, "event": event, "detail": safe, "prev": prev}
+            rec["hash"] = hashlib.sha256(
+                (prev + ts + event + safe).encode("utf-8")
+            ).hexdigest()
         try:
             with open(self.audit_log, "a", encoding="utf-8") as f:
                 f.write(json.dumps(rec) + "\n")
         except OSError as e:
             print(f"[HANDOFF_GUARD] audit append failed: {e}")
+
+    @staticmethod
+    def _chain_input_v1(prev: str, ts: str, event: str, ct: str) -> str:
+        """Hash preimage for a v1 (encrypted) record: the schema version plus every
+        other stored field EXCEPT the hash, joined with the ASCII unit separator
+        (0x1f) -- a byte that cannot occur in hex / ISO-timestamp / event-token /
+        base64-ciphertext, so field boundaries are unambiguous and no field (the
+        "v" marker included) can be silently altered. Hashing the ciphertext keeps
+        chain verification keyless."""
+        return "\x1f".join(["1", prev, ts, event, ct])
 
     def _last_audit_line(self) -> Optional[str]:
         try:
@@ -389,8 +432,20 @@ class HandoffGuard:
         except OSError:
             return None
 
-    def verify_audit(self) -> Tuple[bool, Optional[int]]:
-        """Walk the chain. Returns ``(ok, broken_line_no_or_None)``."""
+    def verify_audit(self, decrypt: bool = False) -> Tuple[bool, Optional[int]]:
+        """Walk the chain and confirm continuity. Returns ``(ok,
+        broken_line_no_or_None)``. Works WITHOUT the Fernet key: legacy records are
+        hashed over plaintext `detail`, v1 records over their `ct` ciphertext, so a
+        deletion, reordering, truncation, or altered field surfaces as a hash/prev
+        mismatch at that line.
+
+        With ``decrypt=True`` (key required) each v1 record is additionally
+        Fernet-decrypted to confirm it does not raise InvalidToken -- full
+        content-authenticity on top of chain continuity. Because a keyless attacker
+        can recompute the ciphertext hash, content tampering that re-links the chain
+        is invisible to the keyless walk but is caught here on decrypt. A decrypt
+        failure is reported as a break at that line.
+        """
         prev = "0" * 64
         try:
             with open(self.audit_log, "r", encoding="utf-8") as f:
@@ -399,18 +454,61 @@ class HandoffGuard:
                     if not line:
                         continue
                     rec = json.loads(line)
-                    h = hashlib.sha256(
-                        (prev + rec["ts"] + rec["event"] + rec.get("detail", "")
-                         ).encode("utf-8")
-                    ).hexdigest()
-                    if rec.get("prev") != prev or rec.get("hash") != h:
-                        return False, i
-                    prev = h
+                    if rec.get("v") == 1 or "ct" in rec:
+                        ct = rec.get("ct", "")
+                        h = hashlib.sha256(
+                            self._chain_input_v1(
+                                prev, rec.get("ts", ""), rec.get("event", ""), ct
+                            ).encode("utf-8")
+                        ).hexdigest()
+                        if rec.get("prev") != prev or rec.get("hash") != h:
+                            return False, i
+                        if decrypt:
+                            try:
+                                import atrest
+                                atrest.decrypt_bytes(ct.encode("ascii"))
+                            except Exception:
+                                return False, i
+                    else:
+                        h = hashlib.sha256(
+                            (prev + rec.get("ts", "") + rec.get("event", "")
+                             + rec.get("detail", "")).encode("utf-8")
+                        ).hexdigest()
+                        if rec.get("prev") != prev or rec.get("hash") != h:
+                            return False, i
+                    prev = rec.get("hash", "")
         except FileNotFoundError:
             return True, None
         except Exception:
             return False, None
         return True, None
+
+    def read_audit(self, decrypt: bool = True) -> List[Dict[str, Any]]:
+        """Return audit records as dicts for human review. With ``decrypt=True``
+        (key required) each v1 record gains a decrypted ``detail`` -- or an
+        ``[UNREADABLE: ...]`` marker if Fernet rejects the ciphertext, which is
+        exactly how a tampered entry surfaces on read."""
+        out: List[Dict[str, Any]] = []
+        try:
+            with open(self.audit_log, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    if decrypt and (rec.get("v") == 1 or "ct" in rec):
+                        rec = dict(rec)
+                        try:
+                            import atrest
+                            rec["detail"] = atrest.decrypt_bytes(
+                                rec.get("ct", "").encode("ascii")
+                            ).decode("utf-8")
+                        except Exception as e:
+                            rec["detail"] = f"[UNREADABLE: {type(e).__name__} — entry tampered]"
+                    out.append(rec)
+        except FileNotFoundError:
+            return []
+        return out
 
     # ------------------------------------------------------------------
     # Cadence guard (detection for the same-user / loop case)
@@ -573,11 +671,70 @@ def load_or_create_socket_token(data_dir) -> Optional[str]:
 
 
 # ---------------------------------------------------------------------------
+# CLI: audit-log verification
+#   python -m handoff_guard verify            # keyless chain-continuity check
+#   python -m handoff_guard verify --decrypt  # + Fernet-decrypt every entry,
+#                                             #   flagging any InvalidToken
+# ---------------------------------------------------------------------------
+def _verify_cli(argv: List[str]) -> int:
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(
+        prog="handoff_guard verify",
+        description="Verify the tamper-evident audit log (handoff_audit.log).",
+    )
+    ap.add_argument("--decrypt", action="store_true",
+                    help="Also Fernet-decrypt each encrypted entry and flag any "
+                         "that raise InvalidToken (content-tamper check).")
+    ap.add_argument("--data-dir", default=None,
+                    help="sage_data directory holding the log "
+                         "(default: config.DATA_DIR).")
+    args = ap.parse_args(argv)
+
+    data_dir = args.data_dir
+    if not data_dir:
+        try:
+            from config import DATA_DIR
+            data_dir = str(DATA_DIR)
+        except Exception:
+            print("error: could not resolve sage_data; pass --data-dir",
+                  file=sys.stderr)
+            return 2
+
+    g = HandoffGuard(Path(data_dir))
+    mode = "chain + decrypt" if args.decrypt else "keyless chain-continuity"
+    if not g.audit_log.exists():
+        print(f"no audit log at {g.audit_log} (nothing to verify)")
+        return 0
+
+    ok, line = g.verify_audit(decrypt=args.decrypt)
+    if ok:
+        n = len(g.read_audit(decrypt=False))
+        print(f"OK  {g.audit_log}")
+        print(f"    {n} record(s) verified [{mode}]")
+        return 0
+
+    print(f"FAIL  {g.audit_log}", file=sys.stderr)
+    print(f"    verification failed at line {line} [{mode}]", file=sys.stderr)
+    if args.decrypt:
+        # List every entry whose ciphertext will not decrypt (InvalidToken).
+        for i, rec in enumerate(g.read_audit(decrypt=True), 1):
+            d = rec.get("detail", "")
+            if isinstance(d, str) and d.startswith("[UNREADABLE"):
+                print(f"    line {i}: {rec.get('event','?')} "
+                      f"@ {rec.get('ts','?')} -> {d}", file=sys.stderr)
+    return 1
+
+
+# ---------------------------------------------------------------------------
 # Self-test (run directly: python handoff_guard.py)
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":  # pragma: no cover
-    import tempfile
     import sys
+    if sys.argv[1:2] == ["verify"]:
+        raise SystemExit(_verify_cli(sys.argv[2:]))
+
+    import tempfile
 
     fails: List[str] = []
     with tempfile.TemporaryDirectory() as d:

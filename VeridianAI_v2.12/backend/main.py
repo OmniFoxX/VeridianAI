@@ -3970,15 +3970,23 @@ async def api_auth_users_mfa_reset(request: Request, payload: dict):
     # before it touches the log; the chain hashes the ciphertext, so tamper-
     # evidence still holds without the key.
     try:
-        import atrest as _atrest
+        import json as _json
         from handoff_guard import HandoffGuard
-        _detail = _atrest.dump_json_encrypted({
+        # audit() now encrypts `detail` itself (Fernet, encrypt-then-hash) and
+        # hash-chains the ciphertext, so pass PLAINTEXT canonical JSON here -- no
+        # pre-encryption (that would double-encrypt and defeat human-readable
+        # review). KEY CO-LOCATION (accepted, documented): the audit-log key
+        # (atrest's .atrest_key) sits with the log in sage_data, like .handoff_key
+        # -- defends against leaked-project-folder / lower-privilege / corruption
+        # per atrest's threat model, NOT a same-user attacker with full sage_data
+        # read access. Revisit key placement if that threat model changes.
+        _detail = _json.dumps({
             "action": "mfa_reset",
             "actor": s.get("username"),
             "target": target,
             "had_mfa": bool(r.get("had_mfa")),
             "outcome": "success" if r.get("success") else "failure",
-        }).decode("utf-8")
+        }, sort_keys=True)
         HandoffGuard(DATA_DIR).audit("auth", _detail)
     except Exception as _audit_err:
         # An audit-sink hiccup must never fail the reset; surface the gap through

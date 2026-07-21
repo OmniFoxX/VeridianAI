@@ -18,6 +18,16 @@ Design
 This module only protects data at rest (offline disk access: a stolen laptop, a
 leaked backup, a cloud-sync copy, another OS account). It does NOT protect a
 running process or anyone who holds the key.
+
+Audit-log note (v2.13)
+----------------------
+``handoff_guard.py`` encrypts its hash-chained audit-log ``detail`` fields with
+THIS key. The key (``.atrest_key``) is co-located with the audit log in
+sage_data, consistent with ``.handoff_key``'s existing co-location. That defends
+against leaked-project-folder, lower-privilege, and corruption scenarios per the
+threat model above; it does NOT defend against a same-user attacker with full
+sage_data read access. Accepted, documented limitation -- if that threat model
+changes, revisit key placement.
 """
 import json
 import os
