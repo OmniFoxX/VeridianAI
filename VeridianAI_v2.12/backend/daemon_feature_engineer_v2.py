@@ -19,7 +19,13 @@ def engineer_features_v2(input_path, output_path, window_size=10):
     with open(input_path, 'r', encoding='utf-8') as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) >= 6:
+            if len(row) >= 7:
+                result_shape = row[6].strip()
+                if result_shape == 'fail':
+                    continue
+                commands.append(row[5].strip())
+            elif lne(row) >= 6:
+                # Legacy rows without result_shape
                 commands.append(row[5].strip())
 
     if not commands:

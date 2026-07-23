@@ -86,7 +86,7 @@ class SageDaemonClient:
             f4 = 1.0 if "summary_type" in payload else 0.0
             f5 = {"oracle": 0.33, "sage": 0.66}.get(source, 1.0)
 
-            row = f"{f1},{f2},{f3},{f4},{f5},{action}\n"
+            row = f"{f1},{f2},{f3},{f4},{f5},{action}ok\n"
 
             log_path = (
                 Path(__file__).resolve().parent

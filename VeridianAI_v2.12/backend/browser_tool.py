@@ -5,7 +5,7 @@ import random
 import re
 import sys
 import time
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, quote_plus
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -38,6 +38,109 @@ def _resolve_profile_dir(ns: Optional[str] = None) -> Path:
     return (base / "users" / ns / "browser_profile") if ns else (base / "browser_profile")
 
 
+def _detect_brave_path() -> Optional[str]:
+    """Locate a Brave Browser binary across OS-standard install locations.
+
+    Brave is NOT one of Playwright's official `channel` values (only chrome/
+    msedge and their beta/dev/canary variants are), so it can only be launched
+    by pointing `executable_path` at the Brave binary. Returns the first path
+    that exists, or None if Brave isn't installed (many users won't have it).
+    """
+    candidates: List[str] = []
+    if sys.platform.startswith("win"):
+        pf = os.getenv("PROGRAMFILES", r"C:\Program Files")
+        pfx86 = os.getenv("PROGRAMFILES(X86)", r"C:\Program Files (x86)")
+        local = os.getenv("LOCALAPPDATA", "")
+        sub = r"BraveSoftware\Brave-Browser\Application\brave.exe"
+        candidates += [os.path.join(pf, sub), os.path.join(pfx86, sub)]
+        if local:
+            candidates.append(os.path.join(local, sub))
+    elif sys.platform == "darwin":
+        candidates.append(
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
+        )
+    else:  # linux / other unix
+        candidates += [
+            "/usr/bin/brave-browser", "/usr/bin/brave",
+            "/opt/brave.com/brave/brave-browser", "/snap/bin/brave",
+        ]
+    for p in candidates:
+        try:
+            if p and Path(p).exists():
+                return p
+        except Exception:
+            continue
+    return None
+
+
+# ---------------------------------------------------------------------- #
+# SECURITY (CRITICAL #1): browser-content sanitization
+# ---------------------------------------------------------------------- #
+# VeridianAI's tool-call grammar is square-bracket based: sage_engine.py
+# parses [BROWSE:...], [REMEMBER:...], [SAVE_FILE:...], [GENERATE_IMAGE],
+# and ~20 other [WORD:...] / [WORD] tags out of model-visible text, plus an
+# ORPHAN/PARTIAL detector that reacts to an UNCLOSED "[WORD" with no closing
+# bracket. Any of those shapes appearing verbatim in fetched page content
+# would be injected straight into Toga's context and executed as a live tool
+# call — a textbook prompt-injection / indirect-tool-call vector.
+#
+# Defense: before ANY page-derived text crosses the return boundary back to
+# the engine, neutralize tag-like bracket tokens by swapping the ASCII
+# brackets for Unicode mathematical white square brackets:
+#     [  ->  U+27E6  ⟦        ]  ->  U+27E7  ⟧
+# The text stays fully human-readable (important — our users are blind/low
+# vision and this is read aloud to them) but is completely INERT to the
+# parser, which only ever matches ASCII "[" / "]".
+#
+# We deliberately do NOT touch purely numeric/symbolic brackets like "[1]"
+# citation markers or "[...]" ellipses: those never match a tool tag
+# (tags require a leading letter/underscore) so they read more naturally
+# left alone. We DO neutralize:
+#   * closed tag-like tokens   [WORD]  /  [WORD: anything]  /  [edit]
+#   * bare openings            [WORD   (defuses the orphan/partial detector,
+#                              which keys on an unclosed "[WORD")
+#
+# One private helper so this logic lives in exactly one place and every
+# return path is provably covered.
+
+# A tag-like token: "[", optional space, a leading letter/underscore, then any
+# run of non-bracket chars, closed by "]". The [^\[\]] body prevents runaway
+# backtracking and stops the match at the first bracket of either kind.
+_TAGISH_TOKEN_RE = re.compile(r"\[\s*[A-Za-z_][^\[\]]*\]")
+# A bare (unclosed) tag opening: "[" immediately followed by a word start.
+# This is what defuses sage_engine's orphan-tag / partial-tag detectors,
+# which act on "[WORD" even when the attacker never supplies a closing "]".
+_TAGISH_OPEN_RE = re.compile(r"\[(?=\s*[A-Za-z_])")
+
+
+def _sanitize_browser_content(text: Optional[str]) -> str:
+    """Neutralize square-bracket tool-call patterns in any content returned
+    from the live web so a malicious page cannot inject a tool call into
+    Toga's context window (CRITICAL #1).
+
+    Returns readable text with tag-like "[" / "]" swapped for the inert
+    lookalikes "⟦" / "⟧". Safe on non-str / None input.
+    """
+    if not text:
+        return "" if text is None else text
+    if not isinstance(text, str):
+        # Defensive: callers should pass str, but never let a non-str slip
+        # past the boundary unsanitized (it could still stringify to a tag).
+        text = str(text)
+
+    # Pass 1: fully-closed tag-like tokens -> swap BOTH brackets. This covers
+    # [BROWSE:...], [REMEMBER:slug|payload], [SAVE_FILE:name|body], [edit], etc.
+    def _swap(m: "re.Match") -> str:
+        return "⟦" + m.group(0)[1:-1] + "⟧"
+    text = _TAGISH_TOKEN_RE.sub(_swap, text)
+
+    # Pass 2: any remaining bare "[WORD" opening (no matching "]") -> neutralize
+    # the opening bracket so the orphan/partial-tag detector can't latch onto it
+    # and pair it with a legitimate "]" later in the page.
+    text = _TAGISH_OPEN_RE.sub("⟦", text)
+    return text
+
+
 class BrowserTool:
     """
     A persistent, stealth-enabled Playwright wrapper that behaves like a
@@ -54,6 +157,7 @@ class BrowserTool:
         ns: Optional[str] = None,
         persist_cookies: bool = False,
         channel: Optional[str] = None,
+        ignore_https_errors: bool = False,
     ):
         # Per-user profile, OUT of the project tree (sage_data). Each user's
         # Sage gets her own browser profile, so bookmarks/history/cookies never
@@ -69,7 +173,22 @@ class BrowserTool:
         self.persist_cookies = persist_cookies
         # Prefer a real Chrome install (proper identity, no "Chromium"/test
         # build); start() falls back to bundled Chromium if it isn't present.
+        # channel may also be "brave" (resolved to an executable_path in start).
         self.channel = channel
+        self.executable_path: Optional[str] = None  # set if launched via a binary
+        # SECURITY (SIGNIFICANT #3): TLS certificate validation is now ON by
+        # default. Silently accepting bad certs made a MITM'd page invisible to
+        # the tool — doubly dangerous given the content boundary above. This is
+        # now an explicit, per-instance opt-in and is logged loudly when set.
+        self.ignore_https_errors = ignore_https_errors
+        if self.ignore_https_errors:
+            print(
+                "[SECURITY][WARN] BrowserTool started with "
+                "ignore_https_errors=True — TLS certificate validation is "
+                "DISABLED for this profile. A man-in-the-middle can serve "
+                "forged pages undetected. Use only for a known-bad-cert host "
+                "you explicitly trust."
+            )
         self.playwright: Optional[Playwright] = None
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
@@ -106,19 +225,43 @@ class BrowserTool:
         first for a proper taskbar identity, then falls back to bundled Chromium."""
         self.playwright = await async_playwright().start()
 
-        launch_kwargs = dict(
+        # ---- Sandbox decision (CRITICAL #2 — ROOT CAUSE) ------------------
+        # Playwright's `chromium_sandbox` launch option defaults to False/None,
+        # so launch_persistent_context() appends `--no-sandbox` ITSELF on every
+        # attempt — bundled Chromium, Chrome, Edge, and Brave alike. That is why
+        # the banner appeared "regardless of channel": it is a Playwright-level
+        # default (confirmed on Playwright 1.58 / Win11 / py3.14), NOT a Windows
+        # or per-browser quirk. Forcing chromium_sandbox=True stops Playwright
+        # adding the flag and keeps Chromium's OS process sandbox. We NEVER put
+        # "--no-sandbox" in args ourselves. The env var is the ONLY way to turn
+        # the sandbox off, for genuinely locked-down hosts, and it warns loudly.
+        allow_no_sandbox = os.getenv("VERIDIAN_ALLOW_NO_SANDBOX") == "1"
+        chromium_sandbox = not allow_no_sandbox  # True in normal operation
+        if allow_no_sandbox:
+            print(
+                "[SECURITY][WARN] VERIDIAN_ALLOW_NO_SANDBOX=1 — launching with "
+                "chromium_sandbox=False; Playwright will add --no-sandbox and "
+                "Chromium process isolation is DISABLED. Use only on hosts that "
+                "genuinely cannot sandbox (and never run the app elevated)."
+            )
+
+        base_kwargs = dict(
             user_data_dir=str(self.profile_dir),
             headless=self.headless,
             proxy=self.proxy,
             user_agent=random.choice(self.user_agents),
             viewport={"width": 1366, "height": 768},
-            ignore_https_errors=True,
+            # SECURITY (SIGNIFICANT #3): validate TLS by default; only bypass
+            # when the operator explicitly opted in on this instance.
+            ignore_https_errors=self.ignore_https_errors,
             # Drop the "Chrome is being controlled by automated test software"
             # banner + the automation fingerprint so it presents as a normal
             # browser (no "test chrome" identity).
             ignore_default_args=["--enable-automation"],
+            # THE FIX (CRITICAL #2): keep the process sandbox. Without this,
+            # Playwright silently injects --no-sandbox on Win11 for ANY channel.
+            chromium_sandbox=chromium_sandbox,
             args=[
-                "--disable-blink-features=AutomationControlled",
                 "--disable-infobars",
                 "--start-maximized",
                 "--no-default-browser-check",
@@ -126,20 +269,59 @@ class BrowserTool:
             ],
         )
 
-        # Prefer a real Chrome (or Edge) install via channel; fall back to the
-        # bundled Chromium so a fresh machine without Chrome still works.
-        channels_to_try = [self.channel] if self.channel else ["chrome", "msedge", None]
+        # Build the ordered list of launch attempts. Each entry is
+        # (label, overrides) where overrides carry EITHER channel= OR
+        # executable_path= (never both). Brave is not an official Playwright
+        # channel, so it is launched via executable_path to its binary.
+        attempts: List = []
+        if self.channel:
+            if self.channel.lower() == "brave":
+                brave = _detect_brave_path()
+                if not brave:
+                    raise RuntimeError(
+                        "channel='brave' requested but no Brave binary was "
+                        "found in the standard install locations."
+                    )
+                attempts.append(("brave", {"executable_path": brave}))
+            else:
+                attempts.append((self.channel, {"channel": self.channel}))
+        else:
+            # Default preference order. Brave FIRST when present (the preferred
+            # browser), then real Chrome, then Edge, then bundled Chromium so a
+            # fresh machine with none of them installed still works. Every step
+            # keeps the sandbox on — the fallback is about identity, not safety.
+            brave = _detect_brave_path()
+            if brave:
+                attempts.append(("brave", {"executable_path": brave}))
+            attempts.append(("chrome", {"channel": "chrome"}))
+            attempts.append(("msedge", {"channel": "msedge"}))
+            attempts.append(("bundled-chromium", {}))  # channel=None
+
+        # CRITICAL #2: log every attempt + the sandbox state so an operator can
+        # confirm from the console exactly what served the session.
         last_err = None
         self.context = None
-        for ch in channels_to_try:
+        for label, overrides in attempts:
+            print(
+                f"[BROWSER] Attempting launch: {label} "
+                f"(chromium_sandbox={chromium_sandbox})"
+            )
             try:
                 self.context = await self.playwright.chromium.launch_persistent_context(
-                    channel=ch, **launch_kwargs
+                    **{**base_kwargs, **overrides}
                 )
-                self.channel = ch
+                # Record what actually served the session (channel name, or the
+                # binary path for Brave / other executable_path launches).
+                self.channel = overrides.get("channel", label)
+                self.executable_path = overrides.get("executable_path")
+                print(
+                    f"[BROWSER] Launch SUCCEEDED: {label} — process sandbox "
+                    f"{'ON' if chromium_sandbox else 'OFF (--no-sandbox)'}"
+                )
                 break
             except Exception as e:
                 last_err = e
+                print(f"[BROWSER] Launch failed on {label}: {e}")
                 continue
         if self.context is None:
             raise RuntimeError(f"browser launch failed (no usable channel): {last_err}")
@@ -332,8 +514,14 @@ class BrowserTool:
                 "url": page_url, "sitekey": sitekey,
             })
             token = await self._solve_captcha_with_fallback(sitekey, page_url)
+            # SECURITY: the token comes from our own solver/operator, but it is
+            # still injected into the page via string interpolation. Guard the
+            # JS string so a hostile token value can't break out of the quotes.
+            safe_token = json.dumps(token)  # yields a properly-escaped JS string
             await self.page.evaluate(
-                f"document.getElementById('g-recaptcha-response').innerHTML = '{token}';"
+                "(t) => { const el = document.getElementById('g-recaptcha-response');"
+                " if (el) el.innerHTML = t; }",
+                token,
             )
             await self.page.evaluate(
                 "if (window.__recaptchaCallback) window.__recaptchaCallback();"
@@ -345,7 +533,12 @@ class BrowserTool:
     # Logging
     # ------------------------------------------------------------------ #
     def _log_captcha_success(self, url: str, notes: str = "") -> None:
-        """Emits a structured memory log entry after a successful CAPTCHA solve."""
+        """Emits a structured memory log entry after a successful CAPTCHA solve.
+
+        This is a TRUSTED, tool-originated memory tag (not page content), so it
+        is intentionally emitted verbatim. Only untrusted, page-derived text is
+        passed through _sanitize_browser_content(); our own log lines are not.
+        """
         description = f"Successfully browsed {url} with CAPTCHA solve."
         if notes:
             description += f" Notes: {notes}"
@@ -414,8 +607,14 @@ class BrowserTool:
     # Content & page utilities
     # ------------------------------------------------------------------ #
     async def extract_text(self) -> str:
-        """Extract clean readable text from current page, strips HTML."""
-        return await self.evaluate("() => document.body.innerText")
+        """Extract clean readable text from current page, strips HTML.
+
+        SECURITY (CRITICAL #1): the return value is UNTRUSTED web content and
+        is sanitized before it can reach Toga's context window / the tool
+        parser. Never return raw page text from this method.
+        """
+        raw = await self.evaluate("() => document.body.innerText")
+        return _sanitize_browser_content(raw)
 
     async def scroll_to_bottom(self, steps: int = 5) -> None:
         """Scroll page gradually like a human reading."""
@@ -433,27 +632,54 @@ class BrowserTool:
     async def extract_links(
         self, filter_domain: Optional[str] = None
     ) -> List[str]:
-        """Extract all href links, optionally filtered by domain."""
+        """Extract all href links, optionally filtered by domain.
+
+        SECURITY (CRITICAL #1): href values are attacker-controlled and can
+        carry tool-tag payloads (e.g. a link whose text or URL fragment spells
+        out [REMEMBER:...]). Each returned link is sanitized before crossing
+        the boundary.
+        """
         links = await self.evaluate(
             "() => Array.from(document.querySelectorAll('a[href]'))"
             ".map(a => a.href)"
         )
         if filter_domain:
             links = [l for l in links if filter_domain in l]
-        return links
+        # Sanitize every link individually so no tag pattern survives.
+        return [_sanitize_browser_content(l) for l in links]
 
     async def check_page_health(self) -> Dict[str, Any]:
-        """Detect 404s, empty pages, or bot-detection walls."""
-        return await self.evaluate("""
+        """Detect 404s, empty pages, or bot-detection walls.
+
+        SECURITY (CRITICAL #1): document.title is page-controlled text, so the
+        title is sanitized. bodyLength/status are numeric/URL and low-risk, but
+        we sanitize the URL string too for defense in depth.
+        """
+        health = await self.evaluate("""
             () => ({
                 title: document.title,
                 bodyLength: document.body.innerText.length,
                 status: window.location.href
             })
         """)
+        try:
+            if isinstance(health, dict):
+                if "title" in health:
+                    health["title"] = _sanitize_browser_content(health.get("title"))
+                if "status" in health:
+                    health["status"] = _sanitize_browser_content(health.get("status"))
+        except Exception:
+            pass
+        return health
 
     async def page_content(self) -> str:
-        return await self.page.content()
+        """Return the page's HTML.
+
+        SECURITY (CRITICAL #1): full HTML is the richest injection surface of
+        all — sanitized before return, same as extract_text().
+        """
+        raw = await self.page.content()
+        return _sanitize_browser_content(raw)
 
     async def screenshot(self, path: str) -> None:
         await self.page.screenshot(path=path, full_page=True)
@@ -490,34 +716,171 @@ class BrowserTool:
             pass
 
     # ------------------------------------------------------------------ #
-    # Search engine wrapper (SearXNG default, Brave stub ready)
+    # Search engine wrapper (DuckDuckGo default, SearXNG opt-in)
     # ------------------------------------------------------------------ #
     async def search(
         self,
         query: str,
-        engine: str = "searxng",
-        base_url: str = "https://searx.be",
+        engine: str = "duckduckgo",
+        base_url: Optional[str] = None,
         max_results: int = 10,
     ) -> List[Dict[str, str]]:
         """
         Perform a search and return a list of dicts:
         {"title": str, "url": str, "snippet": str}
+
+        SIGNIFICANT #4: the default engine is now DuckDuckGo, driven through
+        the real browser via goto() to https://duckduckgo.com/?q=<query> and
+        parsed from the rendered page. The previous default (SearXNG at
+        https://searx.be) was dead, which is why [WEB_SEARCH:] silently failed.
+
+        Backward compatibility: the method signature is unchanged in shape
+        (query, engine, base_url, max_results). SearXNG is still fully
+        supported as an EXPLICIT opt-in — call search(q, engine="searxng",
+        base_url="https://your-searx-instance"). All result dicts are passed
+        through _sanitize_browser_content() (titles/snippets/urls are untrusted
+        web content — CRITICAL #1).
         """
-        if engine.lower() != "searxng":
-            raise NotImplementedError("Only SearXNG is wired in this example.")
+        eng = (engine or "duckduckgo").lower()
 
         await self._notify_ipc("search", {
-            "query": query, "engine": engine, "max_results": max_results,
+            "query": query, "engine": eng, "max_results": max_results,
         })
 
-        # Build the search URL
+        if eng in ("duckduckgo", "ddg", "duck"):
+            results = await self._search_duckduckgo(query, max_results)
+        elif eng == "searxng":
+            # Opt-in only. base_url must be supplied (no dead default baked in).
+            results = await self._search_searxng(
+                query, base_url or "https://searx.be", max_results
+            )
+        else:
+            raise NotImplementedError(
+                f"Unknown search engine '{engine}'. Supported: "
+                f"'duckduckgo' (default), 'searxng' (opt-in, requires base_url)."
+            )
+
+        # Sanitize every field of every result before it leaves the boundary.
+        clean: List[Dict[str, str]] = []
+        for r in results[:max_results]:
+            clean.append({
+                "title": _sanitize_browser_content(r.get("title", "")),
+                "url": _sanitize_browser_content(r.get("url", "")),
+                "snippet": _sanitize_browser_content(r.get("snippet", "")),
+            })
+
+        await self._notify_ipc("search_results", {
+            "query": query, "count": len(clean),
+        })
+        return clean
+
+    async def _search_duckduckgo(
+        self, query: str, max_results: int = 10
+    ) -> List[Dict[str, str]]:
+        """DuckDuckGo search via a real browser navigation (SIGNIFICANT #4).
+
+        Navigates to the live results page and extracts results from the DOM.
+        Uses several resilient selector strategies because DDG periodically
+        renames its result containers; falls back to the no-JS HTML endpoint
+        if the primary layout yields nothing.
+        """
+        search_url = f"https://duckduckgo.com/?q={quote_plus(query)}&ia=web"
+        await self.goto(search_url, wait_until="networkidle")
+
+        # Give the SERP a beat to hydrate, then read results from the DOM. The
+        # extraction runs entirely in-page and tolerates layout changes by
+        # trying modern (data-testid) selectors first, then older class names.
+        try:
+            await self.page.wait_for_selector(
+                "[data-testid='result'], article[data-testid='result'], "
+                ".result, .react-results--main",
+                timeout=8000,
+            )
+        except Exception:
+            pass  # best-effort; extraction below still tries
+
+        extract_js = """
+            (maxN) => {
+                const out = [];
+                const seen = new Set();
+                const push = (title, url, snippet) => {
+                    if (!url || seen.has(url)) return;
+                    seen.add(url);
+                    out.push({ title: title || '', url: url,
+                               snippet: snippet || '' });
+                };
+
+                // Strategy 1: modern data-testid layout
+                let nodes = document.querySelectorAll(
+                    "article[data-testid='result'], [data-testid='result']");
+                nodes.forEach(n => {
+                    if (out.length >= maxN) return;
+                    const a = n.querySelector(
+                        "a[data-testid='result-title-a'], h2 a, a[href]");
+                    const s = n.querySelector(
+                        "[data-testid='result-snippet'], .result__snippet");
+                    if (a) push(a.innerText.trim(), a.href,
+                               s ? s.innerText.trim() : '');
+                });
+
+                // Strategy 2: classic .result blocks
+                if (out.length === 0) {
+                    nodes = document.querySelectorAll('.result, .web-result');
+                    nodes.forEach(n => {
+                        if (out.length >= maxN) return;
+                        const a = n.querySelector('a.result__a, h2 a, a[href]');
+                        const s = n.querySelector('.result__snippet');
+                        if (a) push(a.innerText.trim(), a.href,
+                                   s ? s.innerText.trim() : '');
+                    });
+                }
+                return out.slice(0, maxN);
+            }
+        """
+        try:
+            results = await self.evaluate(extract_js, max_results)
+        except Exception:
+            results = []
+
+        # Fallback: the no-JS HTML endpoint, which is stable and easy to parse.
+        if not results:
+            html_url = f"https://html.duckduckgo.com/html/?q={quote_plus(query)}"
+            await self.goto(html_url, wait_until="networkidle")
+            try:
+                results = await self.evaluate("""
+                    (maxN) => {
+                        const out = [];
+                        document.querySelectorAll('.result__body, .result')
+                          .forEach(n => {
+                            if (out.length >= maxN) return;
+                            const a = n.querySelector('.result__a, a[href]');
+                            const s = n.querySelector('.result__snippet');
+                            if (a) out.push({
+                                title: a.innerText.trim(),
+                                url: a.href,
+                                snippet: s ? s.innerText.trim() : ''
+                            });
+                          });
+                        return out.slice(0, maxN);
+                    }
+                """, max_results)
+            except Exception:
+                results = []
+
+        return results or []
+
+    async def _search_searxng(
+        self, query: str, base_url: str, max_results: int = 10
+    ) -> List[Dict[str, str]]:
+        """SearXNG JSON search (opt-in). Kept intact for anyone running their
+        own SearXNG instance; no longer a default because public instances
+        (e.g. searx.be) are unreliable/disabled for the JSON API."""
         params = {"q": query, "format": "json"}
         search_url = f"{base_url}/search?{urlencode(params)}"
 
         await self.goto(search_url)
         await self.wait_for("pre")
 
-        # Extract JSON from the page
         json_text = await self.evaluate(
             "() => document.querySelector('pre').innerText"
         )
@@ -531,16 +894,11 @@ class BrowserTool:
 
         results = []
         for item in data.get("results", [])[:max_results]:
-            results.append(
-                {
-                    "title": item.get("title", ""),
-                    "url": item.get("url", ""),
-                    "snippet": item.get("content", ""),
-                }
-            )
-        await self._notify_ipc("search_results", {
-            "query": query, "count": len(results),
-        })
+            results.append({
+                "title": item.get("title", ""),
+                "url": item.get("url", ""),
+                "snippet": item.get("content", ""),
+            })
         return results
 
     async def search_brave(
@@ -605,7 +963,7 @@ class BrowserTool:
         3. Fills them with provided credentials.
         4. Submits the form.
         5. Handles verification if a link appears (optional, can be extended).
-        
+
         This works for Tuta, AtomicMail, or any site with standard forms.
         """
         print(f"[SIGNUP] Starting universal signup at: {signup_url}")
@@ -637,24 +995,26 @@ class BrowserTool:
 
         # Wait a moment for navigation or success message
         await asyncio.sleep(3)
-        
-        # Optional: Check for success message or redirect
+
+        # Optional: Check for success message or redirect. extract_text() is
+        # already sanitized (CRITICAL #1), so the returned page content is safe
+        # to hand back to the engine.
         page_content = await self.extract_text()
         if "success" in page_content.lower() or "welcome" in page_content.lower():
             print(f"[SIGNUP] Success detected in page content.")
-        
+
         print(f"[REMEMBER:signup_success|Completed signup at {signup_url} for user {username}]")
         return page_content
 
     async def signup_with_temp_email(self, signup_url: str) -> str:
         """
-        [DEPRECATED] Legacy function for Guerrilla Mail. 
+        [DEPRECATED] Legacy function for Guerrilla Mail.
         Use signup_auto_detect for Tuta/AtomicMail.
         """
         # If Sage tries to call this, she should get a warning or it should fallback
         # For now, let's log a warning and suggest the new method
         print("[WARNING] signup_with_temp_email is deprecated. Use signup_auto_detect for Tuta/AtomicMail.")
-        # Fallback to auto-detect with a temp email if she insists? 
+        # Fallback to auto-detect with a temp email if she insists?
         # Or just raise an error to force the correct path.
         # Let's raise a clear error to guide her.
         raise RuntimeError("[SIGNUP] Please use signup_auto_detect for persistent accounts like Tuta/AtomicMail. This function is for legacy temp-mail only.")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-sage_daemon.py — OracleAI background mechanics daemon
+sage_daemon.py — VeridianAI background mechanics daemon
 ------------------------------------------------------
 A separate long-running Python process that handles memory-log mechanics
 (reading, verifying, summarizing) on behalf of Sage, so those operations

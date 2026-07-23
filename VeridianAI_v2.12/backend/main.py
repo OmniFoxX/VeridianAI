@@ -243,7 +243,7 @@ async def _taskp_run_or_direct(
 #
 # What it is NOT
 # --------------
-# - It does NOT re-prompt Sage. Recovery action = abort cleanly + UI
+# - It does NOT re-prompt Toga. Recovery action = abort cleanly + UI
 #   banner. The user decides whether to retry. Re-prompting would
 #   re-engage the AIQNudge self-prompt-injection surface that #44 is
 #   queued to audit — strictly off-limits until that audit is done.
@@ -736,7 +736,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="OracleAI", version="2.11.11", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.13", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
