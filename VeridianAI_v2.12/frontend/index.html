@@ -704,7 +704,7 @@
               <span
                 class="hw-toggle-label"
                 id="multi-profile-label"
-                data-tip="Multi-Profile: everyone gets their own sign-in with separate chats, archives, settings, and system-prompt addendum. Socials (Discord, Bluesky, BitChat...) stay with the owner profile. Only the owner can change this switch. Users may need to sign in again after switching."
+                data-tip="Multi-Profile: everyone gets their own sign-in with separate chats, archives, settings, and system-prompt addendum. Socials (Discord, Bluesky, Argo-Net...) stay with the owner profile. Only the owner can change this switch. Users may need to sign in again after switching."
                 >Enable Multi-Profile</span
               >
               <label class="toggle-switch">
@@ -1795,6 +1795,29 @@
             role="tablist"
             aria-label="Social channel threads"
           ></div>
+          <!-- Argo-Net To: picker — chooses the group or a private per-peer DM
+               thread. Lives at the TOP of the messaging area (not crammed into
+               the composer). Shown only when Argo-Net is connected. -->
+          <div
+            id="socials-dm-row"
+            style="
+              display: none;
+              align-items: center;
+              gap: 6px;
+              font-size: 0.82em;
+              margin: 2px 0;
+            "
+          >
+            <span style="opacity: 0.8">Argo-Net → To:</span>
+            <select
+              class="setting-select"
+              id="socials-dm-target"
+              aria-label="Everyone or a private peer thread"
+              style="flex: 1"
+              data-tip="Everyone = group broadcast; a peer = private end-to-end DM thread"
+              onchange="socialsOnDmPeerChange()"
+            ></select>
+          </div>
           <div
             id="socials-feed"
             style="

@@ -1,4 +1,4 @@
-/* socials.js -- Socials channel tab (BitChat + Discord + more).
+/* socials.js -- Socials channel tab (Argo-Net + Discord + more).
  * Full-area view in the Oracle (games) panel, shown via the 📡 tab. Talks to
  * /api/socials/*. The feed only polls while the tab is open. Pure-ASCII source. */
 (function () {
@@ -16,6 +16,8 @@
   var _last = null;          // last /api/socials/status (so peers polling knows what's connected)
   var _msgs = [];            // last /api/socials/recent messages (every platform, newest last)
   var _activeThread = "all"; // which channel thread the feed shows ("all" = merged view)
+  var _dmPeer = "";          // Argo-Net To: selection ("" = Everyone/group; else a peer fingerprint)
+  var _peerFlags = {};       // node_id -> {compromised, revoked} from identity(), for the DM guard
 
   // Swap the game canvas/scoreboard/controls for the full Socials view.
   function socialsOnTab(show) {
@@ -39,18 +41,25 @@
         var label = n + (c.experimental ? " (experimental)" : "");
         // Show the requirement/setup note as guidance until the channel is
         // connected; once it's up (green dot) the note is redundant.
-        var note = (c.note && !c.connected) ? (' <span style="opacity:0.7">— ' + esc(c.note) + "</span>") : "";
+        var note = (c.note && !c.connected) ? ('<span style="opacity:0.8">' + esc(c.note) + "</span>") : "";
         // v2.11.15: surface the adapter's last REAL error (bad token, missing
         // Discord intent, 401s...) — previously these died in a hidden console
         // and a failed channel just silently stayed grey.
+        // v2.12.17: notes/errors moved OUT of the name+button flex row into
+        // their own scrollable container (.socials-chan-note). Compounding
+        // BlueSky/Mastodon login errors were widening the row and shoving the
+        // Connect button past the viewport edge — unclickable for mouse
+        // users (tab-navigation scrolled it into view, ironically).
         if (c.error && !c.connected) {
-          note += ' <span style="color:#e0836d">— ' + esc(c.error) + "</span>";
+          note += (note ? " " : "") + '<span class="socials-chan-err">' + esc(c.error) + "</span>";
         }
         var btn = c.connected
           ? '<button class="toolbar-btn" aria-label="Disconnect ' + esc(n) + '" data-tip="Disconnect from ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',false)">Disconnect</button>'
           : '<button class="toolbar-btn"' + (c.available ? "" : " disabled") + ' aria-label="Connect ' + esc(n) + '" data-tip="Connect to ' + esc(n) + '" onclick="socialsConnect(\'' + n + '\',true)">Connect</button>';
-        return '<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:3px 0">'
-          + "<span>" + dot + " " + esc(label) + note + "</span>" + btn + "</div>";
+        return '<div class="socials-chan">'
+          + '<div class="socials-chan-row"><span class="socials-chan-name">' + dot + " " + esc(label) + "</span>" + btn + "</div>"
+          + (note ? ('<div class="socials-chan-note">' + note + "</div>") : "")
+          + "</div>";
       }).join("") : "<i>No channels.</i>";
     }
     var st = $("socials-status"); if (st) st.textContent = (d && d.available === false) ? "unavailable" : "ready";
@@ -77,6 +86,7 @@
       sel.innerHTML = nm.map(function (n) { return '<option value="' + n + '">' + esc(n) + "</option>"; }).join("");
       if (prev) sel.value = prev;
     }
+    _refreshDmRow();   // show/populate the Argo-Net To: picker when connected
     var tg = $("toggle-socials-autoreply"); if (tg) tg.checked = !!(d && d.auto_reply);
     _renderConfig((d && d.config) || {});
     _renderThreads();   // channel list drives the thread tabs
@@ -84,7 +94,7 @@
 
   function _renderConfig(cfg) {
     var box = $("socials-config"); if (!box) return;
-    var d = cfg.discord || {}, b = cfg.bitchat || {}, m = cfg.mastodon || {}, k = cfg.bluesky || {};
+    var d = cfg.discord || {}, a = cfg.argonet || {}, m = cfg.mastodon || {}, k = cfg.bluesky || {};
     function tok(has) { return has ? '<span style="opacity:0.7">(saved)</span>' : '<span style="opacity:0.7">(none)</span>'; }
     box.innerHTML =
       // --- Discord ---
@@ -106,85 +116,152 @@
       + '<input id="cfg-bsky-service" class="setting-select" type="text" placeholder="service (default https://bsky.social)" value="' + esc(k.service || "") + '" style="width:100%;margin-top:2px">'
       + '<div style="display:flex;gap:4px;margin-top:3px"><button class="toolbar-btn" onclick="socialsSaveBluesky()">Save</button>'
       + '<button class="toolbar-btn" onclick="socialsClearToken(\'bluesky\',\'app_password\')">Remove password</button></div></div>'
-      // --- BitChat (requires a peripheral-capable BLE 4.0+ dongle) ---
-      + '<div><div><b>BitChat</b> <span style="opacity:0.7">(needs a BLE 4.0+ dongle)</span></div>'
-      + '<div style="display:flex;gap:4px;margin-top:2px">'
-      + '<input id="cfg-bitchat-host" class="setting-select" type="text" placeholder="host" value="' + esc(b.host || "localhost") + '" style="flex:1">'
-      + '<input id="cfg-bitchat-port" class="setting-select" type="number" placeholder="port" value="' + esc(b.port || 8080) + '" style="width:80px"></div>'
-      + '<div style="display:flex;gap:4px;margin-top:3px">'
-      + '<button class="toolbar-btn" onclick="socialsSaveBitchat()">Save</button>'
-      + '<button class="toolbar-btn" onclick="socialsVerifyIdentity()" data-tip="Show Toga\'s and peers\' security fingerprints to verify out-of-band">Verify identity</button></div>'
+      // --- Argo-Net (native mesh: LAN out of the box, BLE adds phones) ---
+      + '<div><div><b>Argo-Net</b> ' + tok(a.has_mesh_secret) + ' <span style="opacity:0.7">(LAN mesh + BLE)</span></div>'
+      + '<div style="opacity:0.75;margin-top:2px">Transport-agnostic mesh. Public messages work out of the box across devices — no setup. For a PRIVATE group, set the SAME mesh secret on every device (agree on it over a channel you already trust). DMs are always private and need no secret.</div>'
+      + '<input id="cfg-argonet-secret" class="setting-select" type="password" placeholder="private-group secret (optional; identical on every device)" style="width:100%;margin-top:2px">'
+      + '<div style="display:flex;gap:4px;margin-top:3px;flex-wrap:wrap">'
+      + '<button class="toolbar-btn" onclick="socialsSaveArgonet()">Save</button>'
+      + '<button class="toolbar-btn" onclick="socialsClearToken(\'argonet\',\'mesh_secret\')">Remove secret</button>'
+      + '<button class="toolbar-btn" onclick="socialsRotateIdentity()" data-tip="Generate a fresh identity + fingerprint (use after revoking your key). Peers must re-verify.">New identity</button>'
+      + '<button class="toolbar-btn" onclick="socialsVerifyIdentity(\'argonet\')" data-tip="Show this node\'s and peers\' fingerprints to verify out-of-band">Verify identity</button></div>'
       + '<div id="socials-identity" style="margin-top:4px;font-size:11px"></div></div>';
   }
 
-  async function socialsVerifyIdentity() {
+  async function socialsVerifyIdentity(channel) {
+    channel = (channel || "argonet");
     var box = $("socials-identity"); if (box) box.innerHTML = "Reading fingerprints…";
-    var d = await jget("/api/socials/identity?channel=bitchat");
+    var d = await jget("/api/socials/identity?channel=" + encodeURIComponent(channel));
     if (!box) return;
     if (!d || d.available === false) {
-      box.innerHTML = "<i>BitChat gateway not reachable — connect BitChat first.</i>"; return;
+      box.innerHTML = "<i>" + esc(channel) + " mesh not up — connect it first.</i>"; return;
     }
+    var revokeBtn = (channel === "argonet")
+      ? '<button class="toolbar-btn" style="margin-top:4px;color:var(--error,#e0836d)" '
+        + 'onclick="socialsRevokeSelf()" '
+        + 'data-tip="Publish a signed revocation of YOUR OWN key if it may be compromised. Others see it as revoked; then reset to a new identity.">Revoke my key…</button>'
+      : "";
     var rows = ['<div style="margin-top:4px;padding:6px;border:1px solid var(--border,#2a3a5a);border-radius:6px">'
       + '<div><b>' + esc(d.nickname || "Toga") + '</b> (you) — read this aloud to verify:</div>'
-      + '<div style="font-family:monospace;letter-spacing:0.5px;color:var(--gold,#f0a500)">' + esc(d.fingerprint || "(none)") + '</div></div>'];
+      + '<div style="font-family:monospace;letter-spacing:0.5px;word-break:break-all;color:var(--gold,#f0a500)">' + esc(d.fingerprint || "(none)") + '</div>'
+      + revokeBtn + '</div>'];
     var peers = d.peers || [];
     if (!peers.length) {
-      rows.push('<div style="margin-top:4px;opacity:0.7">No peers handshaken yet. A peer\'s fingerprint appears once they connect and complete the encrypted handshake.</div>');
+      rows.push('<div style="margin-top:4px;opacity:0.7">No peers yet. A peer\'s fingerprint appears once they\'re discovered on the mesh.</div>');
     } else {
       for (var i = 0; i < peers.length; i++) {
         var p = peers[i];
-        var fp = p.verified
-          ? '<span style="font-family:monospace;letter-spacing:0.5px">' + esc(p.fingerprint) + '</span>'
-          : '<span style="opacity:0.6">handshake pending — no fingerprint yet</span>';
-        // v2.12.5: per-peer verification. "encrypted" = session established;
-        // "verified" = the OWNER compared this peer's fingerprint out-of-band
-        // and marked THIS peer trusted (never a blanket verify-all).
-        var badge = p.verified
-          ? (p.trusted
-              ? '<span style="color:var(--ok,#4ade80)">✓ encrypted · verified by you</span>'
-              : '<span style="color:var(--ok,#4ade80)">✓ encrypted</span> <span style="opacity:0.6">· not yet verified</span>')
-          : '<span style="opacity:0.6">unverified</span>';
-        var btn = "";
-        if (p.verified && p.fingerprint) {
-          btn = '<button class="toolbar-btn" style="margin-top:3px" '
-            + 'data-fp="' + esc(p.fingerprint) + '" data-nick="' + esc(p.nickname || p.peer_id) + '" '
-            + 'data-on="' + (p.trusted ? "0" : "1") + '" '
-            + 'onclick="socialsMarkVerified(this)" '
-            + 'data-tip="' + (p.trusted
-                ? 'Withdraw your out-of-band verification of this peer'
-                : 'Confirm you compared every block of this fingerprint against the peer\'s own device') + '">'
-            + (p.trusted ? 'Unverify' : 'Mark verified') + '</button>';
+        var fpHtml = '<span style="font-family:monospace;letter-spacing:0.5px;word-break:break-all">' + esc(p.fingerprint) + '</span>';
+        var badge, btns = "";
+        if (p.revoked) {
+          badge = '<span style="color:var(--error,#e0836d)">⛔ REVOKED by owner'
+            + (p.revoked_reason ? " (" + esc(p.revoked_reason) + ")" : "") + '</span>';
+        } else if (p.compromised) {
+          badge = '<span style="color:var(--error,#e0836d)">⚠ flagged compromised (local)</span>';
+          btns = _trustBtn(p, "clear", "Clear flag", "Remove your local compromised flag");
+        } else if (p.trusted) {
+          badge = '<span style="color:var(--ok,#4ade80)">✓ encrypted · verified by you</span>';
+          btns = _trustBtn(p, "clear", "Unverify", "Withdraw your out-of-band verification")
+               + _trustBtn(p, "compromised", "Flag compromised", "Locally flag this key as compromised (warns you; never propagates)");
+        } else {
+          badge = '<span style="color:var(--ok,#4ade80)">✓ encrypted</span> <span style="opacity:0.6">· not yet verified</span>';
+          btns = _trustBtn(p, "verify", "Mark verified", "Confirm you compared every block against the peer’s own device")
+               + _trustBtn(p, "compromised", "Flag compromised", "Locally flag this key as compromised (warns you; never propagates)");
         }
         rows.push('<div style="margin-top:3px;padding:5px;border:1px solid var(--border,#2a3a5a);border-radius:6px">'
           + '<div><b>' + esc(p.nickname || p.peer_id) + '</b> ' + badge + '</div>'
-          + '<div>' + fp + '</div>' + btn + '</div>');
+          + '<div>' + fpHtml + '</div>'
+          + '<div style="display:flex;gap:4px;flex-wrap:wrap">' + btns + '</div></div>');
       }
     }
-    rows.push('<div style="margin-top:4px;opacity:0.7">Verify by comparing a peer\'s block here against what their own BitChat app shows. Matching = genuine; mismatch = possible impostor, do not trust.</div>');
+    rows.push('<div style="margin-top:4px;opacity:0.7">Compare a peer\'s block against what their own device shows. Match = genuine; mismatch = possible impostor. "Flag compromised" is local-only; only a key\'s owner can publish a revocation others see.</div>');
     box.innerHTML = rows.join("");
   }
 
-  async function socialsMarkVerified(el) {
-    // Per-peer by design: each peer is verified one at a time, after the
-    // human has actually compared fingerprint blocks out-of-band.
-    var fp = el.dataset.fp, nick = el.dataset.nick, on = el.dataset.on === "1";
-    if (on) {
+  function _trustBtn(p, action, label, tip) {
+    return '<button class="toolbar-btn" style="margin-top:3px" '
+      + 'data-fp="' + esc(p.fingerprint) + '" data-nick="' + esc(p.nickname || p.peer_id) + '" '
+      + 'data-action="' + action + '" onclick="socialsTrustAction(this)" '
+      + 'data-tip="' + esc(tip) + '">' + esc(label) + '</button>';
+  }
+
+  async function socialsTrustAction(el) {
+    var fp = el.dataset.fp, nick = el.dataset.nick, action = el.dataset.action;
+    var body = { fingerprint: fp, nickname: nick };
+    if (action === "verify") {
       var sure = await (window.oracleConfirm
         ? window.oracleConfirm(
-            "Did you compare ALL 16 blocks of " + nick + "'s fingerprint "
-            + "against their own device (read aloud or side-by-side)?\n\n"
-            + "Only mark verified if every block matched.",
-            { title: "Verify " + nick, okLabel: "They match \u2014 verify" })
+            "Did you compare ALL 16 blocks of " + nick + "'s fingerprint against their own device (read aloud or side-by-side)?\n\nOnly mark verified if every block matched.",
+            { title: "Verify " + nick, okLabel: "They match — verify" })
         : Promise.resolve(window.confirm("Verify " + nick + "?")));
       if (!sure) return;
+      body.status = "trusted";
+    } else if (action === "compromised") {
+      var sure2 = await (window.oracleConfirm
+        ? window.oracleConfirm(
+            "Flag " + nick + "'s key as compromised?\n\nThis is LOCAL ONLY — it warns you and guards DMs to this key, but it is never shared with others (so it can't be abused). Use it if you believe this specific KEY is compromised — not merely because you disagree with someone.",
+            { title: "Flag compromised", okLabel: "Flag (local)" })
+        : Promise.resolve(window.confirm("Flag " + nick + " compromised?")));
+      if (!sure2) return;
+      body.status = "compromised";
+    } else {
+      body.verified = false;
     }
-    var r = await jpost("/api/socials/verify",
-                        { fingerprint: fp, nickname: nick, verified: on });
-    if (r && r.ok) { toast(on ? ("Verified " + nick) : ("Unverified " + nick)); }
-    else { toast("Could not update verification"); }
-    socialsVerifyIdentity();   // re-render with the new state
+    var r = await jpost("/api/socials/verify", body);
+    if (r && r.ok) { toast("Updated " + nick); } else { toast("Could not update"); }
+    socialsVerifyIdentity();
   }
-  window.socialsMarkVerified = socialsMarkVerified;
+  window.socialsTrustAction = socialsTrustAction;
+
+  async function socialsRevokeSelf() {
+    var ok = await (window.oracleConfirm
+      ? window.oracleConfirm(
+          "Publish a signed revocation of YOUR OWN Argo-Net key?\n\nDo this only if your key may be compromised. It broadcasts to the mesh, and peers who receive it will show your fingerprint as REVOKED. You'll then need to Reset key for a fresh identity.\n\nThis only ever revokes your own key — it cannot flag anyone else.",
+          { title: "Revoke my key", okLabel: "Revoke my key" })
+      : Promise.resolve(window.confirm("Revoke your own key?")));
+    if (!ok) return;
+    var r = await jpost("/api/socials/argonet/revoke-self", { reason: "compromised" });
+    if (r && r.ok) {
+      toast("Self-revocation published");
+      // Offer to rotate to a fresh identity right away.
+      var rot = await (window.oracleConfirm
+        ? window.oracleConfirm(
+            "Revocation published. Generate a fresh identity now?\n\n"
+            + "Your revoked key can no longer be trusted. A new identity gives "
+            + "you a new fingerprint; reconnect Argo-Net afterward to apply it, "
+            + "then re-verify with your peers.",
+            { title: "New identity", okLabel: "Create new identity" })
+        : Promise.resolve(window.confirm("Create a new identity now?")));
+      if (rot) await socialsRotateIdentity(true);
+    } else { toast("Revoke failed — is Argo-Net connected?"); }
+    socialsVerifyIdentity();
+  }
+  window.socialsRevokeSelf = socialsRevokeSelf;
+
+  async function socialsRotateIdentity(skipConfirm) {
+    if (!skipConfirm) {
+      var ok = await (window.oracleConfirm
+        ? window.oracleConfirm(
+            "Generate a brand-new Argo-Net identity?\n\n"
+            + "This replaces your keypair and fingerprint. Peers who verified "
+            + "your old fingerprint will need to re-verify the new one. "
+            + "Reconnect Argo-Net afterward to apply it.",
+            { title: "New identity", okLabel: "Create new identity" })
+        : Promise.resolve(window.confirm("Create a new identity?")));
+      if (!ok) return;
+    }
+    var r = await jpost("/api/socials/argonet/rotate-identity", {});
+    if (r && r.ok) {
+      if (r.applied) {
+        toast("New identity active" + (r.fingerprint ? " (" + r.fingerprint.slice(0, 12) + "…)" : ""));
+      } else {
+        toast("New identity created — connect Argo-Net to use it");
+      }
+      socialsRefresh();
+      socialsVerifyIdentity();   // re-render with the fresh fingerprint
+    } else { toast("Could not rotate identity"); }
+  }
+  window.socialsRotateIdentity = socialsRotateIdentity;
 
   async function socialsRefresh() {
     try {
@@ -255,12 +332,28 @@
     else { toast("Save failed"); }
   }
 
-  async function socialsSaveBitchat() {
-    var host = (($("cfg-bitchat-host") || {}).value || "localhost").trim();
-    var port = parseInt((($("cfg-bitchat-port") || {}).value || "8080"), 10) || 8080;
-    var d = await jpost("/api/socials/config", { channel: "bitchat", settings: { host: host, port: port } });
-    if (d && d.ok) { toast("BitChat settings saved"); socialsRefresh(); }
-    else { toast("Save failed"); }
+  async function socialsSaveArgonet() {
+    var secret = (($("cfg-argonet-secret") || {}).value || "").trim();
+    var settings = {};
+    if (secret) settings.mesh_secret = secret;
+    var d = await jpost("/api/socials/config", { channel: "argonet", settings: settings });
+    if (d && d.ok) {
+      if ($("cfg-argonet-secret")) $("cfg-argonet-secret").value = "";
+      toast("Argo-Net secret saved — reconnect to apply");
+      socialsRefresh();
+    } else { toast("Save failed"); }
+  }
+
+  async function socialsResetArgonetKey() {
+    if (!(await window.oracleConfirm(
+        "Regenerate this device's Argo-Net key?\n\n"
+        + "This replaces the per-device key used when NO shared mesh secret is "
+        + "set. Devices relying on the old key won't reach this one until "
+        + "re-paired. A shared mesh secret, if set, is not affected.",
+        { title: "Reset Argo-Net key", okLabel: "Reset key" }))) return;
+    var d = await jpost("/api/socials/argonet/reset-key", {});
+    if (d && d.ok) { toast("Argo-Net key reset — reconnect to apply"); }
+    else { toast("Reset failed"); }
   }
 
   async function socialsClearToken(channel, key) {
@@ -297,9 +390,82 @@
     var sel = $("socials-target"); var txt = (($("socials-text") || {}).value || "").trim();
     if (!sel || !sel.value) { toast("No channel selected"); return; }
     if (!txt) { toast("Type a message first"); return; }
-    var d = await jpost("/api/socials/send", { channel: sel.value, text: txt });
-    if (d && d.ok) { if ($("socials-text")) $("socials-text").value = ""; toast("Sent to " + sel.value); socialsFeed(); }
+    var body = { channel: sel.value, text: txt };
+    var dmLabel = "";
+    // Argo-Net only: a chosen peer in the top To: picker sends a private DM.
+    if (sel.value === "argonet" && _dmPeer) {
+      // DM guard: warn (but allow) if this peer's key is flagged.
+      var fl = _peerFlags[_dmPeer] || {};
+      if (fl.revoked || fl.compromised) {
+        var why = fl.revoked ? "has been REVOKED by its owner"
+                             : "is flagged compromised (locally)";
+        var go = await (window.oracleConfirm
+          ? window.oracleConfirm(
+              "This peer's key " + why + ".\n\nSend this DM anyway? Only do so if "
+              + "you understand the risk — a revoked/compromised key may be in "
+              + "someone else's hands.",
+              { title: "Flagged key", okLabel: "Send anyway" })
+          : Promise.resolve(window.confirm("Key flagged — send anyway?")));
+        if (!go) { toast("DM cancelled"); return; }
+      }
+      body.room = "dm:" + _dmPeer; dmLabel = " (DM 🔒)";
+    }
+    var d = await jpost("/api/socials/send", body);
+    if (d && d.ok) { if ($("socials-text")) $("socials-text").value = ""; toast("Sent to " + sel.value + dmLabel); socialsFeed(); }
     else { toast("Send failed — is " + sel.value + " connected?"); }
+  }
+
+  // The Argo-Net To: picker lives at the top of the messaging area. It is
+  // shown only when Argo-Net is connected, and it drives BOTH what you send
+  // (group vs a private DM) and which thread the feed shows (group vs a
+  // per-peer DM conversation).
+  function _argonetConnected() {
+    var chans = (_last && _last.channels) || {};
+    return !!(chans.argonet && chans.argonet.connected);
+  }
+
+  async function _refreshDmRow() {
+    var row = $("socials-dm-row"); if (!row) return;
+    if (!_argonetConnected()) { row.style.display = "none"; return; }
+    row.style.display = "flex";
+    await _populateDmTargets();
+  }
+
+  async function _populateDmTargets() {
+    var dm = $("socials-dm-target"); if (!dm) return;
+    var prev = dm.value || _dmPeer;
+    var opts = ['<option value="">Everyone (group)</option>'];
+    var seen = {};
+    _peerFlags = {};
+    try {
+      var d = await jget("/api/socials/identity?channel=argonet");
+      var peers = (d && d.peers) || [];
+      for (var i = 0; i < peers.length; i++) {
+        var p = peers[i];
+        _peerFlags[p.peer_id] = { compromised: !!p.compromised, revoked: !!p.revoked };
+        if (!p.can_dm) continue;   // no public key yet -> can't DM
+        seen[p.peer_id] = 1;
+        var mark = p.revoked ? "⛔ " : (p.compromised ? "⚠ " : (p.trusted ? "✓ " : ""));
+        var label = "🔒 " + mark + (p.nickname || (p.peer_id || "").slice(0, 12));
+        opts.push('<option value="' + esc(p.peer_id) + '">' + esc(label) + "</option>");
+      }
+    } catch (e) {}
+    // Keep the currently-selected peer listed even if it briefly drops from the
+    // active-peer list, so an open DM thread doesn't vanish mid-conversation.
+    if (prev && !seen[prev]) {
+      opts.push('<option value="' + esc(prev) + '">🔒 ' + esc(prev.slice(0, 12)) + " (offline)</option>");
+    }
+    dm.innerHTML = opts.join("");
+    dm.value = prev || "";
+  }
+
+  function socialsOnDmPeerChange() {
+    var dm = $("socials-dm-target");
+    _dmPeer = (dm && dm.value) || "";
+    // Looking at a DM thread implies you're on the Argo-Net thread.
+    if (_dmPeer && _activeThread !== "argonet") _activeThread = "argonet";
+    _renderThreads();
+    _renderFeed();
   }
 
   async function socialsAutoReply(on) {
@@ -355,11 +521,24 @@
     }
   }
 
+  function _isDmChannel(m) { return (m.channel || "").indexOf("dm:") === 0; }
+
   function _renderFeed() {
     var box = $("socials-feed"); if (!box) return;
     var msgs = (_activeThread === "all")
       ? _msgs
       : _msgs.filter(function (m) { return (m.platform || "").toLowerCase() === _activeThread; });
+    // Argo-Net per-peer sub-filter driven by the To: picker. Both inbound DMs
+    // (channel "dm:<sender>") and our own echoed DMs (channel "dm:<recipient>")
+    // carry the peer's fingerprint in the channel, so one filter threads the
+    // whole conversation. "Everyone" hides private DMs from the group view.
+    if (_activeThread === "argonet") {
+      if (_dmPeer) {
+        msgs = msgs.filter(function (m) { return m.channel === ("dm:" + _dmPeer); });
+      } else {
+        msgs = msgs.filter(function (m) { return !_isDmChannel(m); });
+      }
+    }
     if (!msgs.length) {
       box.innerHTML = (_activeThread === "all")
         ? "<i>No messages yet.</i>"
@@ -368,7 +547,12 @@
       box.innerHTML = msgs.slice(-50).map(function (m) {
         // In a single-channel thread the platform is implied, so show just the sender.
         var who = (_activeThread === "all" ? ((m.platform || "") + "/") : "") + (m.sender || "?");
-        return "<div><b>" + esc(who) + ":</b> " + esc(m.content || "") + "</div>";
+        // Argo-Net DMs (raw.private) are labelled with a lock so a private
+        // message is never mistaken for a group post.
+        var priv = m.raw && m.raw.private
+          ? '<span style="color:var(--gold,#f0a500)" data-tip="Private end-to-end DM">🔒 DM </span>'
+          : "";
+        return "<div>" + priv + "<b>" + esc(who) + ":</b> " + esc(m.content || "") + "</div>";
       }).join("");
     }
     box.scrollTop = box.scrollHeight;
@@ -433,14 +617,16 @@
     _renderThreads();
     _renderFeed();
   }
-  function _startFeed() { _stopFeed(); _feedTimer = setInterval(function () { socialsFeed(); socialsPeers(); }, 5000); socialsFeed(); socialsPeers(); }
+  function _startFeed() { _stopFeed(); _feedTimer = setInterval(function () { socialsFeed(); socialsPeers(); _refreshDmRow(); }, 5000); socialsFeed(); socialsPeers(); }
   function _stopFeed() { if (_feedTimer) { clearInterval(_feedTimer); _feedTimer = null; } }
 
   window.socialsOnTab = socialsOnTab; window.socialsRefresh = socialsRefresh; window.socialsConnect = socialsConnect;
   window.socialsPeers = socialsPeers;
   window.socialsSend = socialsSend; window.socialsAutoReply = socialsAutoReply; window.socialsFeed = socialsFeed;
-  window.socialsSaveDiscord = socialsSaveDiscord; window.socialsSaveBitchat = socialsSaveBitchat; window.socialsClearToken = socialsClearToken;
+  window.socialsSaveDiscord = socialsSaveDiscord; window.socialsClearToken = socialsClearToken;
   window.socialsSaveMastodon = socialsSaveMastodon; window.socialsSaveBluesky = socialsSaveBluesky;
+  window.socialsSaveArgonet = socialsSaveArgonet; window.socialsResetArgonetKey = socialsResetArgonetKey;
+  window.socialsOnDmPeerChange = socialsOnDmPeerChange;
   window.socialsVerifyIdentity = socialsVerifyIdentity;
   window.socialsSelectThread = socialsSelectThread; window.socialsClearThread = socialsClearThread;
   window.socialsArmDeleteAll = socialsArmDeleteAll; window.socialsDeleteAll = socialsDeleteAll;

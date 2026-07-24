@@ -484,7 +484,7 @@
       '<div id="ac-window-note" aria-live="polite" style="font-size:11px;margin:3px 2px 0;color:' +
       V("--text-muted", "#7890b8") + '"></div>' +
       '<label style="' + chk + '"><input id="ac-socials" type="checkbox" style="accent-color:' +
-      V("--gold", "#f0a500") + '">Allow socials (Discord, Mastodon, Bluesky, BitChat)</label>' +
+      V("--gold", "#f0a500") + '">Allow socials (Discord, Mastodon, Bluesky, Argo-Net)</label>' +
       // v2.12.9 delegated admin: grant an assistant-manager profile specific
       // owner-level controls. Maps to access_policy.admin_grants; enforced
       // server-side by _owner_gate(cap) / _owner_guard -- these checkboxes

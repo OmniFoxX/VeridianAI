@@ -1885,6 +1885,41 @@ pre:hover .copy-btn {
   color: var(--text-muted);
 }
 
+/* Socials: channel rows. The action button lives in .socials-chan-row and
+   is ANCHORED there; setup notes + adapter errors render below it inside
+   .socials-chan-note, which is the scroll area. Errors can compound (BlueSky
+   and Mastodon login failures stack) — max-height + overflow keeps them
+   from growing the row or pushing buttons off-viewport (v2.12.17). */
+.socials-chan {
+  padding: 3px 0;
+}
+.socials-chan-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.socials-chan-row > .toolbar-btn {
+  flex: 0 0 auto; /* the button never shrinks and never gets pushed out */
+}
+.socials-chan-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.socials-chan-note {
+  max-height: 64px; /* ~4 lines, then it scrolls */
+  overflow-y: auto;
+  overflow-x: hidden;
+  overflow-wrap: anywhere; /* long tokens/URLs wrap instead of widening */
+  white-space: pre-wrap;
+  opacity: 0.85;
+  margin-top: 2px;
+  padding-right: 4px;
+}
+.socials-chan-err {
+  color: var(--error, #e0836d);
+}
+
 /* ── Socials: per-channel threads + maintenance ------------------ */
 .socials-threads {
   display: flex;
