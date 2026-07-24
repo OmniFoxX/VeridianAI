@@ -634,6 +634,14 @@ def inspect(tool_name: str, raw_args: Any, origin: str,
     intent_scope classification -- recorded in the hash-chain event so
     scope-creep is auditable alongside validation verdicts."""
     global _warned_disabled
+    # IMPERIUM boundary-integrity witness (v2.12.16). Separate concern,
+    # separate knob (imperium_enabled); observe-only unless
+    # imperium_enforce=true. Never raises, never blocks dispatch here.
+    try:
+        import imperium as _imperium
+        _imperium.observe_dispatch(tool_name, raw_args, origin)
+    except Exception as _imp_err:
+        print(f"[CUSTOMS] imperium witness error (non-fatal): {_imp_err}")
     if not is_enabled():
         if not _warned_disabled:
             _warned_disabled = True

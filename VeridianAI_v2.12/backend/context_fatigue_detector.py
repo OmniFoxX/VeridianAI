@@ -70,6 +70,67 @@ def extract_user_texts(messages):
                 texts.append(" ".join(part if isinstance(part, str) else str(part) for part in content))
     return texts
 
+def extract_assistant_texts(messages):
+    """Extract plain text from ASSISTANT messages.
+
+    v2.12.17: the detector previously analyzed USER texts only, so
+    assistant-output degradation was invisible to it (and to CRAIID).
+    Incident 2026-07-23: after a long build-battle session with a
+    stopped/resent generation, Toga's reply came out token-FUSED --
+    the last quarter was one unbroken string, no spaces or punctuation.
+    Nothing flagged it. This extractor + compute_whitespace_collapse()
+    close that gap."""
+    texts = []
+    for msg in messages:
+        if isinstance(msg, dict) and msg.get("role") == "assistant":
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                texts.append(content)
+            elif isinstance(content, list):
+                texts.append(" ".join(part if isinstance(part, str) else str(part) for part in content))
+    return texts
+
+
+def compute_whitespace_collapse(texts, window_turns,
+                                min_len=200,
+                                ratio_threshold=0.05,
+                                run_threshold=300):
+    """Detect token-fusion / whitespace collapse in recent assistant output.
+
+    Normal English prose runs ~0.15-0.18 whitespace-to-character ratio.
+    Fused output (dropped space tokens) collapses toward 0.0, and the
+    longest unbroken character run explodes. Either signal on a
+    sufficiently long message (>= min_len chars, so code hashes or URLs
+    in short replies do not false-positive) marks collapse.
+
+    Returns (collapsed: bool, details: dict)."""
+    window = texts[-window_turns:] if len(texts) >= window_turns else texts
+    worst_ratio, worst_run, flagged = 1.0, 0, []
+    for i, t in enumerate(window):
+        if not isinstance(t, str) or len(t) < min_len:
+            continue
+        ws = sum(1 for ch in t if ch.isspace())
+        ratio = ws / len(t)
+        longest = max((len(run) for run in t.split()), default=0)
+        worst_ratio = min(worst_ratio, ratio)
+        worst_run = max(worst_run, longest)
+        if ratio < ratio_threshold or longest > run_threshold:
+            flagged.append({
+                "index_in_window": i,
+                "length": len(t),
+                "whitespace_ratio": round(ratio, 4),
+                "longest_unbroken_run": longest,
+                "preview": t[:80],
+            })
+    details = {
+        "messages_flagged": len(flagged),
+        "worst_whitespace_ratio": round(worst_ratio, 4),
+        "longest_unbroken_run": worst_run,
+        "flagged": flagged,
+    }
+    return (len(flagged) > 0), details
+
+
 def compute_metrics(texts, window_turns):
     """Compute fatigue metrics over the last `window_turns` user messages."""
     if not texts:
@@ -144,6 +205,20 @@ def main():
         help="Normalized entropy threshold (0-1) below which fatigue is signaled (low entropy = repetitive)",
     )
     parser.add_argument(
+        "--whitespace-ratio-threshold",
+        type=float,
+        default=0.05,
+        help="Assistant-output whitespace ratio below which token-fusion/"
+             "whitespace collapse is signaled (normal prose is ~0.15+)",
+    )
+    parser.add_argument(
+        "--unbroken-run-threshold",
+        type=int,
+        default=300,
+        help="Longest unbroken (no-whitespace) character run in assistant "
+             "output above which collapse is signaled",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "sage_data" / "downloads" / "coordinator_signal.json",
@@ -166,6 +241,13 @@ def main():
 
     token_ratio, repetition_ratio, entropy_norm = compute_metrics(user_texts, args.window_turns)
 
+    # v2.12.17: assistant-side output-degradation check (token fusion).
+    assistant_texts = extract_assistant_texts(all_messages)
+    ws_collapsed, ws_details = compute_whitespace_collapse(
+        assistant_texts, args.window_turns,
+        ratio_threshold=args.whitespace_ratio_threshold,
+        run_threshold=args.unbroken_run_threshold)
+
     fatigue_signaled = False
     reasons = []
     if token_ratio > args.token_threshold:
@@ -177,6 +259,12 @@ def main():
     if entropy_norm < args.entropy_threshold:
         fatigue_signaled = True
         reasons.append(f"entropy_norm {entropy_norm:.2f} < threshold {args.entropy_threshold}")
+    if ws_collapsed:
+        fatigue_signaled = True
+        reasons.append(
+            f"assistant whitespace collapse: {ws_details['messages_flagged']} "
+            f"message(s), worst ratio {ws_details['worst_whitespace_ratio']}, "
+            f"longest run {ws_details['longest_unbroken_run']} chars")
 
     signal = {
         "fatigue_detected": fatigue_signaled,
@@ -185,6 +273,7 @@ def main():
             "repetition_ratio": round(repetition_ratio, 3),
             "entropy_normalized": round(entropy_norm, 3),
         },
+        "assistant_whitespace_collapse": ws_details,
         "window_turns": args.window_turns,
         "user_messages_considered": len(user_texts),
         "total_user_messages": len([m for m in all_messages if isinstance(m, dict) and m.get("role") == "user"]),

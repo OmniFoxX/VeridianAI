@@ -722,6 +722,15 @@ config = load_config()
 import customs_daemon  # noqa: E402
 customs_daemon.set_runtime(config.get, DATA_DIR)
 
+# -- IMPERIUM (v2.12.16): three-layer goal-integrity + boundary enforcement.
+# Rides the same Customs chokepoint (customs_daemon.inspect calls
+# imperium.observe_dispatch), so every dispatch path is witnessed with one
+# wire. Observe-only until imperium_enforce=true (Customs rollout playbook).
+# Alerts surface through the overseer notification file; audit entries
+# mirror into Toga's memory chain once attach_memory_logger() runs below.
+import imperium  # noqa: E402
+imperium.set_runtime(config.get, DATA_DIR)
+
 # ── Intent-fidelity guardrails Part 1 (v2.13.2): scope tags on standing
 # instructions + requested/opportunistic action classification.
 import intent_scope  # noqa: E402
@@ -7030,6 +7039,10 @@ memory_logger = MemoryLogger(
 print(f"[MEMORY LOGGER] Initialized at: {MEMORY_DIR}")
 print(f"[MEMORY LOGGER] Chain head: {memory_logger.chain_head[:16]}...")
 print(f"[MEMORY LOGGER] Entries on disk: {memory_logger.count_entries()}")
+
+# IMPERIUM audit entries mirror into the SAME tamper-evident chain
+# (buffered since boot; flushed now that the shared logger exists).
+imperium.attach_memory_logger(memory_logger)
 
 # v2.1.4: enable the previously-dormant procedural memory, wired to the
 # memory_logger so successful procedures get chain-witnessed for provenance.

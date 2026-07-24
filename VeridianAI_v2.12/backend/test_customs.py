@@ -200,10 +200,15 @@ chain = _tmp / "handoff_audit.log"
 blob = chain.read_text(encoding="utf-8") if chain.exists() else ""
 check("audit chain exists", chain.exists())
 check("sensitive content NEVER in chain", secret not in blob)
-# detail is a JSON string embedded in the chain record, so quotes are
-# escaped: \"fields\": [\"code\"]
-check("field names ARE in chain",
-      '\\"fields\\": [\\"code\\"' in blob, blob[:200])
+# v2.13 encrypt-then-hash: detail (field names, digest, verdict) now
+# lives Fernet-encrypted in `ct`, so the plaintext blob must NOT contain
+# it -- decrypt via read_audit to confirm the names are still recorded.
+check("no plaintext detail in chain", '"fields"' not in blob)
+from handoff_guard import HandoffGuard as _HG
+_recs = _HG(_tmp).read_audit(decrypt=True)
+_details = " ".join(str(r.get("detail", "")) for r in _recs)
+check("field names ARE in chain (decrypted)",
+      '"fields": ["code"' in _details, _details[:200])
 
 print("== ledger: TTL + size cap ==")
 enable(True)

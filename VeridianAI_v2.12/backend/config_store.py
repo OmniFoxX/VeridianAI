@@ -216,6 +216,13 @@ class SageSection:
     # v2.13 Customs: universal tool-call sanitizer (customs_daemon.py).
     # Default OFF until the CRAIID regression suite passes clean.
     customs_enabled: bool = True
+    # v2.12.16 IMPERIUM: goal-integrity/boundary gate at the Customs
+    # chokepoint. Observe-only by default; flip imperium_enforce only
+    # after a live soak with clean observe logs.
+    imperium_enabled: bool = True
+    imperium_enforce: bool = False
+    imperium_window_seconds: float = 5.0
+    imperium_violation_threshold: int = 3
     privacy_mode: bool = False
     # v2.12.1 personalization: the assistant's NAME (persona self-reference)
     # and the voice/socials WAKE WORD. assistant_name is per-user capable
@@ -459,6 +466,10 @@ class OracleConfig:
             "web_search_enabled":      self.sage.web_search_enabled,
             "code_exec_enabled":       self.sage.code_exec_enabled,
             "customs_enabled":         self.sage.customs_enabled,
+            "imperium_enabled":        self.sage.imperium_enabled,
+            "imperium_enforce":        self.sage.imperium_enforce,
+            "imperium_window_seconds": self.sage.imperium_window_seconds,
+            "imperium_violation_threshold": self.sage.imperium_violation_threshold,
             "privacy_mode":            self.sage.privacy_mode,
             # v2.12.1 personalization
             "assistant_name":          self.sage.assistant_name,
@@ -611,6 +622,13 @@ class OracleConfig:
         cfg.sage.web_search_enabled = bool(_g("web_search_enabled", cfg.sage.web_search_enabled))
         cfg.sage.code_exec_enabled  = bool(_g("code_exec_enabled",  cfg.sage.code_exec_enabled))
         cfg.sage.customs_enabled    = bool(_g("customs_enabled",    cfg.sage.customs_enabled))
+        cfg.sage.imperium_enabled   = bool(_g("imperium_enabled",   cfg.sage.imperium_enabled))
+        cfg.sage.imperium_enforce   = bool(_g("imperium_enforce",   cfg.sage.imperium_enforce))
+        try:
+            cfg.sage.imperium_window_seconds     = float(_g("imperium_window_seconds",     cfg.sage.imperium_window_seconds))
+            cfg.sage.imperium_violation_threshold = int(_g("imperium_violation_threshold", cfg.sage.imperium_violation_threshold))
+        except (TypeError, ValueError):
+            pass  # malformed knob -> keep defaults, never crash boot
         cfg.sage.privacy_mode       = bool(_g("privacy_mode",       cfg.sage.privacy_mode))
         # v2.12.1 personalization — sanitized: printable, no quotes/brackets
         # (they'd break prompt framing and tag parsing), max 24 chars.

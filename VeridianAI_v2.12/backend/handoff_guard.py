@@ -455,6 +455,16 @@ class HandoffGuard:
                         continue
                     rec = json.loads(line)
                     if rec.get("v") == 1 or "ct" in rec:
+                        # v2.13.x hardening: the v1 hash preimage covers exactly
+                        # (v, prev, ts, event, ct) -- an ATTACKER-ADDED extra key
+                        # (e.g. a forged plaintext "detail" alongside the real
+                        # ciphertext) would re-verify clean on both the keyless
+                        # and decrypt walks, then sit waiting for any reader
+                        # that trusts raw fields. Unknown keys = break, at this
+                        # line. Legitimate v1 writers emit exactly these six.
+                        if set(rec.keys()) - {"v", "ts", "event", "ct",
+                                              "prev", "hash"}:
+                            return False, i
                         ct = rec.get("ct", "")
                         h = hashlib.sha256(
                             self._chain_input_v1(
