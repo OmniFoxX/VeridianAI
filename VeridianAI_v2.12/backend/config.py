@@ -160,7 +160,12 @@ LLAMA_SERVER_EXE   = BACKEND_DIR / "llama-server.exe"
 # is guaranteed. The launcher passes the values through environment variables;
 # if not set, these defaults take effect.
 
-SAGE_CTX_MAX       = 10000000   # nemotron-3-super:120b max trained context window 256k (1M-Max)
+SAGE_CTX_MAX       = 65536   # hardware-sanity clamp (2026-07-25). Was 10000000 ("1M-Max"),
+                             # which meant no clamp at all: n_ctx=262144 in config.json made
+                             # the CPU Toga tier try a ~30 GB KV-cache allocation at every
+                             # boot (intermittent boot failure + system-wide thrash) and sent
+                             # num_ctx=262144 on every Ollama request (empty generations).
+                             # Raise deliberately, with the RAM math done, not via config.json.
 SAGE_CTX_DEFAULT   = int(os.environ.get("SAGE_CTX_SIZE",   32768))
 DAEMON_CTX_MAX     = 8192   # gemma4:31b max trained context window 128k
 DAEMON_CTX_DEFAULT = int(os.environ.get("DAEMON_CTX_SIZE", 4096))

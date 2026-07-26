@@ -30,7 +30,7 @@
       "npu_llm": 11438
     },
     "ollama_url": "http://localhost:11434",
-    "host": "127.0.0.1",
+    "host": "0.0.0.0",
     "node_server_enabled": false,
     "node_name": "",
     "remote_node_url": "",
@@ -63,11 +63,19 @@
     "vulkan_enabled": true,
     "openvino_enabled": true,
     "xe_cores_enabled": true,
+    "scheduler_enabled": true,
+    "scheduler_aging_rate": 0.05,
+    "scheduler_queue_limit": 24,
+    "agentic_step_max_tokens": 8192,
+    "runaway_token_limit": 100000,
+    "gen_snapshot_every_tokens": 2048,
+    "gen_snapshot_content": true,
     "npu_enabled": true,
+    "npu_ctx": 16384,
     "n_gpu_layers": -1,
     "temperature": 0.5,
-    "max_tokens": -1,
-    "n_ctx": 131072
+    "max_tokens": 8192,
+    "n_ctx": 32768
   },
   "context_sizing": {
     "hard_cap_ctx": false,
@@ -93,9 +101,15 @@
     "agentic_mode": true,
     "web_search_enabled": true,
     "code_exec_enabled": true,
+    "customs_enabled": true,
+    "imperium_enabled": true,
+    "imperium_enforce": true,
+    "imperium_window_seconds": 5.0,
+    "imperium_violation_threshold": 3,
     "privacy_mode": false,
     "assistant_name": "Toga",
-    "voice_wake_word": "Toga"
+    "voice_wake_word": "Toga",
+    "session_boundary_markers": true
   },
   "handoff_security": {
     "cadence_max": 5,

@@ -10,7 +10,7 @@ import json
 import threading
 from pathlib import Path
 
-_SECRET_KEYS = {"token", "app_password"}
+_SECRET_KEYS = {"token", "app_password", "mesh_secret"}
 
 
 class SocialsConfig:

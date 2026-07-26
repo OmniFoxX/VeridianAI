@@ -45,16 +45,24 @@ from config import (
 )
 
 # --- Tier registry -----------
+# v2.12.17 (2026-07-26): "bitchat" UNREGISTERED from the tier registry.
+# Argo-Net replaced BitChat on 2026-07-24 (see docs/security/
+# INTEGRATION_argonet_2026-07-24.md) but this registration was missed, so
+# GET /api/tiers kept advertising a forever-down "bitchat" tier to every
+# client (UI tier panel, CLI dashboard). Argo-Net needs NO tier entry: it
+# is a Socials adapter (SageMessagingAdapter) with no gateway process or
+# port — its radio starts on the user's Connect click. The gateway
+# functions below (ensure_bitchat_gateway / stop_bitchat_gateway) are
+# KEPT, matching the integration doc's disposition: BitChat files stay
+# on disk, reachable only via the opt-in bitchat_autostart config flag.
 TIER_PORTS: Dict[str, int] = {
     "sage":    PORT_LLAMA_SAGE,
     "daemon":  PORT_LLAMA_DAEMON,
-    "bitchat": 8080,                  # BitChat BLE gateway
 }
 
 TIER_URLS: Dict[str, str] = {
     "sage":    LLAMA_SAGE_URL,
     "daemon":  LLAMA_DAEMON_URL,
-    "bitchat": "http://127.0.0.1:8080",
 }
 
 # --- ctx_size cache ----------

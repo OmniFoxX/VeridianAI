@@ -1093,11 +1093,18 @@ try:
                 return {}
 
         if ns is None:
+            # v2.12.17: Argo-Net replaces BitChat as this machine's native
+            # mesh. Owner-only (it drives the local radio + LAN multicast), so
+            # like BitChat it registers on the OWNER router only. BitChat's
+            # files stay on disk for reuse elsewhere but are no longer wired in
+            # -- its BLE-dongle-plus-gateway requirement made it non-functional
+            # on typical hardware, whereas Argo-Net's LAN transport works out
+            # of the box (see argonet_bridge.py).
             try:
-                from bitchat_bridge import BitChatBridge
-                router.register(BitChatBridge(_seed("bitchat")))
-            except Exception as _bc_err:
-                print(f"[SOCIALS] BitChat adapter not registered: {_bc_err}")
+                from argonet_bridge import ArgoNetBridge
+                router.register(ArgoNetBridge(_seed("argonet")))
+            except Exception as _an_err:
+                print(f"[SOCIALS] Argo-Net adapter not registered: {_an_err}")
         for _cls, _name in ((DiscordAdapter, "discord"),
                             (MastodonAdapter, "mastodon"),
                             (BlueSkyAdapter, "bluesky")):
@@ -1398,10 +1405,11 @@ async def api_socials_connect(request: Request, payload: dict):
     if router is None:
         raise HTTPException(503, "socials unavailable")
     name = (payload.get("channel") or "").strip().lower()
-    # BitChat = this machine's BLE radio; owner profile only (child routers
-    # don't even register it, but fail loudly rather than silently).
-    if name == "bitchat" and _session_ns(request) is not None:
-        raise HTTPException(403, "BitChat uses this machine's radio and is "
+    # BitChat/Argo-Net drive this machine's radio + LAN multicast; owner
+    # profile only (child routers don't even register them, but fail loudly
+    # rather than silently).
+    if name in ("bitchat", "argonet") and _session_ns(request) is not None:
+        raise HTTPException(403, f"{name} uses this machine's radio and is "
                                  "available on the owner profile only")
     if payload.get("connect", True):
         if name == "bitchat":
@@ -1507,6 +1515,22 @@ async def api_socials_peers(request: Request, channel: str = ""):
     return {"peers": await router.peers((channel or "").strip().lower())}
 
 
+@app.post("/api/socials/argonet/reset-key")
+async def api_socials_argonet_reset_key(request: Request):
+    """Regenerate this machine's Argo-Net per-machine mesh key. Owner-only (it
+    drives the local radio + LAN multicast). A shared mesh secret, if set, is
+    unaffected -- clear that separately. Reconnect to apply the new key."""
+    if not _is_local_client(request):
+        raise HTTPException(404)
+    if not _is_owner(request):
+        raise HTTPException(403, "Argo-Net key reset is owner-only")
+    try:
+        import argonet_bridge
+        return {"ok": bool(argonet_bridge.reset_mesh_key())}
+    except Exception as exc:
+        raise HTTPException(500, f"reset failed: {exc}")
+
+
 @app.get("/api/socials/identity")
 async def api_socials_identity(request: Request, channel: str = "bitchat"):
     """v2.12.3: identity fingerprints for out-of-band verification. Returns
@@ -1525,7 +1549,13 @@ async def api_socials_identity(request: Request, channel: str = "bitchat"):
         trust = _socials_trust_load()
         for _p in (d.get("peers") or []):
             _fpn = _socials_fp_norm(_p.get("fingerprint") or "")
-            _p["trusted"] = bool(_fpn) and _fpn in trust
+            _t = trust.get(_fpn) if _fpn else None
+            # Legacy entries (no "status") mean trusted. New entries carry a
+            # status of "trusted" or "compromised" (a LOCAL flag). "revoked"
+            # comes from the mesh (a signed self-revocation) and is set by the
+            # adapter itself, so we never clobber it here.
+            _p["trusted"] = bool(_t) and (_t.get("status", "trusted") == "trusted")
+            _p["compromised"] = bool(_t) and (_t.get("status") == "compromised")
     except Exception:
         pass
     return d
@@ -1570,27 +1600,98 @@ def _socials_trust_save(d: dict) -> None:
 
 @app.post("/api/socials/verify")
 async def api_socials_verify(request: Request, payload: dict):
-    """Mark ONE peer as human-verified (or unmark it). Localhost-only.
-    Body: {fingerprint, nickname?, verified?: bool (default true)}.
-    Per-peer by design: a blanket verify-all would defeat the entire point
-    of out-of-band fingerprint comparison."""
+    """Mark ONE peer's LOCAL trust state (or clear it). Localhost + owner only.
+    Body: {fingerprint, nickname?, status?: "trusted"|"compromised",
+           verified?: bool}.
+      * status "trusted"     -> you compared fingerprints out-of-band and vouch.
+      * status "compromised" -> you locally flag this key as compromised (shows
+                                a warning + guards DMs). LOCAL ONLY: it never
+                                propagates, so it can't be abused to brand a
+                                peer for others. To warn others, the KEY OWNER
+                                publishes a signed self-revocation instead.
+      * verified:false / no status -> clear the local mark (unverify).
+    Per-peer by design; a blanket verify-all would defeat out-of-band checking.
+    """
     _owner_gate(request)  # v2.12.8 owner-only (semgrep)
     if not _is_local_client(request):
         raise HTTPException(404)
     fpn = _socials_fp_norm(payload.get("fingerprint") or "")
-    if not fpn or len(fpn) < 32:
+    if not fpn or len(fpn) < 16:
         raise HTTPException(400, "full fingerprint required")
+    status = (payload.get("status") or "").strip().lower()
     trust = _socials_trust_load()
-    if payload.get("verified", True):
-        trust[fpn] = {"nickname": str(payload.get("nickname") or "")[:64],
-                      "verified_at": int(time.time())}
+    if status in ("trusted", "compromised"):
+        trust[fpn] = {"status": status,
+                      "nickname": str(payload.get("nickname") or "")[:64],
+                      "ts": int(time.time())}
+    elif payload.get("verified", True) and not status:
+        # legacy call shape: verified:true means trusted
+        trust[fpn] = {"status": "trusted",
+                      "nickname": str(payload.get("nickname") or "")[:64],
+                      "ts": int(time.time())}
     else:
-        trust.pop(fpn, None)
+        trust.pop(fpn, None)   # unverify / clear
     try:
         _socials_trust_save(trust)
     except Exception as exc:
         raise HTTPException(500, _safe_detail(exc, "trust store"))
-    return {"ok": True, "trusted_count": len(trust)}
+    return {"ok": True, "count": len(trust)}
+
+
+@app.post("/api/socials/argonet/rotate-identity")
+async def api_socials_argonet_rotate_identity(request: Request):
+    """Generate a FRESH Argo-Net identity (new keypair + fingerprint). Owner-
+    only. Deletes the old keys, then -- if Argo-Net is connected -- reconnects
+    in place so the new identity loads and takes effect IMMEDIATELY (no manual
+    reconnect needed). Peers will need to re-verify the new fingerprint."""
+    _owner_gate(request)
+    if not _is_local_client(request):
+        raise HTTPException(404)
+    try:
+        import argonet_identity
+        if not argonet_identity.ArgoIdentity.reset():
+            raise HTTPException(500, "could not remove old identity keys")
+        router = _socials_router_for(request)
+        a = getattr(router, "_adapters", {}).get("argonet") if router else None
+        applied = False
+        new_fp = ""
+        # Apply live: a fresh identity is built when the node is reconstructed on
+        # connect, so bounce the connection if it's currently up.
+        if a is not None and a.connected():
+            await router.disconnect("argonet")
+            applied = await router.connect("argonet")
+            try:
+                d = await router.identity("argonet")
+                new_fp = (d or {}).get("fingerprint", "")
+            except Exception:
+                pass
+        return {"ok": True, "applied": bool(applied), "fingerprint": new_fp}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(500, _safe_detail(exc, "rotate-identity"))
+
+
+@app.post("/api/socials/argonet/revoke-self")
+async def api_socials_argonet_revoke_self(request: Request, payload: dict = None):
+    """Publish a signed self-revocation of THIS machine's Argo-Net identity to
+    the mesh. Owner-only. Others who receive it will show this fingerprint as
+    revoked. Rotate to a new identity (Reset key) afterward to keep using
+    Argo-Net. This is the ONLY compromise signal that propagates -- and it can
+    only ever revoke your OWN key, so it can't be weaponized against a peer."""
+    _owner_gate(request)
+    if not _is_local_client(request):
+        raise HTTPException(404)
+    router = _socials_router_for(request)
+    a = getattr(router, "_adapters", {}).get("argonet") if router else None
+    if a is None or not hasattr(a, "revoke_self"):
+        raise HTTPException(400, "Argo-Net not connected")
+    reason = str((payload or {}).get("reason") or "compromised")[:32]
+    try:
+        rev = await a.revoke_self(reason)
+    except Exception as exc:
+        raise HTTPException(500, _safe_detail(exc, "revoke-self"))
+    return {"ok": bool(rev), "fingerprint": (rev or {}).get("fingerprint", "")}
 
 
 @app.get("/api/socials/config")

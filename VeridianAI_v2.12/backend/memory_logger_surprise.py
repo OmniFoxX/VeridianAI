@@ -45,6 +45,7 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 from datetime import datetime  # noqa: F401 — kept for backward compat
 from time_manager import TimeManager  # v2.1.6 unified time source
 from cryptography.fernet import Fernet, InvalidToken
@@ -58,7 +59,10 @@ GENESIS_HASH = "0" * 64  # Standard "before time began" hash for chain start
 _FERNET_PREFIX = "gAAAAA"
 
 # Roles recognized by log(). "assistant" preserves back-compat (default).
-VALID_ROLES = ("user", "assistant", "system", "procedure")
+# v2.13.1 (2026-07-25): "imperium" added — imperium.py's Toga mirror passes
+# role="imperium" and every mirror write had been failing silently with
+# ValueError since integration (zero imperium entries ever reached the chain).
+VALID_ROLES = ("user", "assistant", "system", "procedure", "imperium")
 
 
 # -----------------------------------------------------------------------------
@@ -148,6 +152,13 @@ class MemoryLogger:
         self.log_file = os.path.join(storage_dir, "memory_chain.log")
         os.makedirs(storage_dir, exist_ok=True)
         self.chain_head = self._load_chain_head()
+        # v2.13.1 (2026-07-25): log() is no longer single-writer within the
+        # backend process — ws_chat, procedural_memory, and imperium's mirror
+        # all call it from different threads. Without this lock, two
+        # concurrent log() calls read the same chain_head and write entries
+        # with duplicate prev_hash values, forking the chain (verify_chain()
+        # would then report a chain break = false tamper alarm).
+        self._write_lock = threading.Lock()
 
     # --- Chain state ------------------------------
     def _load_chain_head(self):
@@ -263,42 +274,44 @@ class MemoryLogger:
         # chain remains tamper-evident independent of encryption state.
         encrypted_content = _encrypt_content(content)
 
-        entry = {
-            # v2.1.6: TimeManager.iso_z() produces the same Z-suffixed
-            # ISO format the chain log was already using, so old and
-            # new entries co-mingle without breaking verify_chain().
-            "timestamp": TimeManager.iso_z(),
-            "role": role,
-            "content": encrypted_content,
-            "temperature": temperature,
-            "token_prob": token_prob,
-            "surprise_score": round(surprise_score, 4),
-            "metadata": metadata or {},
-            "prev_hash": self.chain_head,
-        }
+        # v2.13.1: the read-chain_head -> append -> update-chain_head section
+        # must be atomic across threads, or concurrent writers fork the chain.
+        with self._write_lock:
+            entry = {
+                # v2.1.6: TimeManager.iso_z() produces the same Z-suffixed
+                # ISO format the chain log was already using, so old and
+                # new entries co-mingle without breaking verify_chain().
+                "timestamp": TimeManager.iso_z(),
+                "role": role,
+                "content": encrypted_content,
+                "temperature": temperature,
+                "token_prob": token_prob,
+                "surprise_score": round(surprise_score, 4),
+                "metadata": metadata or {},
+                "prev_hash": self.chain_head,
+            }
 
-        entry_hash = self._hash_entry(entry)
-        entry["hash"] = entry_hash
-        entry_line = json.dumps(entry, separators=(',', ':')) + "\n"
-        entry_bytes = entry_line.encode("utf-8")
+            entry_hash = self._hash_entry(entry)
+            entry["hash"] = entry_hash
+            entry_line = json.dumps(entry, separators=(',', ':')) + "\n"
+            entry_bytes = entry_line.encode("utf-8")
 
-        # --- TRUE ATOMIC APPEND (v2.1.2 fix) ------------------
-        # Previous version used os.replace() which REPLACED the entire log
-        # with a single-entry temp file. Now we append correctly:
-        #   1. Open in binary append mode (seeks to end automatically)
-        #   2. Write the line
-        #   3. Flush Python's buffer to the OS
-        #   4. fsync to force the OS to commit to disk
-        # This is atomic for small writes (<4KB) on both POSIX and Windows
-        # since we have a single writer. Larger entries are written as one
-        # contiguous write() call, which is safe for single-process use.
-        with open(self.log_file, "ab") as f:
-            f.write(entry_bytes)
-            f.flush()
-            os.fsync(f.fileno())
+            # --- TRUE ATOMIC APPEND (v2.1.2 fix) ------------------
+            # Previous version used os.replace() which REPLACED the entire log
+            # with a single-entry temp file. Now we append correctly:
+            #   1. Open in binary append mode (seeks to end automatically)
+            #   2. Write the line
+            #   3. Flush Python's buffer to the OS
+            #   4. fsync to force the OS to commit to disk
+            # Single contiguous write() under _write_lock: safe for the
+            # multi-threaded single-process writer this backend actually is.
+            with open(self.log_file, "ab") as f:
+                f.write(entry_bytes)
+                f.flush()
+                os.fsync(f.fileno())
 
-        self.chain_head = entry_hash
-        return entry_hash
+            self.chain_head = entry_hash
+            return entry_hash
 
     # --- Verify --------------
     def verify_chain(self):
