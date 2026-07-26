@@ -5,8 +5,8 @@
     "product": "OracleAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "04d68120f9e4473fb0c990a566d31559",
-    "built_utc": "2026-07-26T11:07:11.474352+00:00",
+    "build_id": "4ad6ab21185c46f286583f5384913d08",
+    "built_utc": "2026-07-26T12:03:59.518584+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -42,7 +42,7 @@
       "backend/argonet_bridge.py": "e8c5f872e6aa4642aefc36e2479bd86ec3fb0a8d1676e5cc20a2e7f3dfb15bd0",
       "backend/argonet_envelope.py": "d924cee4ecb1acfcb1204d7ad55db17d4c162179c83fb8c1e8391a1212609bb7",
       "backend/argonet_identity.py": "f34676cb3d454798bfd7a0f035e55afd1ab0ef6d116d306d5529269ec322481a",
-      "backend/argonet_lan.py": "c93178c820009366197d37f33295ed07bd981e866f9a13003621ee82bf957f4c",
+      "backend/argonet_lan.py": "345f659ccf349910b2254792c25d7ef3fc86940bc45713743aebfb0e39f760b3",
       "backend/argonet_manager.py": "75ff87ea13140c7c425e00f0c35d3bd59270b8cc2b906a10f62b1dda6328ef07",
       "backend/argonet_node.py": "679c955134f9282ebdcd29b5bd0f837e73f6fc570e28297e5d8a1d16a94d2ec7",
       "backend/argonet_router.py": "5e496608cecf03bb88ad9c6abadf976534a2328cf6e20dd9b7e796a9704f989c",
@@ -243,5 +243,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "hzauieIL3KyhiUoJ4cdS0OUy/ZiMGTZx3lEo/UsQ9ZaF7PQdrDAmhRKdgk7ZDHcf6YDP+yyPmyLoDQdFmqInAg=="
+  "signature_b64": "TOmkC0Y9M6EjcGN9pagOdfI2Qu1VAARnODEdgFrl3M9JYdE/Ifvf0GsDqDWIU5XMVtP96Eo7ctXSPWj8fpHbBg=="
 }

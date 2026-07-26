@@ -142,7 +142,19 @@ class ArgoNetLANAdapter:
             return "127.0.0.1"
 
     def _build_multicast_socket(self) -> socket.socket:
-        """Build and configure UDP multicast socket for receiving."""
+        """Build and configure UDP multicast socket for receiving.
+
+        Bind hardening (2026-07-26, CodeQL py/bind-socket-all-network-
+        interfaces): we bind to the MULTICAST GROUP address where the OS
+        allows it (Linux/macOS). A group-bound socket receives ONLY
+        datagrams addressed to the group — unicast sent straight at the
+        port from any interface is refused by the kernel, which is
+        exactly the exposure CodeQL flags. Windows cannot bind a group
+        address (WSAEADDRNOTAVAIL) and needs INADDR_ANY to receive
+        multicast, so it falls back to self._bind_address — that path is
+        covered by the _is_lan_source() guard in the receive loop, which
+        drops any datagram from a non-private source before parsing.
+        """
         sock = socket.socket(
             socket.AF_INET,
             socket.SOCK_DGRAM,
@@ -154,7 +166,17 @@ class ArgoNetLANAdapter:
         except AttributeError:
             pass    # Windows doesn't have SO_REUSEPORT — that's fine
 
-        sock.bind((self._bind_address, ARGONET_LAN_PORT))
+        try:
+            # Preferred: group-bound socket (unicast physically undeliverable)
+            sock.bind((ARGONET_MULTICAST_GROUP, ARGONET_LAN_PORT))
+            logger.info("[ArgoNetLAN] Bound to multicast group address "
+                        "(unicast to this port is kernel-refused)")
+        except OSError:
+            # Windows: INADDR_ANY is required for multicast reception.
+            # Unicast reaching this socket is filtered by _is_lan_source().
+            sock.bind((self._bind_address, ARGONET_LAN_PORT))
+            logger.info("[ArgoNetLAN] Group-bind unsupported here — bound to "
+                        f"{self._bind_address!r}; source-address guard active")
 
         # Join multicast group
         group = socket.inet_aton(ARGONET_MULTICAST_GROUP)
@@ -169,6 +191,20 @@ class ArgoNetLANAdapter:
         logger.info(f"[ArgoNetLAN] Joined multicast group "
                     f"{ARGONET_MULTICAST_GROUP}:{ARGONET_LAN_PORT}")
         return sock
+
+    @staticmethod
+    def _is_lan_source(ip: str) -> bool:
+        """True iff a datagram source belongs on a LAN mesh: RFC1918
+        private, link-local (169.254/16), or loopback. Everything else —
+        which on a firewall-less machine means internet-sourced unicast —
+        is dropped BEFORE any parsing. Part of the 0.0.0.0-bind hardening
+        (see _build_multicast_socket)."""
+        try:
+            import ipaddress
+            a = ipaddress.ip_address(ip)
+            return a.is_private or a.is_link_local or a.is_loopback
+        except ValueError:
+            return False
 
     def _build_send_socket(self) -> socket.socket:
         """Build UDP socket for sending multicast."""
@@ -271,6 +307,13 @@ class ArgoNetLANAdapter:
 
                 # Ignore our own broadcasts
                 if addr[0] == self._local_ip:
+                    continue
+
+                # Non-LAN source: drop before parsing (0.0.0.0-bind guard;
+                # debug level so a WAN scanner can't flood the log).
+                if not self._is_lan_source(addr[0]):
+                    logger.debug(f"[ArgoNetLAN] Dropped non-LAN datagram "
+                                 f"from {addr[0]}")
                     continue
 
                 result = LANFramer.unframe(packet)
