@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.12.16",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f258795625484b36ba07ea6d244939a4",
-    "built_utc": "2026-08-05T01:06:10.366752+00:00",
+    "build_id": "399bf2d61041485998e03998c56e6575",
+    "built_utc": "2026-08-05T04:06:32.220772+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -15,8 +15,6 @@
       "backend/craiid/audit_archives_deep.py",
       "backend/craiid/audit_archives_lite.py",
       "backend/craiid/audit_archives_personal_v2.py",
-      "backend/craiid/context_fatigue_detector.py",
-      "backend/craiid/coordinator_signal.py",
       "backend/craiid/craiid_archivist_compression_integration.py",
       "backend/craiid/craiid_author.py",
       "backend/craiid/craiid_author_compression_integration.py",
@@ -70,8 +68,6 @@
       "backend/craiid/audit_archives_deep.py": "43165c72427f5d132dd4d30aa24b3372603429193635001e8983f48d2f844890",
       "backend/craiid/audit_archives_lite.py": "9b42dc94697601cf9fc0c6dfcbac859c41cfb989af1b695bbc28bd4bc5ff18ad",
       "backend/craiid/audit_archives_personal_v2.py": "25776301eedd79144478b84b1b7021ce8ba666681fdc673480442e34aaf2eb3f",
-      "backend/craiid/context_fatigue_detector.py": "0e8bbbcc283b2f98c676b540dd1476e6bf6673291caa2bdf3499fe24aa6c8471",
-      "backend/craiid/coordinator_signal.py": "94f514dc75cf20fa3174456e09b9d98c3c54bbc586d010a2c760bdc28e6ddc66",
       "backend/craiid/craiid_archivist_compression_integration.py": "04b71ef77dceaf3d5ce2e50fc4d9616d50f22e4db96cf1dc0c9e7e4c624f146d",
       "backend/craiid/craiid_author.py": "a9e05c0843cde410bb513c25b1097bd87360054f2667fe319119af53cc1d820e",
       "backend/craiid/craiid_author_compression_integration.py": "f98ffaa5063155f7eec8d175e9689cc5764a3d9e9011685147d799a0cdcf1c70",
@@ -214,8 +210,8 @@
       "LICENSES.chromium.html": "5d545ce8065079f38a82472ab93bd62fcdf73cd319f0771ef51c45c7e243f1d4",
       "rotate_api_key.bat": "e527f860aaa7d0679fcd5eb58bbef6d56e2b23d5bf215671c52be086071a4f89",
       "rotate_api_key.py": "71c8f566b1943255a7fe9ca18ef8b12ae443ad5011f62bc68c0e5835af26c353",
-      "start.bat": "b1e4557399961b2a03bbc48420be7d8bc01544fa22a7459b019072c6b1d061d2",
-      "start.py": "280af228c47b2222de723b59ffc2b570fd5b1ee775bf152a836561bb883e84d3",
+      "start.bat": "53254f326fab38b6780dfcd6f6fdcac4f96f78646bd674265e852b4d74b30c71",
+      "start.py": "962f0c57a2a692cb6c8f7196e101e45d9e8b24d249f3621bf6b5ccac25c6aa7f",
       "tools/aiq_nudge_send.py": "45179b149e0860b5b76e2a436509fb1011b22cdd0c94dbd7707b8f9a0c288946",
       "tools/reset_mfa.py": "c755e106930815cb27d3ab502c063f6c0ab03946cce0e8d5eef6276add3a5bda",
       "tools/veridian_cli.py": "fa1733f99c314ed27380156363b6447a1a69f52adaf4c2c528fa9888de3e20a5",
@@ -223,5 +219,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "mbItyBZxYVpHrsB4+pbv5P2/kOKMR25KJYHhbDRekVq0S2/HzLm8EMLdczQV9jN1xIOJzk0EBgJ+gc1/grVuAQ=="
+  "signature_b64": "DvPowhYEpMhKG1SfyWGQYatB+AvWUUGGoCwaT2OWCC8xa64N2p4CII1DhiC4w8NlVG9/PVckvABtrue96Rj5DQ=="
 }

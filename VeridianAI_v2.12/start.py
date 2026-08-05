@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VeridianAI Launcher v2.12
+VeridianAI Launcher v2.13
 Usage: python start.py [--port 8000] [--host 127.0.0.1] [--no-browser]
 """
 
@@ -60,7 +60,7 @@ def check_dependencies():
 def print_banner():
     print("""
   +-------------------------------------------+
-  |    V E R I D I A N   A I   v2.12         |
+  |    V E R I D I A N   A I   v2.13          |
   |       Local AI Inference + Sage           |
   +-------------------------------------------+
 """)
@@ -145,7 +145,7 @@ def main():
         print(f"    {sys.executable} -m pip install -r {REQ_FILE}")
         sys.exit(1)
     except KeyboardInterrupt:
-        print("\n[OracleAI] Stopped. Goodbye.")
+        print("\n[VeridianAI] Stopped. Goodbye.")
 
 
 if __name__ == "__main__":
