@@ -13,7 +13,10 @@
     "build-win": "npm run genmanifest && electron-builder --win",
     "build-store": "npm run genmanifest && electron-builder --win appx",
     "build-linux": "py ../backend/build_integrity.py genmanifest && electron-builder --linux",
-    "build-mac": "py ../backend/build_integrity.py genmanifest && electron-builder --mac"
+    "build-mac": "py ../backend/build_integrity.py genmanifest && electron-builder --mac",
+    "deps": "npm ci",
+    "deps-audit": "npm audit --audit-level=high",
+    "deps-verify": "npm audit signatures"
   },
   "build": {
     "appId": "software.mentisphere.veridianai",
@@ -51,10 +54,10 @@
     }
   },
   "devDependencies": {
-    "electron": "^42.4.0",
-    "electron-builder": "^26.15.3"
+    "electron": "42.7.1",
+    "electron-builder": "26.15.3"
   },
-  "allowScripts": {
-    "electron-winstaller@5.4.0": true
+  "overrides": {
+    "fast-uri": ">=3.1.5"
   }
 }
