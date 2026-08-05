@@ -1,4 +1,4 @@
-name: OracleAI Continue Config
+name: VeridianAI Continue Config
 version: 2.0.0
 schema: v1
 
@@ -14,9 +14,9 @@ models:
       - embed
 
 mcpServers:
-  - name: OracleAI
+  - name: VeridianAI
     transport: http
     url: http://127.0.0.1:8000/mcp/v1/jsonrpc
     requestOptions:
       headers:
-        Authorization: Bearer ${{ env.ORACLE_API_KEY }}
+        Authorization: Bearer ${{ env.VERIDIANAI_API_KEY }}

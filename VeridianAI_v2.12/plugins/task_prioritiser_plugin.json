@@ -1,7 +1,7 @@
 {
   "id": "task-prioritiser",
   "name": "Task Prioritizer",
-  "description": "Multi-agent prioritization with 3 sub-agents for parallel dispatch.",
+  "description": "Multi-agent prioritization with 3 sub-agents for parallel dispatch. Can be configured for more in sage_engine.py, but will break sync with canonical copy.",
   "version": "3.2",
   "author": "VeridianAI",
   "enabled": true,

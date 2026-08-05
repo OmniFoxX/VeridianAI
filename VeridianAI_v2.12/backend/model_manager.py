@@ -45,6 +45,7 @@ from __future__ import annotations
 from time_manager import TimeManager
 
 import asyncio
+import time as _time
 import heapq
 import json
 import sys
@@ -671,9 +672,21 @@ class ModelManager:
         ModelManager._gpu_vendors_cache = vendors
         return vendors
 
-    _VENDOR_TOGGLE = {"nvidia": "cuda_enabled",
-                      "amd":    "rocm_enabled",
-                      "intel":  "vulkan_enabled"}
+    # v2.12.19: was a 1:1 vendor->toggle map, which got AMD badly wrong.
+    #
+    # It consulted ONLY rocm_enabled for AMD -- but on Windows, ROCm supports
+    # discrete Radeon RX/PRO cards ONLY. It does not support Ryzen AI APU
+    # integrated graphics at all, at any HSA_OVERRIDE setting. On an APU laptop
+    # (e.g. Radeon 840M) Vulkan is the ONLY working GPU path, and there was no
+    # way for an AMD user to say so: vulkan_enabled was wired to "intel".
+    #
+    # Vulkan is vendor-neutral, so it now counts for every vendor. A vendor is
+    # considered "GPU-disabled" only when ALL of its usable paths are off.
+    _VENDOR_TOGGLES = {
+        "nvidia": ("cuda_enabled",   "vulkan_enabled"),
+        "amd":    ("rocm_enabled",   "vulkan_enabled"),
+        "intel":  ("openvino_enabled", "xe_cores_enabled", "vulkan_enabled"),
+    }
 
     async def _gpu_offload_disabled(self) -> bool:
         """True -> force num_gpu=0 (CPU-only) on Ollama calls."""
@@ -682,8 +695,10 @@ class ModelManager:
         vendors = await self._detected_gpu_vendors()
         if not vendors:
             return False   # no GPU to gate; Ollama is CPU-bound anyway
+        # Disable offload only when EVERY detected vendor has every one of its
+        # usable acceleration paths switched off.
         return all(
-            not self.config.get(self._VENDOR_TOGGLE[v], True)
+            all(not self.config.get(t, True) for t in self._VENDOR_TOGGLES[v])
             for v in vendors
         )
 
@@ -786,6 +801,27 @@ class ModelManager:
             _prio = PRIORITY_LOCAL_NORMAL
         _prio = max(PRIORITY_LOCAL_URGENT, min(PRIORITY_REMOTE_NORMAL, _prio))
         _gate = self._gen_lock_for(base_url)
+        # v2.12.19 GATE DIAGNOSTICS. Symptom being chased: on the Ryzen AI NPU
+        # tier the FIRST prompt answers and every later one silently does
+        # nothing. Prime suspect is this gate staying held -- release() lives in
+        # a `finally` around an async generator (below), and an abandoned
+        # generator does not run its finally promptly. Lemonade is known to end
+        # turns abnormally (see the non-SSE note in _gen_openai), which is
+        # exactly how a stream gets abandoned rather than exhausted.
+        #
+        # These three log lines make the failure unambiguous: if you see
+        # GATE-WAIT with no matching GATE-HELD, the gate is the blocker. If you
+        # see GATE-HELD then GATE-FREE every turn, it is NOT the gate and the
+        # problem is inside Lemonade or the stream parser.
+        _gate_t0 = _time.time()
+        _held_by = getattr(ModelManager, "_gate_holder", {}).get(base_url)
+        if _held_by:
+            print(f"[GATE-WAIT] {tier_label} model={model_id} url={base_url} "
+                  f"— gate already held by {_held_by['model']!r} for "
+                  f"{_time.time() - _held_by['since']:.1f}s", flush=True)
+        else:
+            print(f"[GATE-WAIT] {tier_label} model={model_id} url={base_url} "
+                  f"— gate free, acquiring", flush=True)
         # v2.12.2: aging-fair scheduling. _priority still authorizes URGENCY
         # (0/2 = urgent, granted server-side only), but ORDER among normal
         # waiters is now the aging score, so peers age up instead of starving
@@ -812,12 +848,29 @@ class ModelManager:
                                 ident=str(options.get("_ident") or ""))
         else:
             await _gate.acquire(_prio)
+        if not hasattr(ModelManager, "_gate_holder"):
+            ModelManager._gate_holder = {}
+        ModelManager._gate_holder[base_url] = {"model": model_id,
+                                               "tier": tier_label,
+                                               "since": _time.time()}
+        print(f"[GATE-HELD] {tier_label} model={model_id} "
+              f"(waited {_time.time() - _gate_t0:.2f}s)", flush=True)
+        _tok_count = 0
         try:
             async for token in gen:
                 if self._abort:
                     return
+                _tok_count += 1
                 yield token
         finally:
+            # This finally is the thing under suspicion. If the consumer
+            # abandons us mid-stream, Python defers it to generator
+            # finalization — which may be much later, or effectively never.
+            # The log line proves whether it ran.
+            ModelManager._gate_holder.pop(base_url, None)
+            print(f"[GATE-FREE] {tier_label} model={model_id} "
+                  f"tokens={_tok_count} held={_time.time() - _gate_t0:.2f}s",
+                  flush=True)
             _gate.release()
 
     # --- Ollama streaming (/api/chat) ------------------------------------
@@ -1159,6 +1212,8 @@ class ModelManager:
                     # the old parser skipped every non-"data:" line and the
                     # turn ended instantly with an empty reply.
                     _yielded = False
+                    _sse_tokens = 0          # v2.12.19 diagnostics
+                    _finish = None
                     _raw_lines = []
                     async for line in resp.aiter_lines():
                         if not line:
@@ -1187,9 +1242,16 @@ class ModelManager:
                             or choice.get("text") or ""
                         if content:
                             _yielded = True
+                            _sse_tokens += 1
                             yield content
                         if choice.get("finish_reason") is not None:
                             break
+                    # v2.12.19: one line per completed stream, so a hung tier
+                    # can be told apart from a tier that answered and then had
+                    # its gate leak. Pair this with [GATE-FREE].
+                    print(f"[STREAM-END] tier={tier_label} model={model_id} "
+                          f"sse_tokens={_sse_tokens} yielded={_yielded} "
+                          f"non_sse_lines={len(_raw_lines)}", flush=True)
                     if _yielded:
                         return
                     # Fallback: non-streamed OpenAI JSON body.

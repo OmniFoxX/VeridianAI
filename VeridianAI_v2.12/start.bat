@@ -66,9 +66,12 @@ echo.
 ::   Daemon  -> llama-server    on 127.0.0.1:11436  (mechanics, CPU, tiny)
 ::
 :: This script starts each tier ONCE, then polls each port via curl until it
-:: answers. If any tier fails to come online within PROBE_TIMEOUT_SEC, the
-:: script aborts BEFORE launching the FastAPI backend so you see exactly
-:: which tier failed and why. No silent partial startup.
+:: answers. A tier that does not answer within PROBE_TIMEOUT_SEC prints a
+:: loud diagnostic and the launch CONTINUES -- see the :warn_* handlers at
+:: the bottom. It used to abort instead, which meant a cold Ollama or a
+:: machine with no network never got a backend at all (v2.12.17).
+:: The tiers keep warming in the background and model_manager routes to
+:: whichever are live.
 :: ============================================================================
 
 :: -- Port defaults (overridable via env var OR config.json network.ports.*).
@@ -82,7 +85,14 @@ set LLAMA_DAEMON_PORT=11436
 set DAEMON_PORT=9998
 
 :: -- Tunables
+:: v2.12.17: this is PER TIER and the three probes run serially, so 90 meant
+:: a 270s worst case -- past Electron's backend health timeout, guaranteeing
+:: the 'backend is slow' dialog on any machine where the tiers are cold or
+:: absent. Now that a slow tier only warns, Electron-launched runs use a much
+:: shorter budget: FastAPI comes up promptly and the tiers join when ready.
+:: Interactive runs keep the longer window, where a human is watching output.
 set PROBE_TIMEOUT_SEC=90
+if !ELECTRON_MODE!==1 set PROBE_TIMEOUT_SEC=20
 :: v2.1.5: backend selected at startup via choice menu (Vulkan or IPEX-LLM).
 :: %~dp0 expands to the directory this .bat file lives in (with trailing
 :: backslash), so renaming the project folder never breaks llama-server
@@ -139,18 +149,23 @@ set DAEMON_CTX_SIZE=4096
 :: -- Preflight: curl must exist (Windows 10 1803+ ships with it)
 where curl.exe >nul 2>&1
 if !errorlevel! neq 0 (
-    echo [VeridianAI] ERROR: curl.exe not found on PATH.
-    echo           curl ships with Windows 10 1803+. Install curl or upgrade Windows.
-    pause
-    exit /b 1
+    echo [VeridianAI] curl.exe not found on PATH -- readiness probes will be
+    echo           SKIPPED. curl ships with Windows 10 1803+.
+    echo           VeridianAI will still start; tiers warm unobserved.
+    set NO_CURL=1
 )
 
-:: -- Preflight: llama-server.exe must exist
+:: -- Preflight: llama-server.exe
+:: v2.12.17: no longer fatal. tier_launcher.py already skips the Toga and
+:: Daemon tiers when LLAMA_SERVER is blank, exactly as it does for a missing
+:: model file. Aborting here meant that picking the IPEX backend on a build
+:: without that folder killed the whole app instead of dropping two tiers.
 if not exist "%LLAMA_SERVER%" (
-    echo [VeridianAI] ERROR: llama-server.exe not found at:
+    echo [VeridianAI] llama-server.exe not found at:
     echo           %LLAMA_SERVER%
-    pause
-    exit /b 1
+    echo           Toga and Daemon tiers will be SKIPPED. Chat routes through
+    echo           the Oracle tier ^(Ollama^). VeridianAI will still start.
+    set "LLAMA_SERVER="
 )
 
 :: -- Preflight: daemon model — try sage_data first, then bundled_models
@@ -275,11 +290,24 @@ if not exist "%SAGE_MODEL%" (
 :: regardless of Windows Terminal. Restart-to-apply. The launcher reads the
 :: resolved paths/ports/models from the environment populated above.
 ::   Oracle = Ollama  |  Toga + Daemon = llama-server  |  Toga-Daemon/Overseer = Python
+:: v2.12.17: no llama-server means the Toga and Daemon tiers cannot launch,
+:: whatever the model preflights above concluded. Clear the flags HERE, after
+:: those checks have run, so tier_launcher skips both tiers and we do not
+:: then sit in a readiness probe waiting for something that was never spawned.
+if not defined LLAMA_SERVER (
+    set SAGE_MODEL_PRESENT=0
+    set DAEMON_MODEL_PRESENT=0
+)
+
 set "OAI_ROOT=%~dp0"
 echo [VeridianAI] Launching tiers + daemons (Developer Mode controls visibility) ...
 !PYTHON_CMD! "%~dp0backend\tier_launcher.py"
 :: Soft delay to let ports begin binding before the readiness probes below.
-timeout /t 3 /nobreak >nul
+:: v2.12.17: was `timeout /t 3 /nobreak`. timeout.exe refuses to run with
+:: redirected stdin -- which is exactly how Electron spawns this script when
+:: Developer Mode is off -- so this delay silently never happened. ping is
+:: stdin-agnostic. (-n 4 = 3 gaps = ~3s.)
+ping -n 4 127.0.0.1 >nul 2>&1
 
 :: -- Probe each tier for readiness
 echo.
@@ -296,7 +324,12 @@ echo.
 :: works" — the second try hit a warm file cache). Now we log a warning
 :: and continue: the tier keeps loading in the background, llama-server/
 :: Ollama answer when ready, and model_manager routes to whatever tiers
-:: are up. Interactive (double-click) runs keep the loud fail+pause.
+:: are up.
+::
+:: v2.12.17: interactive runs no longer abort either. They still print the
+:: full diagnostic (see the :warn_* handlers at the bottom) -- they just no
+:: longer `pause` + `exit` before FastAPI is launched. A local-inference app
+:: must reach its own UI with no network and no tiers.
 
 :: Oracle uses Ollama's /api/tags endpoint
 call :probe_tier "Oracle" !OLLAMA_ORACLE_PORT! "http://127.0.0.1:!OLLAMA_ORACLE_PORT!/api/tags"
@@ -304,7 +337,7 @@ if !errorlevel! neq 0 (
     if !ELECTRON_MODE!==1 (
         echo [VeridianAI] WARNING: Oracle tier not ready yet -- continuing. It may finish warming in the background.
     ) else (
-        goto fail_oracle
+        call :warn_oracle
     )
 )
 
@@ -317,7 +350,7 @@ if !SAGE_MODEL_PRESENT!==1 (
         if !ELECTRON_MODE!==1 (
             echo [VeridianAI] WARNING: Toga tier not ready yet -- continuing. It may finish warming in the background.
         ) else (
-            goto fail_sage
+            call :warn_sage
         )
     )
 ) else (
@@ -331,16 +364,14 @@ if !DAEMON_MODEL_PRESENT!==1 (
         if !ELECTRON_MODE!==1 (
             echo [VeridianAI] WARNING: Daemon tier not ready yet -- continuing. It may finish warming in the background.
         ) else (
-            goto fail_daemon
+            call :warn_daemon
         )
     )
 )
 
 echo.
-echo [VeridianAI] Tiers ready. Launching backend...
+echo [VeridianAI] Tier probes done. Launching backend...
 echo.
-
-:run
 
 :run
 :: v2.1.11 fix: do NOT pass %* to start.py.
@@ -369,6 +400,9 @@ exit /b 0
 ::   Returns errorlevel 0 on success, 1 on timeout.
 :: ============================================================================
 :probe_tier
+:: No curl means no way to observe readiness. Report ready and move on --
+:: the probes are advisory now, so a false 'ready' costs nothing.
+if defined NO_CURL exit /b 0
 set "LABEL=%~1"
 set "PORT=%~2"
 set "URL=%~3"
@@ -387,29 +421,45 @@ if !count! geq %PROBE_TIMEOUT_SEC% (
 :: Progress dots every 5 seconds
 set /a mod=count %% 5
 if !mod!==0 echo [VeridianAI] !LABEL! ^(:!PORT!^) still waiting ... !count!s
-timeout /t 1 /nobreak >nul
+:: v2.12.17: ping instead of timeout.exe -- see the note at the 3s delay
+:: above. With timeout.exe this loop span at full speed under Electron,
+:: so PROBE_TIMEOUT_SEC counted iterations, not seconds.
+ping -n 2 127.0.0.1 >nul 2>&1
 goto probe_loop
 
 :: ============================================================================
-:: Failure handlers -- each prints a specific hint and pauses
+:: Tier-not-ready handlers.
+::
+:: v2.12.17 (2026-07-30, the "no internet on the drive to the doctor" fix):
+:: these used to `pause` + `exit /b 1`, which aborted the launch BEFORE the
+:: :run block ever started FastAPI. A user with no network -- or simply a
+:: cold/slow Ollama -- got no backend at all, and eventually the offline
+:: screen. VeridianAI is a LOCAL inference app; a slow or absent tier must
+:: degrade it, not kill it.
+::
+:: Electron mode already warned-and-continued (see the comment block above
+:: the probes, added 2026-07-02 for the Ryzen AI cold-boot case). These are
+:: now `call`ed subroutines so the interactive double-click path behaves the
+:: same way: print the same diagnostics, then carry on to :run.
 :: ============================================================================
-:fail_oracle
+:warn_oracle
 echo.
 echo [VeridianAI] ============================================================
-echo [VeridianAI] ORACLE TIER FAILED TO START (Ollama on :!OLLAMA_ORACLE_PORT!)
+echo [VeridianAI] ORACLE TIER NOT READY (Ollama on :!OLLAMA_ORACLE_PORT!) -- CONTINUING
 echo [VeridianAI] ============================================================
 echo [VeridianAI] Check the "Ollama-Oracle" window for errors. Common causes:
 echo [VeridianAI]   - ollama.exe not installed or not on PATH
 echo [VeridianAI]   - port !OLLAMA_ORACLE_PORT! already in use by another process
 echo [VeridianAI]   - GPU driver / VRAM issue on first model load
 echo [VeridianAI] Run `ollama serve` manually in a terminal to see the error.
-pause
-exit /b 1
+echo [VeridianAI] Continuing anyway -- the backend WILL start; this tier joins
+echo [VeridianAI] in as soon as it answers.
+exit /b 0
 
-:fail_sage
+:warn_sage
 echo.
 echo [VeridianAI] ============================================================
-echo [VeridianAI] SAGE TIER FAILED TO START (llama-server on :!LLAMA_SAGE_PORT!)
+echo [VeridianAI] TOGA TIER NOT READY (llama-server on :!LLAMA_SAGE_PORT!) -- CONTINUING
 echo [VeridianAI] ============================================================
 echo [VeridianAI] Check the "Llama-Toga" window for errors. Common causes:
 echo [VeridianAI]   - model file not found: %SAGE_MODEL%
@@ -417,17 +467,18 @@ echo [VeridianAI]   - port !LLAMA_SAGE_PORT! already in use
 echo [VeridianAI]   - insufficient RAM for the model
 echo [VeridianAI] Alternative: set inference.backend to "ollama" in config.json
 echo [VeridianAI] and VeridianAI will serve Toga chat through the Oracle tier.
-pause
-exit /b 1
+echo [VeridianAI] Continuing anyway -- the backend WILL start; this tier joins
+echo [VeridianAI] in as soon as it answers.
+exit /b 0
 
-:fail_daemon
+:warn_daemon
 echo.
 echo [VeridianAI] ============================================================
-echo [VeridianAI] DAEMON TIER FAILED TO START (llama-server on :!LLAMA_DAEMON_PORT!)
+echo [VeridianAI] DAEMON TIER NOT READY (llama-server on :!LLAMA_DAEMON_PORT!) -- CONTINUING
 echo [VeridianAI] ============================================================
 echo [VeridianAI] Check the "Llama-Daemon" window for errors. Common causes:
 echo [VeridianAI]   - model file not loadable: %DAEMON_MODEL%
 echo [VeridianAI]   - port !LLAMA_DAEMON_PORT! already in use
 echo [VeridianAI]   - insufficient RAM (~1.5 GB needed)
-pause
-exit /b 1
+echo [VeridianAI] Continuing anyway -- daemon work is background mechanics.
+exit /b 0

@@ -23,7 +23,10 @@
       "output": "../dist"
     },
     "win": {
-      "target": ["nsis", "appx"],
+      "target": [
+        "nsis",
+        "appx"
+      ],
       "icon": "assets/icon.ico"
     },
     "appx": {
@@ -50,5 +53,8 @@
   "devDependencies": {
     "electron": "^42.4.0",
     "electron-builder": "^26.15.3"
+  },
+  "allowScripts": {
+    "electron-winstaller@5.4.0": true
   }
 }

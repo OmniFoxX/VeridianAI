@@ -67,4 +67,3 @@ class RelayHub:
         for rid in list(self._responses.keys()):
             if self._responses[rid]["expiry"] < now:
                 self._responses.pop(rid, None)
-"""

@@ -712,6 +712,20 @@ app.on('second-instance', () => {
   }
 });
 
+// v2.12.18 — THE "FIRST CLICK INSTALLS, SECOND CLICK RUNS" BUG.
+//
+// On a clean machine first_run.js opens a Setup Assistant BrowserWindow.
+// When setup finished it closed that window — and because it was the only
+// window open (the main window is not created until AFTER the backend is
+// healthy, further down this handler), Electron fired 'window-all-closed',
+// which calls stopBackend() + app.quit(). The app therefore installed
+// everything perfectly and then exited before it ever showed itself. The
+// second launch skipped setup, so no transient window existed, and it ran.
+//
+// This flag marks the window between app start and createWindow(). While it
+// is true, 'window-all-closed' is a normal part of booting and must NOT quit.
+let _bootingUp = true;
+
 app.whenReady().then(async () => {
   // v2.12.0 rebrand: the About dialog (menu role:'about') reads these —
   // without them it falls back to the exe's embedded package name/version.
@@ -751,6 +765,10 @@ app.whenReady().then(async () => {
       cancelId: 1,
     });
     if (choice === 1) {
+      // User chose Quit at the "backend is slow" dialog. Release the boot
+      // guard first, or window-all-closed would decline to quit and we
+      // would linger as a headless process.
+      _bootingUp = false;
       stopBackend();
       app.quit();
       return;
@@ -759,6 +777,9 @@ app.whenReady().then(async () => {
     console.log('[Electron] backend ready, opening window');
   }
   createWindow();
+  // Boot finished: from here a window-all-closed really does mean "the user
+  // closed the app", so the handler may quit normally again.
+  _bootingUp = false;
 
   // v2.1.6: if the window loaded with no working backend (user
   // chose "Open anyway" past the timeout), auto-retry the load
@@ -798,6 +819,15 @@ app.whenReady().then(async () => {
 // children spawned by start.bat. Previously kill('SIGTERM') only
 // touched the start.bat shell and left orphans behind.
 app.on('window-all-closed', () => {
+  // v2.12.18: during boot the only window may be first_run.js's Setup
+  // Assistant. Closing it is the normal end of setup, NOT the user closing
+  // the app — quitting here is what made a fresh install need two launches.
+  // See the _bootingUp comment above app.whenReady.
+  if (_bootingUp) {
+    console.log('[Electron] window-all-closed during boot (setup window) — not quitting');
+    return;
+  }
+
   // Security: clear the login cookie on close so reopening requires a fresh
   // sign-in (the auth cookie is also session-scoped server-side now).
   try {

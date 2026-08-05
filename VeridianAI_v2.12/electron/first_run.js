@@ -37,6 +37,13 @@ function projectRoot() {
 function sageDataDir() {
   return path.resolve(projectRoot(), '..', 'sage_data');
 }
+// v2.12.17: hard ceiling on the dependency install. Generous enough for a
+// genuine first-run install over a slow connection, short enough that a
+// no-network machine is not held up for long. Belt to pip's --retries braces.
+const PIP_TIMEOUT_MS    = 10 * 60 * 1000;
+const WINGET_TIMEOUT_MS = 15 * 60 * 1000;   // installer download + run
+const PULL_TIMEOUT_MS   = 30 * 60 * 1000;   // a 2 GB model on slow wifi
+
 function markerPath() {
   return path.join(sageDataDir(), '.oracle_setup.json');
 }
@@ -137,7 +144,13 @@ function findOllama() {
 function hasWinget() { return tryVersion('winget'); }
 
 // --- child process with live output ------------------------------------
+// v2.12.17: `timeoutMs` kills a child that will not finish. Without it, an
+// offline `pip install` sits in its retry/backoff loop for minutes while the
+// whole app waits (ensureSetup is awaited before the backend is spawned).
+// Resolves -2 on timeout so callers can tell "killed" from "failed".
 function run(cmd, args, onLine, opts) {
+  // timeoutMs is ours; everything else is forwarded to spawn() untouched.
+  const { timeoutMs = 0, ...spawnOpts } = (opts || {});
   return new Promise((resolve) => {
     let p;
     try {
@@ -147,7 +160,7 @@ function run(cmd, args, onLine, opts) {
       // not from user input. (Callers never pass shell:true in opts.)
       p = spawn(cmd, args, {
         cwd: projectRoot(), windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe'], ...(opts || {}),
+        stdio: ['ignore', 'pipe', 'pipe'], ...spawnOpts,
       });
     } catch (e) {
       slog(`spawn failed: ${cmd}: ${e && e.message}`);
@@ -163,10 +176,30 @@ function run(cmd, args, onLine, opts) {
         if (line && onLine) onLine(line);
       }
     };
+    let timer = null;
+    let hardTimer = null;
+    let timedOut = false;
+    const done = (v) => {
+      if (timer) { clearTimeout(timer); timer = null; }
+      if (hardTimer) { clearTimeout(hardTimer); hardTimer = null; }
+      resolve(v);
+    };
+    if (timeoutMs > 0) {
+      timer = setTimeout(() => {
+        timedOut = true;
+        slog(`timeout after ${timeoutMs}ms, killing: ${cmd}`);
+        try { p.kill(); } catch { /* already gone */ }
+        // SIGKILL equivalent if it ignores the first ask
+        hardTimer = setTimeout(() => {
+          try { p.kill('SIGKILL'); } catch { /* gone */ }
+        }, 3000);
+        if (hardTimer.unref) hardTimer.unref();   // never hold the process open
+      }, timeoutMs);
+    }
     p.stdout.on('data', feed);
     p.stderr.on('data', feed);
-    p.on('error', () => resolve(-1));
-    p.on('exit', (code) => resolve(code == null ? -1 : code));
+    p.on('error', () => done(-1));
+    p.on('exit', (code) => done(timedOut ? -2 : (code == null ? -1 : code)));
   });
 }
 
@@ -263,7 +296,7 @@ async function stepPython(win) {
   const code = await run('winget', [
     'install', '--id', 'Python.Python.3.12', '-e', '--scope', 'user',
     '--accept-source-agreements', '--accept-package-agreements', '--silent',
-  ], (l) => liveLine(win, l));
+  ], (l) => liveLine(win, l), { timeoutMs: WINGET_TIMEOUT_MS });
   slog('winget python exit ' + code);
   python = findPython();   // locates the fresh install + fixes session PATH
   stepState(win, 'python', python ? 'ok' : 'warn',
@@ -278,12 +311,25 @@ async function stepDeps(win, python, needDeps) {
   if (!f) { stepState(win, 'deps', 'ok', 'nothing to install'); return true; }
   stepState(win, 'deps', 'run', 'installing components…');
   // --user: per-user site, no admin. --no-cache-dir: avoids locked caches.
+  // v2.12.17 offline hardening. Two layers:
+  //   --retries 1 --timeout 15  : pip's own backoff is the slow part. Default
+  //                               is 5 retries with exponential backoff PER
+  //                               package, so a no-network run can grind for
+  //                               many minutes before admitting defeat.
+  //   timeoutMs                 : a hard ceiling in case pip ignores both.
   const code = await run(python, ['-m', 'pip', 'install', '--user', '--no-cache-dir',
-                                  '--disable-pip-version-check', '-r', f],
-                         (l) => liveLine(win, l));
+                                  '--disable-pip-version-check',
+                                  '--retries', '1', '--timeout', '15', '-r', f],
+                         (l) => liveLine(win, l),
+                         { timeoutMs: PIP_TIMEOUT_MS });
   const ok = code === 0;
   slog('pip exit ' + code);
-  stepState(win, 'deps', ok ? 'ok' : 'warn', ok ? 'installed' : 'some components failed (see setup.log)');
+  if (code === -2) {
+    stepState(win, 'deps', 'warn', 'timed out - continuing offline');
+  } else {
+    stepState(win, 'deps', ok ? 'ok' : 'warn',
+              ok ? 'installed' : 'some components failed (see setup.log)');
+  }
   return ok;
 }
 
@@ -316,7 +362,7 @@ async function stepOllama(win, firstRun) {
   const code = await run('winget', [
     'install', '--id', 'Ollama.Ollama', '-e',
     '--accept-source-agreements', '--accept-package-agreements', '--silent',
-  ], (l) => liveLine(win, l));
+  ], (l) => liveLine(win, l), { timeoutMs: WINGET_TIMEOUT_MS });
   slog('winget ollama exit ' + code);
   ollama = findOllama();   // locates it + fixes session PATH for start.bat
   stepState(win, 'ollama', ollama ? 'ok' : 'warn',
@@ -332,7 +378,7 @@ async function stepStarterModel(win, ollama) {
   await run(ollama, ['list'], (l) => {
     // Header line is "NAME  ID  SIZE  MODIFIED"; any other line = a model.
     if (l && !/^NAME\s+/i.test(l)) hasModels = true;
-  });
+  }, { timeoutMs: 30 * 1000 });
   if (hasModels) { stepState(win, 'model', 'ok', 'models found'); return 'present'; }
 
   const res = dialog.showMessageBoxSync({
@@ -352,7 +398,7 @@ async function stepStarterModel(win, ollama) {
     liveLine(win, l);
     const m = l.match(/(\d+)%/);
     if (m) stepState(win, 'model', 'run', `downloading… ${m[1]}%`);
-  });
+  }, { timeoutMs: PULL_TIMEOUT_MS });
   const ok = code === 0;
   slog('ollama pull exit ' + code);
   stepState(win, 'model', ok ? 'ok' : 'warn', ok ? 'ready' : 'download failed (add one later)');
@@ -375,18 +421,24 @@ function stepDataDirs(win) {
 }
 
 /**
- * Run first-run setup if needed. Safe to await unconditionally on every boot —
- * returns immediately once setup has completed (run-once; pip re-runs only
- * when requirements.txt changes or a prior install failed).
+ * Run first-run setup if needed. Safe to await unconditionally on every boot.
+ *
+ * Awaiting this BLOCKS only on a genuine first run. Once the marker exists,
+ * any further dependency work is dispatched to the background and this
+ * resolves immediately, so the backend spawn is never gated on anything that
+ * touches the network. See the comment inside for the offline failure this
+ * fixed (v2.12.17).
  */
 async function ensureSetup() {
   let firstRun = true;
   let needDeps = true;
+  let reqChanged = true;
   try {
     const m = readMarker();
     if (m) {
       firstRun = false;
-      needDeps = (m.req_hash !== reqHash()) || (m.deps_ok === false);
+      reqChanged = (m.req_hash !== reqHash());
+      needDeps = reqChanged || (m.deps_ok === false);
       // Re-adopt previously discovered tool dirs into this session's PATH
       // (covers the launch right after an earlier partial setup).
       if (m.python_dir) addToSessionPath(m.python_dir);
@@ -396,20 +448,69 @@ async function ensureSetup() {
 
   if (!firstRun && !needDeps) return;   // already set up — honor run-once
 
+  // v2.12.17 (the offline fix): ONLY a first run may gate the launch.
+  //
+  // On a genuine first run, waiting is correct -- without Python and the deps
+  // there is nothing to start. On every later boot the app is already
+  // installed and working, so re-checking dependencies must never hold the
+  // backend hostage. It used to: `needDeps` is true whenever the previous
+  // attempt recorded deps_ok:false, so a single failed offline pip made EVERY
+  // subsequent launch re-run pip AND block on it -- a self-perpetuating stall
+  // that only cleared if you happened to be online next time you opened the
+  // app. Now those runs happen in the background while the backend boots.
+  if (!firstRun) {
+    // Only re-run pip when requirements.txt ACTUALLY changed. Two reasons:
+    //
+    //  1. Race: the background pip would rewrite per-user site-packages at the
+    //     same moment start.py does `from main import app`. On Windows that is
+    //     a locked-file failure or a half-replaced dist -- we would be causing
+    //     the very breakage we are trying to repair.
+    //  2. Convergence: `deps_ok:false` alone used to re-trigger this. Offline,
+    //     pip fails, we record false again, and every future boot repeats it
+    //     forever. Keying on the hash means a failed install is retried when
+    //     the requirements change or the user reinstalls -- not on a loop.
+    //
+    // If deps really are broken, start.py's own check_dependencies() is the
+    // backstop: it runs in the backend process where nothing else is importing.
+    if (needDeps && !reqChanged) {
+      slog('deps previously failed but requirements.txt is unchanged — ' +
+           'leaving it to start.py; not re-running pip in the background');
+    }
+    _runSetup(false, needDeps && reqChanged)
+      .catch((e) => slog('background setup error: ' + (e && e.message)));
+    return;
+  }
+  return _runSetup(true, needDeps);
+}
+
+async function _runSetup(firstRun, needDeps) {
   slog(`setup starting (firstRun=${firstRun} needDeps=${needDeps})`);
   const win = firstRun ? makeSetupWindow() : null;   // update runs: quiet pip only
 
-  let python = null, ollama = null, depsOk = false, modelState = 'n/a';
+  let python = null, ollama = null, depsOk = false;
+  // Preserve what a previous run recorded — a background run never touches the
+  // starter model, so writing 'n/a' here would erase a real 'present'/'pulled'.
+  let modelState = 'n/a';
+  if (!firstRun) {
+    try { const prev = readMarker(); if (prev && prev.starter_model) modelState = prev.starter_model; }
+    catch { /* keep 'n/a' */ }
+  }
   try {
-    python = await stepPython(win);
+    // Background (non-first) runs must never raise a modal: stepPython can
+    // show blocking "install Python?" dialogs, which on a background run would
+    // freeze the main process behind a prompt the user never asked for. Those
+    // dialogs belong to the first-run wizard only; later runs just look.
+    python = firstRun ? await stepPython(win) : findPython();
     depsOk = await stepDeps(win, python, needDeps);
     if (firstRun) {
       ollama = await stepOllama(win, firstRun);
       modelState = await stepStarterModel(win, ollama);
-      stepDataDirs(win);
     } else {
       ollama = findOllama();
     }
+    // Local + cheap, and NOT first-run-only: a user who deletes or relocates
+    // sage_data between launches should get it recreated, not a broken boot.
+    stepDataDirs(win);
   } catch (e) {
     slog('setup error: ' + (e && e.message));
   }

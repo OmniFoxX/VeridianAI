@@ -21,18 +21,77 @@ def detect_hardware() -> Dict[str, Any]:
     if nvidia["available"]:
         rec_backend, rec_layers = "cuda", -1
     elif amd["available"]:
-        rec_backend, rec_layers = "rocm", -1
+        # v2.12.19: was an unconditional "rocm". On Windows, ROCm supports
+        # discrete Radeon RX/PRO cards ONLY -- it does not support Ryzen AI
+        # APU integrated graphics at any setting. Recommending rocm on an APU
+        # laptop pointed the user at a path that cannot work. Vulkan is the
+        # vendor-neutral path that does.
+        if amd.get("rocm_available"):
+            rec_backend, rec_layers = "rocm", -1
+        else:
+            rec_backend, rec_layers = "vulkan", -1
     elif intel["available"]:
         rec_backend = "vulkan"
         rec_layers  = -1 if intel.get("arc_detected") else 20
     else:
         rec_backend, rec_layers = "cpu", 0
 
+    memory = _detect_memory()
+
     return {
         "os": _detect_os(), "cpu": _detect_cpu(),
         "nvidia": nvidia, "amd": amd, "intel": intel, "npu": npu,
+        "memory": memory,
+        "advisories": _build_advisories(memory, npu, amd),
         "recommended_backend": rec_backend, "recommended_layers": rec_layers,
     }
+
+
+def _detect_memory() -> Dict[str, Any]:
+    """Total/available system RAM. On APU laptops this pool is SHARED with the
+    iGPU, so whatever is carved out as VRAM is subtracted from what the CPU
+    tiers can use — the two compete."""
+    info: Dict[str, Any] = {"total_gb": None, "available_gb": None}
+    try:
+        import psutil
+        vm = psutil.virtual_memory()
+        info["total_gb"] = round(vm.total / (1024 ** 3), 1)
+        info["available_gb"] = round(vm.available / (1024 ** 3), 1)
+    except Exception:
+        pass
+    return info
+
+
+# VeridianAI always launches all three inference tiers (Oracle/Toga/Daemon —
+# the CRAIID substrate), plus the NPU tier when enabled. That is deliberate and
+# is NOT reduced on small machines: each tier has its own role, and silently
+# dropping one is a category error. But the user deserves to know when their
+# machine is going to struggle, rather than discovering it as mysterious
+# slowness. Advisory only — nothing here changes what launches.
+_LOW_RAM_GB = 20.0
+
+def _build_advisories(memory: Dict[str, Any], npu: Dict[str, Any],
+                      amd: Dict[str, Any]) -> list:
+    out = []
+    total = memory.get("total_gb")
+    if total and total < _LOW_RAM_GB:
+        msg = (f"This machine has {total:g} GB of RAM. VeridianAI always runs "
+               f"three inference tiers, so memory is tight — prefer smaller "
+               f"models (a 7B or below per tier) and expect swapping with "
+               f"larger ones.")
+        if npu.get("available"):
+            msg += (" The NPU tier (Lemonade) loads a fourth model on top of "
+                    "those three.")
+        out.append({"level": "warn", "topic": "memory", "message": msg})
+    if amd.get("available") and not amd.get("rocm_available"):
+        out.append({
+            "level": "info", "topic": "gpu",
+            "message": ("AMD GPU detected without a ROCm runtime. On Windows, "
+                        "ROCm supports discrete Radeon RX/PRO cards only and "
+                        "never integrated Ryzen AI graphics — use the Vulkan "
+                        "toggle for GPU acceleration here."),
+        })
+    return out
 
 
 def _detect_os() -> Dict[str, Any]:

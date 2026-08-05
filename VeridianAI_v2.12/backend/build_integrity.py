@@ -1,4 +1,4 @@
-"""OracleAI build provenance + integrity — signed build manifest.
+"""VeridianAI build provenance + integrity — signed build manifest.
 
 Official builds ship a `build_manifest.json` signed with the maintainer's Ed25519
 PRIVATE key (held only by OmniFoxX, never distributed). The PUBLIC key ships with
@@ -32,7 +32,7 @@ import uuid
 from pathlib import Path
 
 CANONICAL_REPO = "https://github.com/OmniFoxX"
-PRODUCT = "OracleAI"
+PRODUCT = "VeridianAI"          # v2.12.17: was "OracleAI" (pre-rename leftover)
 
 # Once you run `keygen`, paste the printed fingerprint here to LOCK provenance:
 # verify() will then mark a build "official" only if its shipped public key
@@ -65,13 +65,23 @@ INCLUDE_EXT = {".py", ".js", ".html", ".css", ".bat", ".ps1",
                ".webmanifest", ".vbs"}
 EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build",
                 "downloads", "archives", "logs", "uploads", "vlts_archives",
-                "reconstructs", "OracleAI_Icon_files",
+                "reconstructs", "OracleAI_Icon_files", "VeridianAI_Icon_files",
+                # v2.12.17: these are dev scratch areas that tools/make_release.ps1
+                # strips from the release. If we hash them here, the manifest lists
+                # files the shipped tree cannot contain and the Build badge reads
+                # "modified" no matter how many times you regenerate. genmanifest
+                # and make_release.ps1 must agree on what "the product" is.
+                "Geminisms", "LeoBraves", "SageCrafts", "SAFE",
                 # User-modifiable / runtime data — meant to change, never hashed:
                 "skills", "memory_log", "models", "bundled_models", "prompts"}
 # Never hash these specific files (generated / runtime state / self) — belt &
 # suspenders in case a runtime extension is ever re-added to INCLUDE_EXT.
 EXCLUDE_FILES = {"build_manifest.json", "config.json", "chat_memory.json",
-                 "ui_prefs.json", ".backend_mode", "package-lock.json"}
+                 "ui_prefs.json", ".backend_mode", "package-lock.json",
+                 # Build tooling: present in the working tree, deliberately absent
+                 # from the release. Hashing them makes a matching manifest
+                 # impossible (see EXCLUDE_DIRS note above).
+                 "make_release.ps1", "prep_distribution.bat"}
 
 
 def _data_dir() -> Path:
@@ -178,7 +188,7 @@ def genmanifest(root: Path = None, priv_path: Path = None, pub_path: Path = None
     priv = serialization.load_pem_private_key(priv_path.read_bytes(), password=None)
     files = {str(rel).replace("\\", "/"): _sha256(root / rel) for rel in _iter_files(root)}
     body = {
-        "schema": "oracleai_build_manifest", "manifest_version": 1,
+        "schema": "veridianai_build_manifest", "manifest_version": 1,
         "product": PRODUCT, "version": version or _detect_version(),
         "canonical_repo": CANONICAL_REPO,
         "build_id": uuid.uuid4().hex,

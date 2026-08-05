@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-rotate_api_key.py -- generate a fresh OracleAI default API key
+rotate_api_key.py -- generate a fresh VeridianAI default API key
 ================================================================
 
 v2.3.1 (2026-06-06): tokens now stored as prefix + SHA-256 hash.
@@ -29,8 +29,8 @@ WHAT IT DOES NOT DO
   that token survives the rotation unchanged.
 - Restart the FastAPI server. After rotation, the running server
   must be restarted (or the keystore reloaded) for it to see the
-  new token. The simplest path: close OracleAI, run this script,
-  restart OracleAI, copy the new token into your client config.
+  new token. The simplest path: close VeridianAI, run this script,
+  restart VeridianAI, copy the new token into your client config.
 """
 
 import sys
@@ -54,8 +54,8 @@ except ImportError as exc:
     print("  ERROR: could not import auth.py from backend/")
     print(f"  Detail: {exc}")
     print()
-    print("  Make sure you are running this script from the OracleAI")
-    print("  project root (e.g.  py rotate_api_key.py  from E:\\OracleAI_v2.3)")
+    print("  Make sure you are running this script from the VeridianAI")
+    print("  project root (e.g.  py rotate_api_key.py  from E:\\VeridianAI_v2.3+)")
     print()
     sys.exit(1)
 
@@ -69,7 +69,7 @@ def main() -> None:
 
     print()
     print(bar)
-    print("  OracleAI -- API KEY ROTATION")
+    print("  VeridianAI -- API KEY ROTATION")
     print(bar)
     print()
     print("  Rotating default token ...")
@@ -93,9 +93,9 @@ def main() -> None:
     print("  Only a prefix + SHA-256 hash are persisted.")
     print()
     print("  Next steps:")
-    print("    1. Close OracleAI (the FastAPI server must restart to")
+    print("    1. Close VeridianAI (the FastAPI server must restart to")
     print("       pick up the new token)")
-    print("    2. Restart OracleAI")
+    print("    2. Restart VeridianAI")
     print("    3. Paste the token above into your client config:")
     print()
     print("       Continue.dev  (~\\.continue\\config.yaml):")

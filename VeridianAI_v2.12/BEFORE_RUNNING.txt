@@ -1,0 +1,144 @@
+================================================================================
+  VeridianAI -- portable build for Windows x64
+  MentiSphere Software  |  https://veridianai.mentispheresoftware.com
+================================================================================
+
+READ THIS FIRST. It is short, and two of these points will save you a support
+email.
+
+
+--------------------------------------------------------------------------------
+1. WHAT THIS IS
+--------------------------------------------------------------------------------
+
+This is the portable build: a complete, self-contained folder. There is no
+installer, nothing is written to Program Files, and nothing is added to your
+registry. To uninstall, delete the folder.
+
+The local inference engine (llama.cpp, Vulkan and Intel IPEX builds) is already
+bundled. You do not need to download it separately.
+
+A Windows installer and a Microsoft Store package are in progress. This portable
+build is the supported way to run VeridianAI today.
+
+
+--------------------------------------------------------------------------------
+2. WHERE TO EXTRACT IT  (this one matters)
+--------------------------------------------------------------------------------
+
+VeridianAI keeps your data in a folder named "sage_data", created NEXT TO the
+extracted folder -- as a sibling, not inside it. This is deliberate: your
+conversations, keys and memory survive upgrades and never get swept up when you
+replace the program folder.
+
+So if you extract to:
+
+    C:\Users\you\Apps\VeridianAI-2.12.16-portable\
+
+then your data lives at:
+
+    C:\Users\you\Apps\sage_data\
+
+Pick your extraction folder with that in mind.
+
+  GOOD:  C:\Users\<you>\Apps\        or   D:\VeridianAI\
+  AVOID: C:\Program Files\           (not writable without admin)
+  AVOID: the root of C:\             (sage_data would land in C:\)
+  AVOID: OneDrive / Dropbox / any synced folder
+         Cloud sync will corrupt the database files while they are open.
+         This is the single most common cause of a broken install.
+
+You need roughly 1.5 GB free for the program folder, plus room for whatever
+models you later download.
+
+
+--------------------------------------------------------------------------------
+3. WINDOWS WILL WARN YOU. HERE IS WHY, AND HOW TO CHECK.
+--------------------------------------------------------------------------------
+
+This build is not yet code-signed, so Windows SmartScreen will show a blue
+"Windows protected your PC" box. That warning means "this publisher has not paid
+for a certificate yet" -- it is not a malware detection.
+
+You should not simply trust that. Verify the download instead:
+
+  1. Open PowerShell in the folder containing the ZIP.
+  2. Run:
+
+         Get-FileHash .\VeridianAI-2.12.16-portable-win-x64.zip -Algorithm SHA256
+
+  3. Compare the result against the SHA-256 published on the download page at
+     https://veridianai.mentispheresoftware.com
+
+     If they do not match, delete the file and tell us. Do not run it.
+
+Once it matches:
+
+  * Right-click the ZIP -> Properties -> tick "Unblock" -> OK, THEN extract.
+    (Doing this before extraction saves you unblocking dozens of files.)
+  * On the SmartScreen box: "More info" -> "Run anyway".
+
+There is also a signed build manifest included. After first launch you can
+confirm every file matches what we shipped from inside the app.
+
+
+--------------------------------------------------------------------------------
+4. FIRST RUN
+--------------------------------------------------------------------------------
+
+Launch VeridianAI.exe from the extracted folder.
+
+On first launch a setup window walks through three things:
+
+  1. Python 3.10+  -- detected, and offered via winget if missing.
+  2. Dependencies  -- installed with pip, with live output. Takes a few minutes.
+  3. Ollama        -- optional, and only if you want to use Ollama-hosted
+                      models. You can skip it and use the bundled engine.
+
+Each step asks before it does anything. Nothing installs silently.
+
+If you decline Python, VeridianAI cannot start -- the backend is a Python
+application. Everything else is optional.
+
+Keep VeridianAI.exe in the same folder as start.bat. The launcher resolves the
+whole application relative to the executable, so moving the .exe out on its own
+(or making a copy of just the .exe) will fail with a "Cannot find start.bat"
+message. Make a shortcut instead: right-click VeridianAI.exe -> Send to ->
+Desktop (create shortcut).
+
+
+--------------------------------------------------------------------------------
+5. GPU / BACKEND MODE
+--------------------------------------------------------------------------------
+
+The default backend mode is "vulkan", which works on essentially any modern GPU
+from AMD, NVIDIA or Intel, and falls back to CPU where it must. You can change
+this later in Settings. Intel Arc owners may prefer the bundled IPEX build.
+
+First launch is slow. The engine loads a model into memory before it can answer
+anything, and on a cold start that can take a minute or more. It is not frozen.
+
+
+--------------------------------------------------------------------------------
+6. IF SOMETHING GOES WRONG
+--------------------------------------------------------------------------------
+
+  * "Cannot find start.bat"
+      VeridianAI.exe was moved or copied out of the folder. See section 4.
+
+  * Setup finishes but the window stays blank
+      The backend is still starting. Give it 60-90 seconds on a cold first run.
+
+  * Database or memory errors after a while
+      Check whether the folder is inside OneDrive or another sync client.
+      See section 2.
+
+  * Antivirus quarantines the engine binaries
+      The bundled llama.cpp executables are unsigned and get false-positived by
+      some scanners. Verify the SHA-256 from section 3 first, then add the
+      folder to your scanner's exclusions if you are satisfied.
+
+Report anything else through the site. Include what you were doing and any text
+from the setup window -- it logs its own progress.
+
+================================================================================

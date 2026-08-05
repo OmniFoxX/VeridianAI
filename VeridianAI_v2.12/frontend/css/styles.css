@@ -57,8 +57,19 @@
    System-font stack so it looks great with or without internet
    ============================================================ */
 
-/* ── Fonts: try Google, fall back gracefully ------------------- */
-@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Rajdhani:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+/* ── Fonts ------------------------------------------------------
+   v2.12.17 (2026-07-30): the Google Fonts @import used to live here.
+   An @import at the top of a stylesheet is RENDER-BLOCKING for that
+   whole sheet -- so with no network (or worse, a hotspot with no real
+   route) the entire UI waited on fonts.googleapis.com before painting.
+   For an app whose pitch is "local, no cloud", blocking first paint on
+   a Google request is exactly the wrong dependency.
+
+   The webfonts are now requested NON-blocking from index.html, so they
+   still arrive when there is a connection and are simply absent when
+   there is not. The --font-* tokens below already carry full system
+   fallback stacks, which is what the header comment always claimed.
+   ------------------------------------------------------------------ */
 
 /* ── Design tokens --------------------------------------------- */
 :root {
@@ -1256,21 +1267,70 @@ pre:hover .copy-btn {
 /* Print: force readable black-on-white regardless of theme, so Dark theme no
    longer prints white text onto a white page (the "blank sheets" bug). */
 @media print {
-  /* The chat lives inside .app-body, which is position:fixed + overflow:hidden
-     (pinned to the viewport) -- THAT clipped the final page. Un-pin the whole
-     shell so the full conversation flows across pages, and hide the chrome. */
+  /* ==========================================================================
+     PRINT — one block, deliberately. There used to be TWO @media print rules
+     in this file (this one, and a weaker duplicate further down). The later
+     one silently won on every property they shared, which is how the earlier
+     white-text-on-white-paper bug survived as long as it did. Do not add a
+     second one: extend this.
+     ========================================================================== */
+
+  @page { margin: 14mm; }
+
+  /* --- 1. STOP CHROMIUM RASTERIZING THE PAGE -------------------------------
+     This is what made printed chats behave like scanned images with no
+     selectable text. The glassmorphism shell uses backdrop-filter in 11
+     places; an element with backdrop-filter (or filter) is promoted to a
+     composited layer, and Chromium flattens composited layers to BITMAPS when
+     it prints. Everything inside then arrives as pixels — no text layer, no
+     select, no search, no accessibility.
+     Killing the effects for print restores real, selectable text. -------- */
+  *,
+  *::before,
+  *::after {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    filter: none !important;
+    text-shadow: none !important;
+    box-shadow: none !important;
+    will-change: auto !important;
+  }
+
+  /* --- 2. HIDE THE APP CHROME --------------------------------------------- */
   .app-header,
   .sidebar,
   .oracle-panel,
   .chat-toolbar,
   .input-container,
+  .vibe-bar,
+  .skip-link,
   #modal-root {
     display: none !important;
   }
+  /* Atmospheric layers (fixed star field) */
   body::before,
   body::after {
     display: none !important;
   }
+
+  /* --- 3. HIDE FLOATING OVERLAYS ------------------------------------------
+     Chromium repeats a position:fixed element on EVERY printed page. The
+     shared tooltip (.a11y-tip, z-index 100000) is visible whenever the pointer
+     is resting on a control — including the Print button you just clicked — so
+     it stamped a little "Print" bubble across every page of the output.
+     Anything pinned to the viewport gets hidden here for the same reason. -- */
+  .a11y-tip,
+  .modal-overlay,
+  .toast,
+  .notification,
+  [role="tooltip"],
+  [role="status"][aria-live] {
+    display: none !important;
+  }
+
+  /* --- 4. UN-PIN THE SHELL SO CONTENT FLOWS ACROSS PAGES ------------------
+     .app-body is position:fixed + overflow:hidden (pinned to the viewport),
+     which clipped everything past the first page. -------------------------- */
   html,
   body,
   .app-body,
@@ -1286,14 +1346,9 @@ pre:hover .copy-btn {
     min-height: 0 !important;
     display: block !important;
   }
-  .message-bubble h1,
-  .message-bubble h2,
-  .message-bubble h3,
-  .message-bubble pre,
-  .message-bubble blockquote {
-    page-break-inside: avoid;
-    break-inside: avoid;
-  }
+  .messages-container { padding: 0 !important; }
+
+  /* --- 5. INK-FRIENDLY COLOURS -------------------------------------------- */
   :root,
   body,
   #messages,
@@ -1305,21 +1360,83 @@ pre:hover .copy-btn {
   .message-bubble,
   .message-bubble * {
     color: #000000 !important;
-    text-shadow: none !important;
-    box-shadow: none !important;
-  }
-  .message-bubble code,
-  .message-bubble pre {
-    background: #f2f2f2 !important;
-    color: #000000 !important;
-    border: 1px solid #cccccc !important;
   }
   .message-bubble a {
     color: #0645ad !important;
+    text-decoration: underline !important;
+  }
+
+  /* --- 6. KEEP THE FORMATTING ---------------------------------------------
+     print-color-adjust:exact tells the browser NOT to helpfully strip these
+     backgrounds/borders — without it, code blocks and table rules come out as
+     undifferentiated text and a formatted report loses its structure. ------ */
+  .message-bubble code,
+  .message-bubble pre,
+  .message-bubble table,
+  .message-bubble th,
+  .message-bubble td,
+  .message-bubble blockquote {
+    print-color-adjust: exact !important;
+    -webkit-print-color-adjust: exact !important;
+  }
+  .message-bubble code,
+  .message-bubble pre {
+    background: #f4f4f4 !important;
+    border: 1px solid #cccccc !important;
+    border-radius: 3px !important;
+  }
+  .message-bubble pre {
+    padding: 8px 10px !important;
+    white-space: pre-wrap !important;   /* long lines must not run off the page */
+    word-wrap: break-word !important;
   }
   .message-bubble blockquote {
     color: #333333 !important;
     border-left: 3px solid #999999 !important;
+    padding-left: 10px !important;
+  }
+  .message-bubble table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  .message-bubble th,
+  .message-bubble td {
+    border: 1px solid #999999 !important;
+    padding: 4px 8px !important;
+  }
+  .message-bubble th {
+    background: #eeeeee !important;
+    font-weight: 700 !important;
+  }
+  /* Keep the speaker distinction without a heavy filled bubble */
+  .message-bubble {
+    border: 1px solid #cccccc !important;
+    border-radius: 6px !important;
+    padding: 10px 12px !important;
+    margin: 0 0 10px 0 !important;
+    max-width: 100% !important;
+  }
+
+  /* --- 7. PAGE BREAKS ------------------------------------------------------ */
+  .message-bubble h1,
+  .message-bubble h2,
+  .message-bubble h3,
+  .message-bubble pre,
+  .message-bubble blockquote,
+  .message-bubble tr,
+  .message-bubble img {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+  .message-bubble h1,
+  .message-bubble h2,
+  .message-bubble h3 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+  .message-bubble img {
+    max-width: 100% !important;
+    height: auto !important;
   }
 }
 
@@ -2240,39 +2357,6 @@ pre:hover .copy-btn {
 }
 
 /* ── Print styles ------------------------------------------------ */
-@media print {
-  .app-header,
-  .sidebar,
-  .oracle-panel,
-  .input-container,
-  .chat-toolbar,
-  .vibe-bar {
-    display: none !important;
-  }
-  .app-body {
-    position: static !important;
-  }
-  .chat-area {
-    overflow: visible !important;
-  }
-  .messages-container {
-    overflow: visible !important;
-    height: auto !important;
-    padding: 20px !important;
-  }
-  .message-bubble {
-    box-shadow: none !important;
-    border: 1px solid #ccc !important;
-  }
-  body {
-    background: white !important;
-    color: black !important;
-  }
-  .message-bubble {
-    background: white !important;
-    color: black !important;
-  }
-}
 
 /* WCAG 2.4.1 - Skip Link */
 .skip-link {

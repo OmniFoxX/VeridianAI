@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-mcp_server.py -- stdio MCP entry point for OracleAI
+mcp_server.py -- stdio MCP entry point for VeridianAI
 ====================================================
 
 Standalone subprocess that speaks MCP (Model Context Protocol) over
@@ -9,9 +9,9 @@ Continue.dev or Claude Desktop using a config such as:
 
     {
       "mcpServers": {
-        "oracleai-sage": {
+        "veridianai-toga": {
           "command": "py",
-          "args": ["E:\\\\OracleAI_v2.3\\\\backend\\\\mcp_server.py"]
+          "args": ["E:\\\\VeridianAI_v2.11.11\\\\backend\\\\mcp_server.py"]
         }
       }
     }
@@ -28,7 +28,7 @@ This entrypoint shares dispatch logic with the HTTP MCP route in
 main.py via mcp_handlers.py -- the protocol envelope handling lives
 there. This file is only the stdio framing.
 
-v2.3 (2026-06-03): initial implementation.
+v2.11.11 (v2.3 (2026-06-03): initial implementation)
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def _write_response(envelope: dict) -> None:
 
 
 def main() -> int:
-    _log(f"OracleAI MCP server (stdio) starting; pid={os.getpid()}")
+    _log(f"VeridianAI MCP server (stdio) starting; pid={os.getpid()}")
     _log(f"protocol={mcp_handlers.MCP_PROTOCOL_VERSION} "
          f"server={mcp_handlers.MCP_SERVER_NAME}/"
          f"{mcp_handlers.MCP_SERVER_VERSION}")

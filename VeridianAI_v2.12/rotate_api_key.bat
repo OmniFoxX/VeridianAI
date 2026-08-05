@@ -1,9 +1,9 @@
 @echo off
-:: rotate_api_key.bat -- OracleAI API key rotation launcher
+:: rotate_api_key.bat -- VeridianAI API key rotation launcher
 :: =========================================================
 :: v2.3.1 (2026-06-06)
 ::
-:: Run this from the OracleAI project root to rotate the default
+:: Run this from the VeridianAI project root to rotate the default
 :: bearer token. Wraps rotate_api_key.py with a friendly console
 :: window that stays open so you can copy the new token.
 ::
@@ -30,7 +30,7 @@ if not exist "%SCRIPT%" (
     echo   ERROR: rotate_api_key.py not found at:
     echo       %SCRIPT%
     echo.
-    echo   Make sure rotate_api_key.bat lives in the OracleAI project root.
+    echo   Make sure rotate_api_key.bat lives in the VeridianAI project root.
     echo.
     goto :done
 )
@@ -63,7 +63,7 @@ if exist "%VENV_PYTHON%" (
 :: Run the rotator
 :: ---------------------------------------------------------------------------
 echo.
-echo   OracleAI -- launching key rotator ...
+echo   VeridianAI -- launching key rotator ...
 echo   Python: %PYTHON%
 echo.
 

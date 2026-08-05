@@ -5,11 +5,19 @@
     <meta charset="utf-8" />
     <meta content="width=device-width, initial-scale=1.0" name="viewport" />
     <title>VeridianAI</title>
-    <link href="https://fonts.googleapis.com" rel="preconnect" />
-    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <!-- Webfonts, NON-BLOCKING (v2.12.17). media="print" means the browser
+         fetches this sheet at low priority and does NOT hold first paint for
+         it; onload promotes it to "all" once it actually arrives. With no
+         network the request simply fails and the system fallback stacks in
+         styles.css (--font-display / --font-body / --font-mono) are used.
+         Previously this was a plain render-blocking stylesheet link AND an
+         @import in styles.css, so an offline or dead-route connection stalled
+         the whole UI before it drew anything. -->
     <link
       href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&amp;family=Rajdhani:wght@300;400;500;600&amp;family=JetBrains+Mono:wght@400;500&amp;display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'; this.onload=null;"
     />
     <link href="/static/css/styles.css?v=2.11.12" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=2.9.10" rel="stylesheet" />

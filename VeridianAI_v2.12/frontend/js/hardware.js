@@ -14,6 +14,12 @@ async function loadHardware() {
   }
 }
 
+function _esc(t) {
+  return String(t).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
 function renderHardwarePanel(hw) {
   const container = document.getElementById('hardware-info');
   const togglesDiv = document.getElementById('hw-toggles');
@@ -24,7 +30,41 @@ function renderHardwarePanel(hw) {
   const cores = cpu.cores || '?';
   const threads = cpu.threads || cpu.cores || '?';
 
+  // v2.12.19: advisories from /api/hardware. These never change what the app
+  // launches (all three tiers always come up by design) — they exist so a
+  // constrained machine explains itself instead of just feeling broken.
+  const adv = Array.isArray(hw.advisories) ? hw.advisories : [];
+  const advHtml = adv.map((a) => {
+    const warn = a.level === 'warn';
+    return `
+      <div class="hw-advisory" role="note" style="
+        grid-column: 1 / -1;
+        display:flex; gap:10px; align-items:flex-start;
+        padding:10px 12px; margin-bottom:10px;
+        border-radius:6px; font-size:12px; line-height:1.45;
+        border:1px solid ${warn ? '#b8860b' : 'var(--border-hi, #444)'};
+        background:${warn ? 'rgba(184,134,11,0.10)' : 'rgba(127,127,127,0.08)'};
+        color:var(--text);">
+        <span aria-hidden="true" style="flex:0 0 auto;font-size:14px;line-height:1.2">
+          ${warn ? '\u26A0' : '\u2139'}
+        </span>
+        <span>${_esc(a.message || '')}</span>
+      </div>`;
+  }).join('');
+
+  const mem = hw.memory || {};
+  const memCard = mem.total_gb
+    ? `<div class="hw-card">
+         <div class="hw-card-title">Memory</div>
+         <div class="hw-card-value">${mem.total_gb} GB</div>
+         <div style="margin-top:4px;font-size:11px;color:var(--text-muted)">
+           ${mem.available_gb != null ? mem.available_gb + ' GB available' : ''}
+         </div>
+       </div>`
+    : '';
+
   container.innerHTML = `
+    ${advHtml}
     <div class="hw-card">
       <div class="hw-card-title">Operating System</div>
       <div class="hw-card-value">${os.name || '?'} ${os.release || ''}</div>
@@ -38,6 +78,7 @@ function renderHardwarePanel(hw) {
         ${cpu.avx512 ? ' · AVX512' : ''}
       </div>
     </div>
+    ${memCard}
     ${renderGpuCard('NVIDIA', hw.nvidia)}
     ${renderGpuCard('AMD',    hw.amd)}
     ${renderGpuCard('Intel',  hw.intel)}
@@ -159,6 +200,20 @@ function buildToggles(hw) {
   // toggle and AMD GPU inference rides the global GPU Acceleration switch.)
   if (hw.amd && hw.amd.rocm_available) {
     toggles.push({ label: 'ROCm (AMD)', checked: _cfgOn('rocm_enabled'), onChange: "updateSetting('rocm_enabled', this.checked)", tip: 'Use AMD ROCm to accelerate inference on your AMD GPU.' });
+  }
+  // v2.12.19: Vulkan is VENDOR-NEUTRAL and was only offered to Intel users.
+  // That left AMD APU laptops with no reachable GPU path at all: ROCm on
+  // Windows supports discrete Radeon RX/PRO cards ONLY -- never Ryzen AI
+  // integrated graphics -- so hw.amd.rocm_available is false and the ROCm
+  // toggle (correctly) never appears, while the toggle that WOULD have worked
+  // was gated behind hw.intel. Offer it to any detected GPU vendor.
+  if ((hw.amd && hw.amd.available) || (hw.nvidia && hw.nvidia.available)) {
+    toggles.push({
+      label: 'Vulkan',
+      checked: _cfgOn('vulkan_enabled'),
+      onChange: "updateSetting('vulkan_enabled', this.checked)",
+      tip: 'Vendor-neutral GPU acceleration. On AMD integrated graphics this is the only working GPU path on Windows (ROCm does not support APUs).',
+    });
   }
   if (hw.intel && hw.intel.available) {
     toggles.push({ label: 'Vulkan/XPU (Intel)', checked: _cfgOn('vulkan_enabled'), onChange: "updateSetting('vulkan_enabled', this.checked)", tip: 'Use Intel Vulkan/XPU acceleration on your Intel GPU.' });
