@@ -750,7 +750,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.14.1", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.14.2", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -1509,8 +1509,19 @@ def _voice_install_worker(target: str) -> None:
             with _voice_install_lock:
                 _voice_install.update(state="failed", detail=" ".join(tail)[:300])
     except Exception as e:
+        # The pip-failure branch above deliberately surfaces pip's OWN stderr:
+        # that is the message the user needs, and it is how the "Cannot import
+        # setuptools" failure was diagnosed. THIS branch is different -- an
+        # unexpected Python exception, whose text can carry absolute paths and
+        # internals into a client response (CodeQL py/stack-trace-exposure).
+        #
+        # Keep the exception CLASS, which is the part with diagnostic value,
+        # and send the rest to the server log behind a reference.
         with _voice_install_lock:
-            _voice_install.update(state="failed", detail=str(e)[:300])
+            _voice_install.update(
+                state="failed",
+                detail="%s - %s" % (type(e).__name__,
+                                    _safe_detail(e, "voice install")))
 
 
 @app.post("/api/voice/install")

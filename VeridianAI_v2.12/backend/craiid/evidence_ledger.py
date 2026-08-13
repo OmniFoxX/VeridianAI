@@ -61,6 +61,7 @@ from __future__ import annotations
 
 import json
 import time
+import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
@@ -338,11 +339,35 @@ def archive_to(archive_name: str, ns=None) -> bool:
         src = _ledger_path(ns)
         if not src or not src.exists():
             return False
-        stem = Path(str(archive_name)).name
-        (folder / f".evidence_{stem}.dat").write_bytes(src.read_bytes())
+        _snapshot_path(folder, archive_name).write_bytes(src.read_bytes())
         return True
     except Exception:
         return False
+
+
+def _snapshot_path(folder: "Path", archive_name) -> "Path":
+    """Path to a conversation's evidence snapshot, contained by construction.
+
+    `Path(name).name` already strips every directory component, so traversal
+    was not reachable -- but that is a subtle property of pathlib rather than a
+    stated rule, which is why CodeQL flagged it (py/path-injection) and why a
+    reader has to know pathlib to agree. Both are worth fixing: an invariant
+    the code asserts is stronger than one it merely happens to satisfy.
+
+    So: strip, reject anything left that could still traverse, and then verify
+    the resolved result is genuinely inside the folder. The last check is the
+    one that holds even if the first two are wrong.
+    """
+    stem = Path(str(archive_name)).name
+    # Belt: a bare ".." survives .name on POSIX, and separators of the OTHER
+    # platform are not treated as separators by this one.
+    if not stem or stem in (".", "..") or "/" in stem or "\\" in stem:
+        raise ValueError("unsafe archive name: %r" % (archive_name,))
+    out = (folder / (".evidence_%s.dat" % stem)).resolve()
+    # Braces: whatever the name was, the result must land inside the folder.
+    if not str(out).startswith(str(Path(folder).resolve()) + os.sep):
+        raise ValueError("archive name escapes its folder: %r" % (archive_name,))
+    return out
 
 
 def restore_from(archive_name: str, ns=None) -> bool:
@@ -350,8 +375,7 @@ def restore_from(archive_name: str, ns=None) -> bool:
     try:
         import sage_engine
         folder = Path(sage_engine._archive_folder(ns))
-        stem = Path(str(archive_name)).name
-        snap = folder / f".evidence_{stem}.dat"
+        snap = _snapshot_path(folder, archive_name)
         dest = _ledger_path(ns)
         if not snap.exists() or not dest:
             return False

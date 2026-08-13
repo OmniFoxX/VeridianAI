@@ -585,7 +585,17 @@ function startBackend() {
     // failure and another blind round.
     const _spawnArgs = IS_STORE_BUILD
       ? ['-u', path.join(resolvedRoot, 'store_launch.py'), '--port', String(APP_PORT)]
-      : ['/c', resolvedBat, '--mode', ELECTRON_BACKEND_MODE];
+      : ['/c', resolvedBat, '--mode',
+         // readBackendMode() allowlists against VALID_MODES on every path, so
+         // this can only ever be 'vulkan' or 'ipex'. Re-checking AT THE SPAWN
+         // is not redundant: it is the difference between "safe because a
+         // function 400 lines up validates it" and "safe here, verifiably",
+         // which is also the difference CodeQL cannot infer (js/shell-command-
+         // injection-from-environment). If the invariant is ever broken
+         // upstream, this fails closed to the default rather than passing an
+         // arbitrary string into a `cmd /c` line.
+         VALID_MODES.includes(ELECTRON_BACKEND_MODE)
+           ? ELECTRON_BACKEND_MODE : 'vulkan'];
 
     if (IS_STORE_BUILD && !fs.existsSync(_spawnCmd)) {
       blog(`FATAL: bundled python missing at ${_spawnCmd}`);
