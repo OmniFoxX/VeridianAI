@@ -1,5 +1,24 @@
 /**
- * VeridianAI 2.9.10 — Electron Wrapper
+ * VeridianAI - Electron Wrapper
+ *
+ * NO VERSION NUMBER IN THIS COMMENT, DELIBERATELY.
+ *
+ * It used to read "VeridianAI 2.9.10", and nothing ever updated it. On
+ * 2026-08-13 that line was used as the test for whether a tree held current
+ * code -- reading the first 80 bytes of each main.js found on the drive and
+ * comparing. Every copy answered "2.9.10", including the fully current
+ * 52,800-byte file, because the comment was stale in all of them. The
+ * conclusion drawn was that no tree had the current code and the files
+ * needed rewriting from scratch. They did not; only the comment was old.
+ *
+ * A version string in a comment is a second source of truth that nothing
+ * enforces, and it is worse than no version at all: absent, you go looking
+ * for the real one; stale, you believe it.
+ *
+ * The version lives in electron/package.json, which _bump_version.py owns
+ * and which becomes the MSIX package version. At runtime: app.getVersion().
+ * To identify a build's actual code, compare content or size -- see
+ * tools/verify_electron_payload.js.
  * ===========================
  *
  * v2.1.6 fix: previously this file spawned `python main.py` directly,
@@ -24,6 +43,78 @@ const { spawn, spawnSync } = require('child_process');
 const path       = require('path');
 const fs         = require('fs');
 const http       = require('http');
+const os         = require('os');
+
+// ---------------------------------------------------------------------------
+// BOOT LOG (v2.13). A packaged GUI app has nowhere to print: stdout is not
+// attached to anything, and when Developer Mode is off start.bat is spawned
+// with stdio:'ignore'. Five debugging rounds were lost to that silence, so
+// main.js now keeps its own account of the boot on disk, from the first line
+// of execution, in a location that is writable no matter how the app was
+// installed. Read it with:  notepad %TEMP%\VeridianAI-boot.log
+// ---------------------------------------------------------------------------
+const BOOT_LOG    = path.join(os.tmpdir(), 'VeridianAI-boot.log');
+// start.bat's own stdout/stderr. Previously this went to stdio:'ignore'
+// whenever Developer Mode was off, which is why a backend that failed on
+// startup produced literally no evidence anywhere. Now it is always
+// captured; Developer Mode only controls whether a CONSOLE also appears.
+const BACKEND_LOG = path.join(os.tmpdir(), 'VeridianAI-backend.log');
+// v2.14.1: the boot log is written to TWO places.
+//
+// %TEMP% alone was not good enough. Two portable runs on 2026-08-12 -- one
+// that failed to start and one that succeeded -- BOTH reported
+// "not present: ...\Temp\VeridianAI-boot.log", while the app was demonstrably
+// running with four VeridianAI processes and a live backend. Whatever the
+// cause (an elevated launch resolving TEMP elsewhere, a cleaner, a redirected
+// environment), the outcome is what matters: the diagnostic written
+// specifically so that a failed boot leaves evidence left none, on the one
+// occasion it was needed.
+//
+// So it is also written beside sage_data, which the app resolves anyway, the
+// user can open from Settings, and no cleaner touches. TEMP is kept because
+// early lines are logged before app.getPath() is safe to call.
+let _logDir2 = null;         // resolved once the app is ready
+let _logBuf  = [];           // lines emitted before that
+
+function _bootLog2Path() {
+  return _logDir2 ? path.join(_logDir2, 'VeridianAI-boot.log') : null;
+}
+
+function blog(msg) {
+  const line = `[${new Date().toISOString()}] ${msg}`;
+  try { fs.appendFileSync(BOOT_LOG, line + '\n'); } catch { /* never fatal */ }
+  const p2 = _bootLog2Path();
+  if (p2) {
+    try { fs.appendFileSync(p2, line + '\n'); } catch { /* never fatal */ }
+  } else {
+    if (_logBuf.length < 500) _logBuf.push(line);   // bounded; boot is short
+  }
+  try { console.log(line); } catch { /* no console when packaged */ }
+}
+
+/** Point the second log at sage_data and flush anything buffered. */
+function openDurableBootLog() {
+  try {
+    const dir = resolveDataDir();
+    fs.mkdirSync(dir, { recursive: true });
+    _logDir2 = dir;
+    const p2 = _bootLog2Path();
+    fs.writeFileSync(p2, '');                       // fresh file per launch
+    if (_logBuf.length) {
+      fs.appendFileSync(p2, _logBuf.join('\n') + '\n');
+      _logBuf = [];
+    }
+    blog(`durable boot log -> ${p2}`);
+    blog(`os.tmpdir()=${os.tmpdir()}  (copy also written there)`);
+  } catch (e) {
+    blog('could not open durable boot log: ' + e.message);
+  }
+}
+try { fs.writeFileSync(BOOT_LOG, ''); } catch { /* fresh file per launch */ }
+blog('=== VeridianAI boot ===');
+blog(`electron=${process.versions.electron} node=${process.versions.node} ` +
+     `platform=${process.platform} windowsStore=${process.windowsStore === true}`);
+blog(`execPath=${process.execPath}`);
 
 // v2.2 #74 — backend mode picker.
 //
@@ -183,6 +274,46 @@ const HEALTH_TIMEOUT_MS = 240_000;  // v2.11.12: was 90s. The 90s budget had
                                     // (polling, not waiting).
 const PRELOAD_PATH = path.join(__dirname, 'preload.js');
 
+// ---------------------------------------------------------------------------
+// v2.13 STORE BUILD DETECTION (MSIX / Microsoft Store)
+//
+// Electron sets process.windowsStore = true when the app is running from an
+// APPX/MSIX package. That single flag drives three behavioural differences,
+// all of them required by Store policy or by how MSIX works:
+//
+//   1. NO RUNTIME INSTALLS. Store apps must be self-contained and serviced
+//      only through the Store, so first_run.js must not winget-install Python
+//      or Ollama, and must not pip-install anything. The Store package ships a
+//      bundled Python instead (see tools/bundle_python.ps1).
+//   2. WRITABLE DATA LOCATION. The install directory under
+//      C:\\Program Files\\WindowsApps is READ-ONLY at runtime, and so is its
+//      parent -- so the usual sibling sage_data cannot exist. We point the
+//      backend at the package's LocalAppData folder via VERIDIAN_DATA_DIR.
+//   3. NO BROAD FILESYSTEM ACCESS. The Store manifest deliberately omits the
+//      broadFileSystemAccess restricted capability, so anything outside our
+//      own data folder must come from an explicit user folder grant.
+//
+// Everything here is a no-op for the portable/NSIS build.
+// ---------------------------------------------------------------------------
+const IS_STORE_BUILD = process.windowsStore === true;
+
+function resolveDataDir() {
+  // Explicit override always wins (power users, portable installs on a stick).
+  const envDir = (process.env.VERIDIAN_DATA_DIR || '').trim();
+  if (envDir) return envDir;
+  if (IS_STORE_BUILD) {
+    // app.getPath('userData') resolves inside the package's virtualized
+    // LocalAppData, which IS writable and survives updates.
+    try { return path.join(app.getPath('userData'), 'sage_data'); }
+    catch { /* fall through */ }
+  }
+  // Portable/NSIS: unchanged historical layout — sibling of the project.
+  const root = app.isPackaged
+    ? path.dirname(app.getPath('exe'))
+    : path.resolve(__dirname, '..');
+  return path.join(root, '..', 'sage_data');
+}
+
 // start.bat lives at the project root, one level up from electron/
 const PROJECT_ROOT = app.isPackaged
   ? path.join(path.dirname(app.getPath('exe')))
@@ -190,7 +321,37 @@ const PROJECT_ROOT = app.isPackaged
 const START_BAT = path.join(PROJECT_ROOT, 'start.bat');
 
 // --- Window ----------------------------------------------------
-function createWindow() {
+// v2.14.1: the window now exists from the first moment, showing boot.html,
+// and is navigated to the app once the backend answers. Previously
+// createWindow() ran only AFTER the health check passed, so launching the app
+// put nothing on screen for 12-40 seconds. Two consequences, both reported
+// from the field: users saw a dead launch, and -- because no window existed --
+// a transient first-run setup window closing could fire 'window-all-closed'
+// and quit the app before it ever appeared.
+//
+// A window that exists throughout fixes the visible symptom and removes the
+// structural cause of the second one, rather than guarding against it.
+let _bootWindowShown = false;
+
+function showBootWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow;
+  createWindow({ boot: true });
+  _bootWindowShown = !!(mainWindow && !mainWindow.isDestroyed());
+  return mainWindow;
+}
+
+function createWindow(opts) {
+  opts = opts || {};
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    // Already up (the boot window). Just point it at the app.
+    if (!opts.boot) {
+      blog('navigating boot window -> app');
+      try { mainWindow.loadURL(BACKEND_URL); } catch (e) {
+        blog('navigate failed: ' + e.message);
+      }
+    }
+    return;
+  }
   mainWindow = new BrowserWindow({
     width:  1280,
     height: 820,
@@ -207,7 +368,13 @@ function createWindow() {
     titleBarStyle: 'hiddenInset',
   });
 
-  mainWindow.loadURL(BACKEND_URL);
+  if (opts.boot) {
+    // No network, no backend: a local file, so it paints instantly.
+    mainWindow.loadFile(path.join(__dirname, 'boot.html'))
+      .catch((e) => blog('boot.html failed to load: ' + e.message));
+  } else {
+    mainWindow.loadURL(BACKEND_URL);
+  }
 
   mainWindow.on('closed', () => { mainWindow = null; });
 
@@ -227,6 +394,33 @@ function createWindow() {
   mainWindow.on('focus', reclaimFocus);
   ipcMain.removeAllListeners('oracle-unstick');   // idempotent if createWindow runs again
   ipcMain.on('oracle-unstick', reclaimFocus);
+
+  // --- Open the user's data folder ------------------------------------
+  // Under MSIX the install directory lives in C:\Program Files\WindowsApps,
+  // which the user cannot browse -- and their archives, uploads, downloads
+  // and snapshots are NOT there anyway. They are in sage_data, which IS
+  // reachable but sits at a redirected LocalCache path nobody would guess.
+  // The data was always accessible; there was simply no door.
+  //
+  // The payload is IGNORED. resolveDataDir() is the only path this can ever
+  // open, so the renderer cannot turn this into "open any folder".
+  ipcMain.removeAllListeners('open-data-folder');
+  ipcMain.on('open-data-folder', () => {
+    try {
+      const dir = resolveDataDir();
+      fs.mkdirSync(dir, { recursive: true });
+      // realpath so MSIX redirection lands the user in the folder the app
+      // actually writes to, not the virtual one it computes.
+      let target = dir;
+      try { target = fs.realpathSync.native(dir); } catch { /* use computed */ }
+      blog(`open-data-folder -> ${target}`);
+      shell.openPath(target).then((err) => {
+        if (err) blog(`open-data-folder failed: ${err}`);
+      });
+    } catch (e) {
+      blog(`open-data-folder error: ${e.message}`);
+    }
+  });
 
   // External links in system browser
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -284,9 +478,20 @@ function _devModeEnabled() {
   // Read the Developer Mode flag from sage_data/ui_prefs.json (the same store
   // the backend uses). Default false = hidden. Best-effort, never throws.
   try {
-    const root = app.isPackaged ? path.dirname(app.getPath('exe')) : path.resolve(__dirname, '..');
-    const prefs = path.join(root, '..', 'sage_data', 'ui_prefs.json');
-    return !!JSON.parse(fs.readFileSync(prefs, 'utf8')).developer_mode;
+    // v2.13: MUST go through resolveDataDir(). This used to compute
+    // root/../sage_data directly, which under MSIX points at
+    // C:\Program Files\WindowsApps\sage_data -- a path that does not
+    // exist and cannot be created. Developer Mode was therefore
+    // UNREACHABLE in the Store build: the one switch that makes
+    // start.bat's console visible was disabled by the same read-only
+    // path bug it would have helped diagnose.
+    const prefs = path.join(resolveDataDir(), 'ui_prefs.json');
+    // Strip a UTF-8 BOM before parsing. PowerShell 5.1's
+    // `Set-Content -Encoding utf8` writes one, and JSON.parse throws on a
+    // leading \uFEFF -- which the catch below then swallowed, silently
+    // reporting Developer Mode as off. Cost a full debugging round.
+    const raw = fs.readFileSync(prefs, 'utf8').replace(/^\uFEFF/, '');
+    return !!JSON.parse(raw).developer_mode;
   } catch (e) {
     return false;
   }
@@ -312,18 +517,96 @@ function startBackend() {
     return;
   }
 
-  console.log(`[Electron] spawning ${resolvedBat}`);
+  blog(`isPackaged=${app.isPackaged} resolvedRoot=${resolvedRoot}`);
+  blog(`start.bat exists=${fs.existsSync(resolvedBat)} at ${resolvedBat}`);
+  try { blog('root contents: ' + fs.readdirSync(resolvedRoot).join(', ')); }
+  catch (e) { blog('root unreadable: ' + e.message); }
 
   if (process.platform === 'win32') {
-    backendProc = spawn('cmd.exe', ['/c', resolvedBat, '--mode', ELECTRON_BACKEND_MODE], {
+    // v2.13: hand the backend its data location and the Store flag. config.py
+    // reads VERIDIAN_DATA_DIR; the rest of the stack inherits both from here,
+    // so there is exactly one place that decides where data lives.
+    const _dataDir = resolveDataDir();
+    try { require('fs').mkdirSync(_dataDir, { recursive: true }); } catch { /* best effort */ }
+    blog(`dataDir=${_dataDir} (store=${IS_STORE_BUILD}) exists=${fs.existsSync(_dataDir)}`);
+    // An MSIX package redirects writes to %APPDATA% into its own LocalCache,
+    // so the path computed above is NOT where the backend's files land. This
+    // log line used to name a directory that stays empty forever while the
+    // real sage_data -- API key, config.json, memory chain -- lived elsewhere
+    // entirely. realpath follows the redirection and prints the truth.
+    try {
+      const _real = fs.realpathSync.native(_dataDir);
+      if (_real && _real !== _dataDir) {
+        blog(`dataDir REDIRECTED by the package container -> ${_real}`);
+        blog('  (that resolved path is the one to back up, not the one above)');
+      }
+    } catch (e) { blog(`dataDir realpath unavailable: ${e.message}`); }
+
+    const _dev = _devModeEnabled();
+    let _outFd = null;
+    if (!_dev) {
+      try { fs.writeFileSync(BACKEND_LOG, ''); _outFd = fs.openSync(BACKEND_LOG, 'a'); }
+      catch (e) { blog('could not open backend log: ' + e.message); }
+    }
+    blog(`devMode=${_dev} backendLog=${_outFd !== null ? BACKEND_LOG : '(console)'}`);
+    // -----------------------------------------------------------------------
+    // v2.13 STORE BUILD: launch Python DIRECTLY, never through cmd.exe.
+    //
+    // Windows only propagates PACKAGE IDENTITY to child processes that live
+    // INSIDE the package. VeridianAI.exe is inside, so it may execute the
+    // bundled python.exe. cmd.exe lives in System32 -- outside -- so it
+    // starts as an ordinary process with no package identity, and the
+    // WindowsApps ACL then refuses it execute access to anything in there.
+    // Every python invocation from start.bat died with 'Access is denied'
+    // and the launcher exited 5 (ERROR_ACCESS_DENIED).
+    //
+    // Proven by an exec probe: spawning python.exe from Electron returned
+    // 'Python 3.12.8' status=0, while the cmd.exe route was refused.
+    //
+    // So a .bat launcher is structurally unusable in MSIX: it can only run
+    // inside cmd.exe, which is exactly the process that lacks the rights it
+    // needs. Python is spawned straight from here instead.
+    //
+    // store_launch.py is that Python bootstrap: it sets up the tier
+    // environment, runs tier_launcher.py, then hands off to start.py.
+    // Identity flows the whole way down because every link lives inside the
+    // package: VeridianAI.exe -> python.exe -> llama-server.exe.
+    // Ollama is absent by design (not installable at runtime); Toga and
+    // Daemon run on the BUNDLED llama-server.exe.
+    // -----------------------------------------------------------------------
+    const _spawnCmd = IS_STORE_BUILD
+      ? path.join(resolvedRoot, 'python', 'python.exe')
+      : 'cmd.exe';
+    // -u is NOT optional here. Python block-buffers stdout whenever it is not
+    // a terminal, and we redirect it to a file -- so on a v2.13 run the whole
+    // startup transcript sat in an 8 KB buffer and was LOST when the process
+    // was killed, leaving a log with a banner and nothing else. Unbuffered
+    // output costs nothing here and is the difference between a diagnosable
+    // failure and another blind round.
+    const _spawnArgs = IS_STORE_BUILD
+      ? ['-u', path.join(resolvedRoot, 'store_launch.py'), '--port', String(APP_PORT)]
+      : ['/c', resolvedBat, '--mode', ELECTRON_BACKEND_MODE];
+
+    if (IS_STORE_BUILD && !fs.existsSync(_spawnCmd)) {
+      blog(`FATAL: bundled python missing at ${_spawnCmd}`);
+    }
+    blog(`spawning: ${_spawnCmd} ${_spawnArgs.join(' ')}`);
+    backendProc = spawn(_spawnCmd, _spawnArgs, {
       cwd:   resolvedRoot,
+      env: {
+        ...process.env,
+        VERIDIAN_DATA_DIR: _dataDir,
+        VERIDIAN_STORE_BUILD: IS_STORE_BUILD ? '1' : '0',
+        PYTHONUNBUFFERED: '1',        // belt to -u's braces
+        PYTHONFAULTHANDLER: '1',      // dump a stack if it hard-crashes
+      },
       // Developer Mode: Dev OFF -> 'ignore' (no console attached/created) +
       // windowsHide so the start.bat window stays hidden for a clean desktop;
       // Dev ON -> 'inherit' so the tier startup logs are visible. (When you run
       // `npm start` from your own terminal, that terminal is the shell you typed
       // in and can't be hidden — only the packaged .exe launch is fully clean.)
-      stdio: _devModeEnabled() ? 'inherit' : 'ignore',
-      windowsHide: !_devModeEnabled(),
+      stdio: _dev ? 'inherit' : (_outFd !== null ? ['ignore', _outFd, _outFd] : 'ignore'),
+      windowsHide: !_dev,
     });
   } else {
     // Non-Windows: there's no start.bat equivalent yet, so fall back
@@ -336,11 +619,14 @@ function startBackend() {
     });
   }
 
+  blog(`spawned pid=${backendProc && backendProc.pid}`);
   backendProc.on('error', err => {
-    console.error('[Electron] Failed to start backend:', err.message);
+    blog('SPAWN ERROR: ' + err.message);
   });
-  backendProc.on('exit', code => {
-    console.log(`[Electron] start.bat exited with code ${code}`);
+  backendProc.on('exit', (code, signal) => {
+    // An immediate exit here is the single most diagnostic event in the
+    // whole boot: it means start.bat ran and gave up, and the code says why.
+    blog(`backend process EXITED code=${code} signal=${signal}`);
     backendProc = null;
   });
 }
@@ -532,11 +818,12 @@ function killPid(pid) {
 // Orchestrator: decides whether to reuse, kill+spawn, or just spawn.
 // Returns true if the backend is (or will shortly be) reachable.
 async function ensureBackendAvailable() {
+  blog(`ensureBackendAvailable: APP_PORT=${APP_PORT} HEALTH_URL=${HEALTH_URL}`);
   // Case 1: backend already healthy — just reuse it. This is the
   // common case if you ran start.bat manually before launching
   // Electron, or if a prior Electron instance is still alive.
   if (await probeHealth()) {
-    console.log('[Electron] backend already healthy — skipping spawn');
+    blog('CASE 1: backend already healthy - skipping spawn');
     return true;
   }
 
@@ -550,11 +837,15 @@ async function ensureBackendAvailable() {
   // launch proceeds first try. The dialog below now only appears when a
   // FOREIGN process owns the port, where user confirmation is right.
   if (await isPortBound(APP_PORT)) {
+    blog('port is BOUND -> running stale-process cleanup');
     runCleanupSync('startup: stale processes detected');
+    blog('cleanup finished');
     await new Promise(r => setTimeout(r, 1000));
   }
   if (await isPortBound(APP_PORT)) {
+    blog('port STILL bound after cleanup - identifying holder');
     const pid = await findPidOnPort(APP_PORT);
+    blog(`port holder pid=${pid}`);
     const detail = pid
       ? `Found PID ${pid} listening on port ${APP_PORT} but it's not ` +
         `responding to /api/health. This is usually an orphan ` +
@@ -575,7 +866,8 @@ async function ensureBackendAvailable() {
       defaultId: 0,
       cancelId: 1,
     });
-    if (choice === 1) { app.quit(); return false; }
+    blog(`port-in-use dialog choice=${choice}`);
+    if (choice === 1) { blog('user chose QUIT'); _bootingUp = false; app.quit(); return false; }
     if (pid) {
       const killed = await killPid(pid);
       if (!killed) {
@@ -589,13 +881,18 @@ async function ensureBackendAvailable() {
       // Give Windows a beat to release the port before bind.
       await new Promise(r => setTimeout(r, 500));
     } else {
-      return false;  // user chose "open anyway" but we can't fix it
+      // NOTE: returns WITHOUT spawning. If the boot log shows this line and
+      // then jumps straight to 'backend healthy=false', that is the whole
+      // story: nothing was ever launched.
+      blog('CASE 2b: port bound, holder UNKNOWN, user opted to continue - NOT spawning');
+      return false;
     }
   }
 
   // Case 3: port is free — spawn start.bat as before.
+  blog('CASE 3: port free -> startBackend()');
   startBackend();
-  console.log('[Electron] waiting for backend health…');
+  blog('waiting for backend health...');
   return await waitForBackend();
 }
 
@@ -737,6 +1034,16 @@ app.whenReady().then(async () => {
     });
   } catch (e) { /* older Electron on non-Windows — ignore */ }
 
+  // Window FIRST, before first-run setup or the backend spawn -- both of which
+  // can take a minute on a cold machine. The user sees the app open
+  // immediately and watches it start, instead of watching their desktop.
+  // Do this first: everything after it is a candidate for going wrong, and
+  // this is what makes the going-wrong legible.
+  openDurableBootLog();
+
+  blog('showBootWindow()');
+  showBootWindow();
+
   // First-run setup (Python deps + Ollama consent) BEFORE the backend launches,
   // so a fresh machine installs what start.bat needs. Run-once via a marker in
   // sage_data; fully defensive so a hiccup never blocks launch.
@@ -749,7 +1056,51 @@ app.whenReady().then(async () => {
   // v2.1.6: ensureBackendAvailable handles the three cases (reuse,
   // orphan-kill, fresh spawn) so we don't blindly spawn start.bat
   // when APP_PORT is already taken. See helper docstring above.
+  blog('calling ensureBackendAvailable()...');
   const ready = await ensureBackendAvailable();
+  blog(`backend healthy=${ready}`);
+
+  // v2.13 LOG HYGIENE. The backend transcript is captured to a temp file so
+  // a failed boot leaves evidence. But that transcript includes anything the
+  // backend prints -- and auth.py prints the raw bearer token on first boot.
+  // Keeping a plaintext credential in %TEMP% indefinitely is not acceptable,
+  // least of all for a HIPAA-facing deployment.
+  //
+  // So: if the backend came up, the diagnostics served no purpose -- replace
+  // them with a one-line note. If it FAILED, keep everything, because that is
+  // exactly when we need it.
+  // v2.13: REDACT, don't discard. The previous version wiped the whole
+  // transcript on a successful boot, which threw away the startup detail we
+  // actually need -- which tiers launched, which models were found. The only
+  // thing that genuinely must not persist is the first-boot bearer token, so
+  // scrub that and keep everything else.
+  if (ready) {
+    try {
+      let txt = fs.readFileSync(BACKEND_LOG, 'utf8');
+      // auth.py prints the token with an 'ora_' prefix; also catch any
+      // Bearer header that might be echoed.
+      const before = txt;
+      txt = txt.replace(/\bora_[A-Za-z0-9_\-]{8,}/g, 'ora_<REDACTED>')
+               .replace(/(Bearer\s+)[A-Za-z0-9._\-]{8,}/gi, '$1<REDACTED>');
+      if (txt !== before) {
+        fs.writeFileSync(BACKEND_LOG, txt);
+        blog('backend log retained (credentials redacted)');
+      } else {
+        blog('backend log retained (nothing to redact)');
+      }
+    } catch (e) { blog('could not redact backend log: ' + e.message); }
+  } else {
+    blog('backend FAILED - backend log retained for diagnosis');
+  }
+  // Copy the backend transcript next to the durable boot log, for the same
+  // reason and with the same redaction already applied above.
+  try {
+    if (_logDir2 && fs.existsSync(BACKEND_LOG)) {
+      fs.copyFileSync(BACKEND_LOG,
+                      path.join(_logDir2, 'VeridianAI-backend.log'));
+      blog('backend log copied beside sage_data');
+    }
+  } catch (e) { blog('could not copy backend log: ' + e.message); }
   if (!ready) {
     const choice = dialog.showMessageBoxSync({
       type: 'warning',
@@ -776,6 +1127,7 @@ app.whenReady().then(async () => {
   } else {
     console.log('[Electron] backend ready, opening window');
   }
+  blog('createWindow()');
   createWindow();
   // Boot finished: from here a window-all-closed really does mean "the user
   // closed the app", so the handler may quit normally again.
@@ -823,9 +1175,25 @@ app.on('window-all-closed', () => {
   // Assistant. Closing it is the normal end of setup, NOT the user closing
   // the app — quitting here is what made a fresh install need two launches.
   // See the _bootingUp comment above app.whenReady.
-  if (_bootingUp) {
-    console.log('[Electron] window-all-closed during boot (setup window) — not quitting');
+  // v2.14.1: the bypass now applies ONLY when no boot window is up.
+  //
+  // The original problem was that during boot the sole window could be
+  // first_run.js's transient Setup Assistant, so its closing looked like the
+  // user quitting. Now a boot window is opened before setup runs and stays up
+  // until the app loads -- so while it is present, the setup window closing
+  // does NOT empty the window list, and 'window-all-closed' during boot can
+  // only mean the user closed the boot window deliberately. Honour that:
+  // refusing would leave a backend running with no window, which is worse
+  // than the bug this guard was written for.
+  //
+  // The bypass is kept for the case where the boot window failed to open, so
+  // a broken boot.html cannot resurrect the two-launch bug.
+  if (_bootingUp && !_bootWindowShown) {
+    console.log('[Electron] window-all-closed during boot, no boot window — not quitting');
     return;
+  }
+  if (_bootingUp) {
+    console.log('[Electron] boot window closed by user — shutting down');
   }
 
   // Security: clear the login cookie on close so reopening requires a fresh

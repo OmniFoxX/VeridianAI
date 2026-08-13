@@ -62,7 +62,14 @@ _FERNET_PREFIX = "gAAAAA"
 # v2.13.1 (2026-07-25): "imperium" added — imperium.py's Toga mirror passes
 # role="imperium" and every mirror write had been failing silently with
 # ValueError since integration (zero imperium entries ever reached the chain).
-VALID_ROLES = ("user", "assistant", "system", "procedure", "imperium")
+# v2.14: "audit" -- an ACTION taken against this install, not a
+# conversation turn. Given its own role rather than buried in a
+# "system" entry's metadata so "show me everything that was DONE, and
+# by whom" is a one-field filter over the chain. Audit controls exist
+# to answer who-did-what; a record you have to grep is a record that
+# does not answer it.
+VALID_ROLES = ("user", "assistant", "system", "procedure", "imperium",
+               "audit")
 
 
 # -----------------------------------------------------------------------------

@@ -21,7 +21,27 @@ from playwright.async_api import (
     Page,
     Playwright,
 )
-from playwright_stealth import Stealth  # pip install playwright-stealth
+# playwright-stealth is a HARD dependency (see backend/requirements.txt and
+# tools/bundle_playwright.ps1), but it is imported defensively because the
+# consequence of getting that wrong is severe and was observed in the field:
+# the MSIX build shipped without it and every browse died at
+# "[BROWSER IMPORT ERROR] No module named 'playwright_stealth'", while the
+# portable build worked because the developer's Python happened to have it.
+#
+# Stealth only masks automation fingerprints. Without it browsing still works;
+# some sites are likelier to challenge us. Losing the whole capability because
+# an evasion helper is absent is the wrong trade -- so degrade, and say so
+# loudly enough that a broken bundle is still noticed.
+try:
+    from playwright_stealth import Stealth
+    _STEALTH_AVAILABLE = True
+except ImportError as _stealth_err:      # pragma: no cover - packaging fault
+    Stealth = None
+    _STEALTH_AVAILABLE = False
+    print("[browser_tool] playwright-stealth is missing (%s). Browsing will "
+          "work, but without automation-fingerprint masking, so some sites "
+          "may present more challenges. This indicates an incomplete build: "
+          "run tools/bundle_playwright.ps1." % _stealth_err, flush=True)
 
 
 def _resolve_profile_dir(ns: Optional[str] = None) -> Path:
@@ -338,7 +358,8 @@ class BrowserTool:
             except Exception:
                 pass
 
-        await Stealth().apply_stealth_async(self.context)
+        if _STEALTH_AVAILABLE:
+            await Stealth().apply_stealth_async(self.context)
 
         # Reuse the page the persistent context opens with instead of spawning
         # a second blank tab.

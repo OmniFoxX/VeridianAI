@@ -72,6 +72,33 @@ EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build",
                 # "modified" no matter how many times you regenerate. genmanifest
                 # and make_release.ps1 must agree on what "the product" is.
                 "Geminisms", "LeoBraves", "SageCrafts", "SAFE",
+                # v2.13: electron/ is NOT hashed. Its .js files are packed into
+                # resources/app.asar at build time and are not present loose in
+                # a packaged install -- so verify() found them "missing" and
+                # reported the whole build as MODIFIED. (That is the tamper
+                # switch that started tripping.) Excluding them is not a loss of
+                # coverage: what actually RUNS is the asar, and electron-builder
+                # embeds an asar integrity hash in the executable which Electron
+                # checks natively. The loose copies are leftover source.
+                "electron",
+                # v2.13 Store build: the BUNDLED CPython runtime (tools/
+                # bundle_python.ps1) is vendored third-party code, not
+                # VeridianAI source. Hashing it took the manifest from 185 to
+                # 3,877 entries -- which also means /api/build/integrity would
+                # re-hash the whole stdlib every time the Build badge is
+                # checked. The bundle's provenance comes from downloading it
+                # over TLS from python.org at build time, not from this
+                # manifest. This manifest answers one question: "has
+                # VeridianAI's own code been tampered with?"
+                "python",
+                # Same reasoning for Playwright's Chromium (tools/
+                # bundle_playwright.ps1): ~150 MB of vendored browser, whose
+                # provenance is the TLS download from Microsoft's CDN at build
+                # time, not this manifest. Chromium ships a handful of .js and
+                # .html files that WOULD otherwise be hashed, adding thousands
+                # of entries and re-hashing a browser every time someone opens
+                # the Build badge.
+                "playwright-browsers",
                 # User-modifiable / runtime data — meant to change, never hashed:
                 "skills", "memory_log", "models", "bundled_models", "prompts"}
 # Never hash these specific files (generated / runtime state / self) — belt &
@@ -81,7 +108,47 @@ EXCLUDE_FILES = {"build_manifest.json", "config.json", "chat_memory.json",
                  # Build tooling: present in the working tree, deliberately absent
                  # from the release. Hashing them makes a matching manifest
                  # impossible (see EXCLUDE_DIRS note above).
-                 "make_release.ps1", "prep_distribution.bat"}
+                 "make_release.ps1", "prep_distribution.bat",
+                 # v2.13.17: the same trap, four more times. Each of these is
+                 # hashed from the working tree but is NOT in electron-builder's
+                 # extraFiles, so verify() finds it absent from the installed
+                 # package and reports the whole build "modified" -- no matter
+                 # how many times genmanifest is re-run, because regenerating
+                 # the manifest cannot conjure the file into the package.
+                 #
+                 #   bundle_python.ps1  - build tooling, and extraFiles
+                 #                        explicitly filters it out (as it does
+                 #                        make_release.ps1, which was already
+                 #                        listed here -- its twin was missed)
+                 #   _bump_version.py   - version tooling, never shipped
+                 #   bump_version.bat   -   "
+                 #   rotate_api_key.*   - not in extraFiles today (see note below)
+                 #
+                 # RULE: excluding from extraFiles and excluding from the
+                 # manifest are two halves of one decision. Doing only the first
+                 # silently arms the tamper switch.
+                 "bundle_python.ps1",
+                 # v2.14: same decision, same pair. bundle_playwright.ps1 is
+                 # build tooling that downloads a 150 MB browser; it has no
+                 # business in a user's install, so it is excluded from
+                 # extraFiles -- and therefore MUST be excluded here too, or
+                 # verify() reports a file the package cannot contain and no
+                 # amount of re-running genmanifest fixes it.
+                 "bundle_playwright.ps1",
+                 "_bump_version.py", "bump_version.bat",
+                 # NOTE: the first-run key banner tells the user to "run
+                 # rotate_api_key.bat in the project folder" -- and the package
+                 # does not contain it. That instruction needs a Store-aware
+                 # replacement (a .bat cannot inherit package identity anyway);
+                 # excluding it here only makes the badge honest, it does not
+                 # make the advice true.
+                 "rotate_api_key.bat", "rotate_api_key.py",
+                 # Electron's own license file. Emitted by electron-builder into
+                 # the package AND left behind in the working tree by a previous
+                 # build, so the two copies need not be byte-identical. Not
+                 # VeridianAI source, which is the only thing this manifest is
+                 # trying to make a statement about.
+                 "LICENSES.chromium.html"}
 
 
 def _data_dir() -> Path:

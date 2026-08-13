@@ -41,6 +41,7 @@ from typing import Any, Optional, Dict, Tuple
 import json
 import os
 import tempfile
+from state_paths import STATE_DIR, CONFIG_FILE, PID_REGISTRY, CHAT_MEMORY_FILE, LOCK_DIR, HASH_CHAIN_LOG  # v2.13 read-only-install support
 
 
 # --- Schema version --------------------------------------------------------
@@ -127,6 +128,14 @@ class PathsSection:
 class InferenceSection:
     backend: str = "ollama"
     default_model: Optional[str] = None
+    # v2.13.17: has the first-boot model pick already happened?
+    #
+    # A ONE-SHOT LATCH, not a fallback. It flips to True the first time a model
+    # is chosen automatically and never flips back, so a user who later clears
+    # the selection on purpose keeps it cleared. "Empty" is a legitimate
+    # setting; only "never configured" is the problem, and those two states are
+    # indistinguishable without this flag.
+    model_bootstrapped: bool = False
     secondary_model: str = ""
     tertiary_model: str = ""
     max_images_per_turn: int = 5
@@ -161,7 +170,21 @@ class InferenceSection:
     runaway_token_limit: int = 100000     # per-turn watchdog abort ceiling
     gen_snapshot_every_tokens: int = 2048  # [GEN SNAPSHOT] cadence; 0/-1 off
     gen_snapshot_content: bool = True     # include content tail (privacy: off)
-    npu_enabled: bool = True
+    # v2.13 (2026-08-07): ships OFF. The NPU tier requires AMD's Lemonade
+    # Server AND a model compiled for XDNA; on the Ryzen AI 5 430 test
+    # machine the tier loads and then never returns a token, so defaulting
+    # it ON meant a first run that silently hangs. Opt in from
+    # Settings -> Hardware. Treat as experimental until proven on real
+    # hardware; Vulkan is the acceleration that actually works today
+    # (10-12 min/response -> 60s-4min on the same laptop).
+    # v2.13: the embed tier (nomic-embed on PORT_LLAMA_EMBED). ON by default --
+    # embedding models are STATELESS: no KV cache, no growth with conversation
+    # length, ~200-300 MB resident and flat. The alternative (spawn on demand)
+    # would put a cold start exactly when CRAIID is already under fatigue
+    # pressure, and add a spawn-failure mode at the worst possible moment.
+    # The knob is here for anyone who disagrees or is tight on RAM.
+    embed_enabled: bool = True
+    npu_enabled: bool = False
     # v2.12.3: context size passed to Lemonade Server at spawn (--ctx-size).
     # Lemonade v10.x auto-updated and defaults to 4096, which Toga's Sage
     # system prompt overflows — the RyzenAI hybrid backend then wedges on
@@ -202,17 +225,52 @@ class PromptsSection:
 @dataclass
 class AiqNudgeSection:
     # AIQNudge HMAC-signed mid-run side-channel (#44).
-    # Off by default for distribution safety; user opts in.
+    #
+    # v2.13.17: the old comment here said "off by default for distribution
+    # safety". That was written when the channel had no security and the app
+    # had far less of it generally -- it described a version that no longer
+    # exists. The nudge is now HMAC-signed, has its own UI control, and is
+    # neither more nor less exposed than the main chat box. It is local; it
+    # sends nothing out. On.
     enabled: bool = True
     watch_pattern: str = "nudge_*.txt"
 
 
 @dataclass
 class SageSection:
+    # v2.13.17 -- SHIPPED DEFAULTS.
+    #
+    # The rule, stated once so it is not re-derived wrongly later:
+    #
+    #   Anything that sends data OUT, or that could write data to disk, is
+    #   opt-in. Everything else is on, because an assistant that does nothing
+    #   until you find six switches is not private, it is just broken.
+    #
+    # The single exception is the hash-chain memory logger, which is always on.
+    # Its whole purpose is remembering; what it records stays local and
+    # encrypted, and the ZDR burn control exists so the user can destroy all of
+    # it in one action.
+    #
+    # sage_mode and agentic_mode ON: neither reaches the network nor writes
+    # user data. They are the assistant behaving like an assistant, and the
+    # tools they orchestrate are individually gated by the two flags below.
     sage_mode: bool = True
     agentic_mode: bool = True
-    web_search_enabled: bool = True
-    code_exec_enabled: bool = True
+    # OUT: reaches the internet (DuckDuckGo, no API key required).
+    web_search_enabled: bool = False
+    # WRITES: executes model-authored code, which can create files.
+    code_exec_enabled: bool = False
+    # --- CRAIID evidence ledger + particulars preservation (v2.13.18) ---
+    # A handoff preserves MEANING and drops SPECIFICS. For conversation that is
+    # right; for a fetched paper or an itinerary it destroys the only part that
+    # mattered, and the model then reconstructs it from memory and is confidently
+    # wrong. See docs/PLAN_craiid_evidence_ledger.md.
+    craiid_evidence_enabled: bool = True
+    craiid_evidence_budget_chars: int = 10000
+    craiid_evidence_per_source_chars: int = 700
+    craiid_evidence_max_sources: int = 12
+    craiid_particulars_enabled: bool = True
+    craiid_turn_chars: int = 900
     # v2.13 Customs: universal tool-call sanitizer (customs_daemon.py).
     # Default OFF until the CRAIID regression suite passes clean.
     customs_enabled: bool = True
@@ -309,11 +367,17 @@ class OracleConfig:
         # tempfile in the SAME directory so os.replace is a same-filesystem
         # rename (atomic on Windows + POSIX). delete=False because we'll
         # rename it; encoding-mode=w-text is fine for JSON.
-        tmp_fd, tmp_path = tempfile.mkstemp(
-            prefix=path.name + ".",
-            suffix=".tmp",
-            dir=str(path.parent),
-        )
+        # v2.13: was tempfile.mkstemp(), which HANGS FOR MINUTES on a
+        # read-only directory. _mkstemp_inner retries up to TMP_MAX (10,000)
+        # times whenever os.access(dir, W_OK) says the directory is writable --
+        # and on Windows os.access only reports the read-only ATTRIBUTE, never
+        # the ACL, so it lies about C:\Program Files\WindowsApps. Same root
+        # cause as the state_paths.is_writable hang; see that file.
+        #
+        # A deterministic name + a single O_EXCL open fails immediately with
+        # PermissionError instead, which the caller can actually handle.
+        tmp_path = str(path) + f".{os.getpid()}.tmp"
+        tmp_fd = os.open(tmp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         try:
             with os.fdopen(tmp_fd, "w", encoding="utf-8") as f:
                 json.dump(data, f, indent=2, sort_keys=False)
@@ -414,6 +478,7 @@ class OracleConfig:
             # inference
             "backend":            self.inference.backend,
             "default_model":      self.inference.default_model,
+            "model_bootstrapped": self.inference.model_bootstrapped,
             "secondary_model":    self.inference.secondary_model,
             "tertiary_model":     self.inference.tertiary_model,
             "max_images_per_turn": self.inference.max_images_per_turn,
@@ -430,6 +495,7 @@ class OracleConfig:
             "vulkan_enabled":     self.inference.vulkan_enabled,
             "openvino_enabled":   self.inference.openvino_enabled,
             "xe_cores_enabled":   self.inference.xe_cores_enabled,
+            "embed_enabled":      self.inference.embed_enabled,
             "npu_enabled":        self.inference.npu_enabled,
             "npu_ctx":            self.inference.npu_ctx,
             "n_gpu_layers":       self.inference.n_gpu_layers,
@@ -543,6 +609,7 @@ class OracleConfig:
         # inference
         cfg.inference.backend          = str(_g("backend", cfg.inference.backend))
         cfg.inference.default_model    = flat.get("default_model") or None
+        cfg.inference.model_bootstrapped = bool(flat.get("model_bootstrapped", False))
         cfg.inference.secondary_model  = str(_g("secondary_model", cfg.inference.secondary_model))
         cfg.inference.tertiary_model   = str(_g("tertiary_model", cfg.inference.tertiary_model))
         cfg.inference.max_images_per_turn = int(_g("max_images_per_turn", cfg.inference.max_images_per_turn))
@@ -567,6 +634,7 @@ class OracleConfig:
         cfg.inference.vulkan_enabled   = bool(_g("vulkan_enabled", cfg.inference.vulkan_enabled))
         cfg.inference.openvino_enabled = bool(_g("openvino_enabled", cfg.inference.openvino_enabled))
         cfg.inference.xe_cores_enabled = bool(_g("xe_cores_enabled", cfg.inference.xe_cores_enabled))
+        cfg.inference.embed_enabled    = bool(_g("embed_enabled", cfg.inference.embed_enabled))
         cfg.inference.npu_enabled      = bool(_g("npu_enabled", cfg.inference.npu_enabled))
         try:
             cfg.inference.npu_ctx = max(
@@ -771,7 +839,7 @@ def get_config(path: Optional[Path] = None, force_reload: bool = False) -> Oracl
         if path is None:
             # Default location: project root / config.json
             backend_dir = Path(__file__).resolve().parent
-            path = backend_dir.parent / "config.json"
+            path = CONFIG_FILE   # v2.13: STATE_DIR, not the (possibly read-only) install dir
         _singleton = OracleConfig.load(path)
         _singleton_path = path
     return _singleton
@@ -781,7 +849,7 @@ def save_config(cfg: OracleConfig, path: Optional[Path] = None) -> None:
     """Save and refresh the singleton in one shot."""
     global _singleton, _singleton_path
     if path is None:
-        path = _singleton_path or (Path(__file__).resolve().parent.parent / "config.json")
+        path = _singleton_path or CONFIG_FILE
     cfg.save(path)
     _singleton = cfg
     _singleton_path = path

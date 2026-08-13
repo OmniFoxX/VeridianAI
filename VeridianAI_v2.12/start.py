@@ -5,11 +5,133 @@ Usage: python start.py [--port 8000] [--host 127.0.0.1] [--no-browser]
 """
 
 import argparse, os, sys, subprocess, threading, time, webbrowser
+
+# ---------------------------------------------------------------------------
+# v2.13 HANG DIAGNOSTIC.
+#
+# A packaged (MSIX) launch reached the banner and then produced NOTHING for
+# four minutes -- no output, no traceback, no exit. That is a HANG, and a hang
+# leaves no evidence: PYTHONFAULTHANDLER only fires on a crash, and -u cannot
+# flush output that was never produced.
+#
+# dump_traceback_later prints a full stack for every thread if the process is
+# still alive after N seconds, then repeats. Whatever import or call is stuck
+# names itself, with file and line. A healthy boot never reaches the first
+# dump, so this costs nothing in normal use.
+#
+# Set VERIDIAN_HANG_DUMP_SEC=0 to disable.
+# ---------------------------------------------------------------------------
+try:
+    import faulthandler
+    _hang_sec = float(os.environ.get("VERIDIAN_HANG_DUMP_SEC", "60") or 0)
+    if _hang_sec > 0:
+        faulthandler.dump_traceback_later(_hang_sec, repeat=True, exit=False)
+except Exception:
+    pass
+
+
+def cancel_hang_dump() -> None:
+    """Disarm the watchdog once the backend is actually serving.
+
+    repeat=True means this fires FOREVER, not once -- the comment above used to
+    claim "a healthy boot never reaches the first dump", which is only true of a
+    non-repeating timer. In practice every 60 seconds it dumped a full stack for
+    every thread, for the life of the process: 43 KB of tracebacks in a routine
+    log, burying the lines someone actually needed to read.
+    #
+    A watchdog that keeps barking after the danger has passed trains you to stop
+    listening to it, which is worse than not having one. It exists to catch a
+    boot that never finishes; once uvicorn is serving, the boot finished.
+    """
+    try:
+        import faulthandler
+        faulthandler.cancel_dump_traceback_later()
+        print("[boot] hang watchdog disarmed - backend is serving", flush=True)
+    except Exception:
+        pass
 from pathlib import Path
 
 BASE_DIR    = Path(__file__).resolve().parent
 BACKEND_DIR = BASE_DIR / "backend"
 REQ_FILE    = BACKEND_DIR / "requirements.txt"
+
+
+# ---------------------------------------------------------------------------
+# v2.13.17 -- OPTIONAL EXTRAS DIRECTORY.
+#
+# Some capabilities are not bundled because they are enormous, not because they
+# are unsupported: speech recognition alone pulls openai-whisper and torch,
+# which is gigabytes. Leaving them out is right. Leaving them UNADDABLE is not.
+#
+# On a Store install there was previously nowhere for them to go. The embeddable
+# interpreter builds sys.path exclusively from python*._pth, every entry of
+# which lives inside the package, and the package is read-only. `pip --user`
+# does not help (embeddable ignores user site) and PYTHONPATH does not help
+# (._pth overrides it). So the honest answer to "can I add voice later?" was no
+# -- for want of one writable directory.
+#
+# This is that directory. It sits in sage_data, which is user-owned and
+# writable in every install shape, and it goes on sys.path FIRST so an extra
+# can also override a bundled package if someone needs a newer one.
+#
+#     pip install --target "<sage_data>\pylibs" openai-whisper sounddevice
+#
+# Then restart. Same shape as Ollama and ComfyUI: the user installs it, into
+# their own space, and VeridianAI detects it. We never download anything, which
+# is also what keeps this inside Store policy -- the app is not fetching code,
+# the user is.
+#
+# CAVEAT worth stating plainly: native wheels must match this interpreter
+# (CPython 3.12, win_amd64). Installing with a mismatched Python produces
+# imports that fail at runtime rather than at install time.
+# ---------------------------------------------------------------------------
+def _extras_dir() -> Path:
+    env = (os.environ.get("VERIDIAN_DATA_DIR") or "").strip()
+    if env:
+        return Path(env) / "pylibs"
+    try:
+        sys.path.insert(0, str(BACKEND_DIR))
+        from state_paths import data_dir  # type: ignore
+        return Path(data_dir()) / "pylibs"
+    except Exception:
+        return BASE_DIR.parent / "sage_data" / "pylibs"
+
+
+def _enable_extras() -> None:
+    try:
+        d = _extras_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        s = str(d)
+        if s not in sys.path:
+            sys.path.insert(0, s)
+        # Announced, not silent: if an extra shadows a bundled package we want
+        # that visible in the log rather than discovered by its symptoms.
+        try:
+            n = sum(1 for _ in d.iterdir())
+        except Exception:
+            n = 0
+        # Always name the interpreter, not just the folder.
+        #
+        # The portable launcher resolves Python through `py`, which selects the
+        # NEWEST installed version. Install a new Python and every package you
+        # pip-installed under the old one silently disappears from the app's
+        # view -- nothing was uninstalled, a different interpreter is simply
+        # looking somewhere else. That failure presents as "the app broke when
+        # I updated it", and without this line there is nothing to contradict
+        # that reading.
+        #
+        # Binary wheels are ABI-specific too, so extras installed for 3.12 will
+        # not import under 3.13+ even from this folder. Printing the version
+        # every boot makes the mismatch a one-line diagnosis.
+        ver = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        print(f"[extras] python {ver} at {sys.executable}", flush=True)
+        if n:
+            print(f"[extras] {n} item(s) on sys.path from {s}", flush=True)
+    except Exception as e:
+        print(f"[extras] optional extras dir unavailable: {e}", flush=True)
+
+
+_enable_extras()
 
 
 # v2.12.17 (2026-07-30): bound the dependency install so a machine with no
@@ -57,13 +179,41 @@ def check_dependencies():
         print(f"[VeridianAI] pip could not run: {e} -- continuing.")
 
 
+def _app_version() -> str:
+    """The version, READ rather than hardcoded.
+
+    This banner said "v2.13" while the app was at 2.14.0, because it was a
+    fourth place the version lived and _bump_version.py did not know about it.
+    A version printed at startup is the one users quote back when reporting a
+    bug, so a stale one costs real time -- and this week a stale version string
+    in a comment sent two people looking for files that were not missing.
+
+    electron/package.json is the single source of truth: _bump_version.py owns
+    it and it becomes the MSIX package version. Reading it means this line can
+    never disagree with the build again.
+    """
+    try:
+        import json
+        here = os.path.dirname(os.path.abspath(__file__))
+        with open(os.path.join(here, "electron", "package.json"),
+                  encoding="utf-8") as fh:
+            v = json.load(fh).get("version", "")
+        return ("v" + v) if v else ""
+    except Exception:
+        # Never fail a launch over a banner. An empty version is honest;
+        # a wrong one is not.
+        return ""
+
+
 def print_banner():
+    ver = _app_version()
+    line = "V E R I D I A N   A I" + (("   " + ver) if ver else "")
     print("""
   +-------------------------------------------+
-  |    V E R I D I A N   A I   v2.13          |
+  |{0}|
   |       Local AI Inference + Sage           |
   +-------------------------------------------+
-""")
+""".format(line.center(43)))
 
 
 def _resolve_default_port() -> int:
@@ -101,7 +251,7 @@ def _resolve_default_host() -> str:
 def main():
     parser = argparse.ArgumentParser(description="Launch VeridianAI")
     # default=None so we can distinguish "user typed --port 8000" from
-    # "user didn't pass --port" — only the latter falls through to config.
+    # "user didn't pass --port" -- only the latter falls through to config.
     parser.add_argument("--port",       type=int, default=None)
     parser.add_argument("--host",       default=None)
     parser.add_argument("--no-browser", action="store_true")
@@ -133,6 +283,10 @@ def main():
     try:
         import uvicorn
         from main import app
+        # Imports are the part that can hang -- that is what the watchdog was
+        # armed for, and reaching this line means it did not. Disarm before
+        # uvicorn.run() blocks, or it barks every 60s for the whole session.
+        cancel_hang_dump()
         uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     except ImportError as e:
         # v2.12.17: this used to block on input("Press Enter to exit..."). With a

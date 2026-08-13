@@ -38,18 +38,28 @@ TAVILY_MIN_DELAY_MS     = 500      # minimum ms between calls
 TAVILY_SESSION_BUDGET   = 60       # configurable session cap
 
 BASE_DIR = Path(__file__).parent.parent
-MEMORY_FILE = BASE_DIR / "chat_memory.json"
-ARCHIVE_FOLDER = BASE_DIR / "archives"
-UPLOAD_FOLDER = BASE_DIR / "uploads"
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+# v2.13: these are WRITTEN to, so they cannot live in the install directory --
+# an MSIX package mounts read-only and the mkdir below raised PermissionError at
+# import time, killing the backend before it bound a port. state_paths keeps
+# them in the project root while it is writable (portable: unchanged) and
+# relocates them to sage_data when it is not.
+from state_paths import (CHAT_MEMORY_FILE as MEMORY_FILE,
+                         ARCHIVES_DIR      as ARCHIVE_FOLDER,
+                         UPLOADS_DIR       as UPLOAD_FOLDER,
+                         DOWNLOADS_DIR)
 from secret_locator import resolve_secret_file as _resolve_secret_file
 # v2.9 hardening: Tavily API key lives in sage_data (out of the project), not a
 # plaintext file in the synced folder. Migrates a legacy in-project file if present.
 TAVILY_KEY_FILE = _resolve_secret_file(
     "tavily_key.txt", BASE_DIR.parent / "sage_data", BASE_DIR, announce=False)
 
+# Never fatal: a directory we cannot create is a degraded feature, not a reason
+# to take the backend down before it can report anything.
 for d in [ARCHIVE_FOLDER, UPLOAD_FOLDER, DOWNLOADS_DIR]:
-    d.mkdir(parents=True, exist_ok=True)
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except Exception as _e:
+        print(f"[sage_engine] WARNING: could not create {d}: {_e}", flush=True)
 
 # --- Dual TaskPrioritiser instances -------------------------------------------
 oracle_p = _OracleP()
@@ -541,7 +551,22 @@ def archive_conversation(history: list, ns=None) -> dict:
         suggested = _suggest_fork_title(history, ns)
         path = _archive_folder(ns) / f"archive_{ts}.json"
         path.write_bytes(atrest.dump_json_encrypted(history))
+        # Snapshot the evidence ledger alongside the archive, BEFORE the
+        # conversation is emptied. Reloading an old research thread should
+        # bring back the sources it was built on -- an archived thread whose
+        # citations can no longer be checked is a thread you cannot trust.
+        try:
+            from craiid import evidence_ledger as _el
+            _el.archive_to(path.name, ns)
+        except Exception:
+            pass
         save_chat_memory([], ns)
+        # The thread is over; its live ledger goes with it.
+        try:
+            from craiid import evidence_ledger as _el
+            _el.clear(ns)
+        except Exception:
+            pass
         return {"success": True, "file": str(path), "filename": path.name,
                 "timestamp": ts, "suggested_title": suggested}
     except Exception as e:
@@ -623,6 +648,14 @@ def load_archive(filename: str, ns=None) -> dict:
     name = _safe_archive_name(filename)
     if not name:
         return {"success": False, "error": "Archive not found"}
+    # Bring back this archive's evidence ledger, if it has one. Older archives
+    # predate the ledger and simply have none -- absence restores nothing and
+    # leaves the current ledger alone rather than clearing it.
+    try:
+        from craiid import evidence_ledger as _el
+        _el.restore_from(name, ns)
+    except Exception:
+        pass
     # Same-node realpath barrier as set_archive_title: `target` is checked and
     # consumed as one dataflow node; the sinks (exists + read) use that exact
     # string, so CodeQL's startswith path sanitizer covers them.

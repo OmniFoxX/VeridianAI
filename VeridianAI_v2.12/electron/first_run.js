@@ -40,6 +40,20 @@ function sageDataDir() {
 // v2.12.17: hard ceiling on the dependency install. Generous enough for a
 // genuine first-run install over a slow connection, short enough that a
 // no-network machine is not held up for long. Belt to pip's --retries braces.
+// v2.13 Store build. Microsoft Store policy requires apps to be self-contained
+// and serviced only through the Store: no winget, no pip, no runtime downloads.
+// The package ships its own Python (tools/bundle_python.ps1), so every install
+// step below is skipped and setup becomes a no-op.
+const IS_STORE_BUILD = process.windowsStore === true;
+
+// Bundled interpreter shipped inside the package, if present.
+function bundledPython() {
+  try {
+    const p = path.join(projectRoot(), 'python', 'python.exe');
+    return fs.existsSync(p) ? p : null;
+  } catch { return null; }
+}
+
 const PIP_TIMEOUT_MS    = 10 * 60 * 1000;
 const WINGET_TIMEOUT_MS = 15 * 60 * 1000;   // installer download + run
 const PULL_TIMEOUT_MS   = 30 * 60 * 1000;   // a 2 GB model on slow wifi
@@ -111,6 +125,11 @@ function tryVersion(cmd) {
   catch { return false; }
 }
 function findPython() {
+  // A bundled interpreter always wins: in a Store package it is the ONLY one we
+  // are allowed to rely on, and in any build it is the one whose dependencies we
+  // actually control.
+  const bundled = bundledPython();
+  if (bundled) { slog('using bundled python: ' + bundled); return bundled; }
   for (const cmd of ['py', 'python', 'python3']) {
     if (tryVersion(cmd)) return cmd;
   }
@@ -430,6 +449,24 @@ function stepDataDirs(win) {
  * fixed (v2.12.17).
  */
 async function ensureSetup() {
+  // ---- Store build: setup is a NO-OP by policy -----------------------------
+  // Everything ensureSetup would otherwise do (winget Python, winget Ollama,
+  // pip install, ollama pull) is a runtime download, which Store policy
+  // forbids. The package already contains what it needs.
+  if (IS_STORE_BUILD) {
+    slog('Store build detected — setup skipped (self-contained package, ' +
+         'no runtime installs permitted)');
+    const py = bundledPython();
+    if (!py) {
+      // Loud, because it means the package was built wrong. It is not something
+      // a user can fix, and it is not something we may fix at runtime.
+      slog('WARNING: Store build has no bundled python at <root>/python/python.exe — ' +
+           'run tools/bundle_python.ps1 before packaging.');
+    }
+    return;
+  }
+
+
   let firstRun = true;
   let needDeps = true;
   let reqChanged = true;

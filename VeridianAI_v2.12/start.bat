@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title VeridianAI v2.13 - Startup
+title VeridianAI v2.14 - Startup
 
 :: ---------------------------------------------------------------
 :: Non-interactive mode for Electron (and future self-update use)
@@ -29,7 +29,7 @@ if /I "%~1"=="--mode" (
 :: --- Interactive path (human double-click) ---------------------
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.13.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.14.0          ^|
 echo  +===============================================+
 echo.
 echo  Select backend for this session:
@@ -51,10 +51,10 @@ if !errorlevel!==2 (
 )
 
 :start_tiers
-title VeridianAI v2.13
+title VeridianAI v2.14
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.13.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.14.0          ^|
 echo  +===============================================+
 echo.
 :: ============================================================================
@@ -102,7 +102,7 @@ set LLAMA_SERVER=%~dp0!LLAMA_BACKEND!
 :: v2.2 fix (2026-05-29): MODELS_DIR is now self-locating. Previously
 :: hardcoded to Todd's E:\sage_data\models, which broke any install on
 :: another drive. %~dp0 resolves to the project directory; ..\sage_data
-:: walks up one level (sage_data lives ALONGSIDE VeridianAI_v2.7, not
+:: walks up one level (sage_data lives ALONGSIDE VeridianAI_v2.14, not
 :: inside it -- see BEFORE_RUNNING.txt). Works on any drive, any path.
 set MODELS_DIR=%~dp0..\sage_data\models
 
@@ -117,19 +117,72 @@ set MODELS_DIR=%~dp0..\sage_data\models
 :: installs behind one arbitrary model and (b) name-dropped a third party
 :: (All Hands / OpenHands is their real project) as if it were required.
 if "%SAGE_MODEL_FILE%"=="" set SAGE_MODEL_FILE=all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf
-set DAEMON_MODEL_FILE=qwen2.5_coder_1.5b_base.gguf
+:: v2.14.1: CANDIDATE LISTS, mirroring store_launch.py exactly.
+::
+:: These were single hardcoded filenames, and both named the model that was
+:: SUPERSEDED when the bundled chat model changed from the base checkpoint to
+:: the instruct one. store_launch.py was updated then; this file was not. The
+:: result: the MSIX found bundled_models\qwen2.5_coder_1.5b_instruct.gguf and
+:: the portable looked for ..._base.gguf, found nothing, skipped the tier, and
+:: therefore had no local model to preselect -- while the same folder, in the
+:: same package, plainly contained a usable model.
+::
+:: Two sources of truth for one fact, one of them updated. A list makes the
+:: next swap survivable: add the new name at the front, the old one still
+:: resolves for anyone who has it.
+:: v2.13: embed tier (nomic-embed). Serves CRAIID's warm-handoff turn
+:: selection AND sage_rag semantic search via backend\embeddings.py.
+set "DAEMON_CANDS=qwen2.5_coder_1.5b_instruct.gguf qwen2.5_coder_1.5b_base.gguf"
+set "EMBED_CANDS=nomic_embed_text_v2_moe.gguf nomic_embed_text_latest.gguf"
+:: An explicit env override is tried FIRST, then the shipped candidates.
+if not "%DAEMON_MODEL_FILE%"=="" set "DAEMON_CANDS=%DAEMON_MODEL_FILE% %DAEMON_CANDS%"
+if not "%EMBED_MODEL_FILE%"==""  set "EMBED_CANDS=%EMBED_MODEL_FILE% %EMBED_CANDS%"
 
 set SAGE_MODEL=%MODELS_DIR%\%SAGE_MODEL_FILE%
-set DAEMON_MODEL=%MODELS_DIR%\%DAEMON_MODEL_FILE%
 
-:: v2.2: bundled_models\ at project root is a fallback for the daemon
-:: model so a fresh distribution install can launch the daemon tier
-:: without the user having to download anything. Toga is not bundled
-:: (model file too large -- ~6 GB); for Toga, MODELS_DIR is the only
-:: lookup location. If the user has not pulled a Toga model yet, the
-:: preflight check below will fail loudly with a clear message --
-:: better than silent partial startup.
-set BUNDLED_DAEMON_MODEL=%~dp0bundled_models\%DAEMON_MODEL_FILE%
+:: Resolve daemon + embed: EVERY candidate in the user's models dir first,
+:: then every candidate in bundled_models -- the same precedence
+:: store_launch.py uses, so a user-supplied model is never overridden by a
+:: bundled second choice.
+::
+:: `if not defined` is evaluated per-iteration at run time, so this needs no
+:: delayed expansion; the first hit wins and later iterations are no-ops.
+set "DAEMON_MODEL="
+set "EMBED_MODEL="
+for %%C in (%DAEMON_CANDS%) do (
+    if not defined DAEMON_MODEL if exist "%MODELS_DIR%\%%C" (
+        set "DAEMON_MODEL=%MODELS_DIR%\%%C"
+        set "DAEMON_MODEL_FILE=%%C"
+    )
+)
+for %%C in (%DAEMON_CANDS%) do (
+    if not defined DAEMON_MODEL if exist "%~dp0bundled_models\%%C" (
+        set "DAEMON_MODEL=%~dp0bundled_models\%%C"
+        set "DAEMON_MODEL_FILE=%%C"
+    )
+)
+for %%C in (%EMBED_CANDS%) do (
+    if not defined EMBED_MODEL if exist "%MODELS_DIR%\%%C" (
+        set "EMBED_MODEL=%MODELS_DIR%\%%C"
+        set "EMBED_MODEL_FILE=%%C"
+    )
+)
+for %%C in (%EMBED_CANDS%) do (
+    if not defined EMBED_MODEL if exist "%~dp0bundled_models\%%C" (
+        set "EMBED_MODEL=%~dp0bundled_models\%%C"
+        set "EMBED_MODEL_FILE=%%C"
+    )
+)
+
+:: v2.2: bundled_models\ at project root is a fallback for the daemon and
+:: embed models, so a fresh distribution install can launch those tiers
+:: without downloading anything. Toga is NOT bundled (~6 GB), so for Toga
+:: MODELS_DIR is the only lookup location and the tier is simply skipped
+:: when it is absent -- a fresh install needs no specific model to start.
+::
+:: v2.14.1: the resolution itself moved up to the candidate-list loops
+:: above. BUNDLED_DAEMON_MODEL used to be built here from a single
+:: filename; it is gone because that single filename was the bug.
 
 :: -- Per-tier context sizes (Phase 1D Step 1) ----------------------------
 :: These control llama-server working memory per tier. Cannot be changed
@@ -145,6 +198,7 @@ set BUNDLED_DAEMON_MODEL=%~dp0bundled_models\%DAEMON_MODEL_FILE%
 ::            mechanical tasks. KV cost ~224 MB on top of 940 MB model.
 set SAGE_CTX_SIZE=256000
 set DAEMON_CTX_SIZE=4096
+set EMBED_CTX_SIZE=2048
 
 :: -- Preflight: curl must exist (Windows 10 1803+ ships with it)
 where curl.exe >nul 2>&1
@@ -168,6 +222,19 @@ if not exist "%LLAMA_SERVER%" (
     set "LLAMA_SERVER="
 )
 
+:: -- Preflight: embed model -- sage_data first, then the bundled copy.
+:: Not fatal: without it, semantic features fall back to lexical (and
+:: backend\embeddings.py logs that once).
+if defined EMBED_MODEL (
+    echo [VeridianAI] Embed model: %EMBED_MODEL_FILE%
+) else (
+    echo [VeridianAI] Embed model not found -- semantic search and CRAIID
+    echo           handoff selection will use lexical matching.
+    echo           Looked for: %EMBED_CANDS%
+    echo           in:         %MODELS_DIR%
+    echo           and:        %~dp0bundled_models
+)
+
 :: -- Preflight: daemon model — try sage_data first, then bundled_models
 :: v2.2: if user doesn't have a daemon model in sage_data, fall back to
 :: the bundled copy under the project. Toga model preflight is deferred
@@ -175,19 +242,17 @@ if not exist "%LLAMA_SERVER%" (
 :: branch below). If neither location has the daemon model, we let the
 :: launcher proceed and the daemon tier will simply skip — daemon is
 :: non-critical (background mechanics).
-if not exist "%DAEMON_MODEL%" (
-    if exist "%BUNDLED_DAEMON_MODEL%" (
-        echo [VeridianAI] Daemon model not in sage_data; using bundled copy.
-        set DAEMON_MODEL=%BUNDLED_DAEMON_MODEL%
-        set DAEMON_MODEL_PRESENT=1
-    ) else (
-        echo [VeridianAI] Daemon model not found in sage_data or bundled_models.
-        echo           Daemon tier will be skipped ^(mechanics background work
-        echo           will be reduced but the rest of VeridianAI is unaffected^).
-        set DAEMON_MODEL_PRESENT=0
-    )
-) else (
+if defined DAEMON_MODEL (
+    echo [VeridianAI] Daemon model: %DAEMON_MODEL_FILE%
     set DAEMON_MODEL_PRESENT=1
+) else (
+    echo [VeridianAI] Daemon model not found in sage_data or bundled_models.
+    echo           Daemon tier will be skipped ^(mechanics background work
+    echo           will be reduced but the rest of VeridianAI is unaffected^).
+    echo           Looked for: %DAEMON_CANDS%
+    echo           in:         %MODELS_DIR%
+    echo           and:        %~dp0bundled_models
+    set DAEMON_MODEL_PRESENT=0
 )
 
 :: ============================================================================
@@ -197,8 +262,76 @@ if not exist "%DAEMON_MODEL%" (
 :: SAGE_CTX_SIZE/DAEMON_CTX_SIZE defaults if Python or the helper fails.
 :: ============================================================================
 set PYTHON_CMD=
-py --version >nul 2>&1
-if !errorlevel!==0 set PYTHON_CMD=py
+:: (Bundled-Python check moved BELOW the explicit pins -- see v2.13.18 note.)
+:: v2.13.18 -- INTERPRETER SELECTION, most explicit first.
+::
+:: Order matters and got this wrong once already. A bundled python\ folder used
+:: to win unconditionally, including over a pin the user had deliberately set,
+:: and including in the PORTABLE build. That is fine for the Store package,
+:: where the bundled interpreter is the only one we are permitted to use -- but
+:: on a portable install it silently moved the app off the system Python the
+:: user had installed their optional packages into. Speech recognition stopped
+:: being found, with no error and no obvious cause, immediately after an
+:: unrelated update. Auto-detection must never outrank an explicit choice.
+::
+:: `py` is the Windows launcher and it selects the NEWEST installed Python, not
+:: the one this install was set up against. Install a new Python for any reason
+:: and every package pip-installed under the old one leaves the app's view at
+:: once -- nothing was uninstalled, a different interpreter is simply looking
+:: somewhere else. Optional extras (speech recognition) stop working, and it
+:: presents as "the app broke", usually days later, with no obvious connection
+:: to the Python install that caused it.
+::
+:: Two ways to pin, checked in order. Both are opt-in; behaviour is unchanged
+:: for anyone who sets neither.
+::
+::   1. VERIDIAN_PYTHON       environment variable -- full path to python.exe
+::   2. python_pin.txt        beside start.bat, one line, same content
+::
+:: A pin that no longer exists is IGNORED with a warning rather than being
+:: obeyed into a failure: a stale pin should degrade to the old behaviour, not
+:: stop the app from starting.
+if "!PYTHON_CMD!"=="" (
+    if defined VERIDIAN_PYTHON (
+        if exist "!VERIDIAN_PYTHON!" (
+            set "PYTHON_CMD=!VERIDIAN_PYTHON!"
+            echo [VeridianAI] Using pinned Python from VERIDIAN_PYTHON
+        ) else (
+            echo [VeridianAI] WARNING: VERIDIAN_PYTHON is set but not found:
+            echo               !VERIDIAN_PYTHON!
+            echo               Ignoring it and detecting Python normally.
+        )
+    )
+)
+if "!PYTHON_CMD!"=="" (
+    if exist "%~dp0python_pin.txt" (
+        set /p _PIN=<"%~dp0python_pin.txt"
+        if exist "!_PIN!" (
+            set "PYTHON_CMD=!_PIN!"
+            echo [VeridianAI] Using pinned Python from python_pin.txt
+        ) else (
+            echo [VeridianAI] WARNING: python_pin.txt points at a missing file:
+            echo               !_PIN!
+            echo               Ignoring it and detecting Python normally.
+        )
+        set "_PIN="
+    )
+)
+:: Bundled interpreter: mandatory for the Store build (an MSIX app may not
+:: install anything at runtime, so this is the only one we may depend on), and
+:: a sensible default for a portable install that has one -- but only after the
+:: user's own explicit pin has had its say.
+:: Built by tools\bundle_python.ps1.
+if "!PYTHON_CMD!"=="" (
+    if exist "%~dp0python\python.exe" (
+        set "PYTHON_CMD=%~dp0python\python.exe"
+        echo [VeridianAI] Using bundled Python
+    )
+)
+if "!PYTHON_CMD!"=="" (
+    py --version >nul 2>&1
+    if !errorlevel!==0 set PYTHON_CMD=py
+)
 if "!PYTHON_CMD!"=="" (
     python --version >nul 2>&1
     if !errorlevel!==0 set PYTHON_CMD=python
@@ -214,6 +347,18 @@ if "!PYTHON_CMD!"=="" (
 )
 echo [VeridianAI] Python: !PYTHON_CMD!
 
+:: Playwright's bundled Chromium, when this tree has one.
+:: Only when it EXISTS -- pointing PLAYWRIGHT_BROWSERS_PATH at an empty or
+:: missing folder does not degrade gracefully. It tells Playwright the browsers
+:: live there, finds none, and then refuses to fall back to the Chrome or Edge
+:: it would otherwise have used. Built by tools\bundle_playwright.ps1.
+if exist "%~dp0playwright-browsers\*" (
+    set "PLAYWRIGHT_BROWSERS_PATH=%~dp0playwright-browsers"
+    echo [VeridianAI] Browser: bundled Chromium
+) else (
+    echo [VeridianAI] Browser: none bundled - will use an installed browser
+)
+
 :: ============================================================================
 :: v2.11.12 zombie-process fix: reap anything a previous session left behind
 :: BEFORE launching tiers. Kills only processes recorded in .oracle_pids.json
@@ -223,7 +368,7 @@ echo [VeridianAI] Python: !PYTHON_CMD!
 :: ============================================================================
 set "OAI_ROOT=%~dp0"
 echo [VeridianAI] Cleaning up any processes left from a previous session ...
-!PYTHON_CMD! "%~dp0backend\shutdown_cleanup.py" --quiet
+"!PYTHON_CMD!" "%~dp0backend\shutdown_cleanup.py" --quiet
 
 :: Read n_ctx + ports + backend from config.json via _tier_config_reader.py.
 :: Output: SAGE_CTX,DAEMON_CTX,APP_PORT,OLLAMA_ORACLE_PORT,LLAMA_SAGE_PORT,LLAMA_DAEMON_PORT,INFERENCE_BACKEND
@@ -231,7 +376,7 @@ echo [VeridianAI] Cleaning up any processes left from a previous session ...
 :: not execute and the tunables-block defaults set above (8000 / 11434 /
 :: 11435 / 11436 and INFERENCE_BACKEND default below) take effect.
 set INFERENCE_BACKEND=ollama
-for /f "tokens=1,2,3,4,5,6,7 delims=," %%a in ('!PYTHON_CMD! "%~dp0backend\_tier_config_reader.py" 2^>nul') do (
+for /f "usebackq tokens=1,2,3,4,5,6,7 delims=," %%a in (`""!PYTHON_CMD!" "%~dp0backend\_tier_config_reader.py"" 2^>nul`) do (
     set "SAGE_CTX_SIZE=%%a"
     set "DAEMON_CTX_SIZE=%%b"
     set "APP_PORT=%%c"
@@ -260,7 +405,7 @@ echo [VeridianAI] Inference backend: !INFERENCE_BACKEND!
 :: v2.2 (2026-05-30) error message: spells out the resolved sage_data
 :: location so the user can see exactly where to put the gguf, and
 :: explains the sibling-not-inside-project layout so they do not
-:: intuitively create sage_data inside VeridianAI_v2.7 (which would
+:: intuitively create sage_data inside VeridianAI_v2.14 (which would
 :: not be found AND would break Trinity separation -- see
 :: BEFORE_RUNNING.txt step 3 for the canonical layout).
 :: v2.11.12e: missing Toga model is NO LONGER FATAL. Mirror the daemon
@@ -301,7 +446,7 @@ if not defined LLAMA_SERVER (
 
 set "OAI_ROOT=%~dp0"
 echo [VeridianAI] Launching tiers + daemons (Developer Mode controls visibility) ...
-!PYTHON_CMD! "%~dp0backend\tier_launcher.py"
+"!PYTHON_CMD!" "%~dp0backend\tier_launcher.py"
 :: Soft delay to let ports begin binding before the readiness probes below.
 :: v2.12.17: was `timeout /t 3 /nobreak`. timeout.exe refuses to run with
 :: redirected stdin -- which is exactly how Electron spawns this script when
@@ -387,11 +532,20 @@ echo.
 :: When Electron is the launcher, also pass --no-browser so Brave
 :: doesn't auto-open on top of the Electron window.
 if !ELECTRON_MODE!==1 (
-    !PYTHON_CMD! start.py --port !APP_PORT! --no-browser
+    "!PYTHON_CMD!" start.py --port !APP_PORT! --no-browser
 ) else (
-    !PYTHON_CMD! start.py --port !APP_PORT!
+    "!PYTHON_CMD!" start.py --port !APP_PORT!
 )
-if !errorlevel! neq 0 ( echo [VeridianAI] Backend exited with error. & pause )
+set "RC=!errorlevel!"
+:: v2.13: `pause` is a NO-OP when stdin is redirected -- which is exactly
+:: how Electron spawns us with Developer Mode off. The old line therefore
+:: swallowed the failure and fell through to `exit /b 0`, so Electron was
+:: told the backend had exited SUCCESSFULLY. Propagate the real code.
+if !RC! neq 0 (
+    echo [VeridianAI] Backend exited with error, code !RC!
+    if !ELECTRON_MODE!==0 pause
+    exit /b !RC!
+)
 exit /b 0
 
 :: ============================================================================

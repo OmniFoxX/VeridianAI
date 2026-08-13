@@ -3,26 +3,30 @@ import math
 import os
 from pathlib import Path
 import requests
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 # Module‑level cache for loaded vector indexes – avoids re‑reading the file on every query.
 _index_cache: dict[str, Dict[str, List[float]]] = {}
 
 def get_embedding(text: str,
-                  ollama_url: str = "http://localhost:11434") -> List[float]:
+                  ollama_url: str = "http://localhost:11434",
+                  task: Optional[str] = None) -> List[float]:
     """Return a list of floats representing the embedding for *text*.
-    If the request fails or the response is malformed, return an empty list."""
-    url = f"{ollama_url.rstrip('/')}/api/embeddings"
+    Returns [] if no backend could serve.
+
+    v2.13: was Ollama-only, so semantic search silently did nothing for anyone
+    who had not installed Ollama AND pulled an embedding model -- which is the
+    whole point the embed tier exists to solve. Now goes through
+    backend/embeddings.py: local embed tier first (ships with the app), Ollama
+    second (for users who prefer it). The ollama_url argument is retained for
+    call compatibility and is no longer authoritative.
+    """
     try:
-        resp = requests.post(url, json={"prompt": text}, timeout=5)
-        resp.raise_for_status()
-        data = resp.json()
-        emb = data.get("embedding")
-        if isinstance(emb, list) and all(isinstance(x, (int, float)) for x in emb):
-            return [float(x) for x in emb]
+        from embeddings import embed_one
+        return embed_one(text, task=task)
     except Exception:
-        pass
-    return []
+        return []
+
 
 def cosine_similarity(vec_a: List[float],
                       vec_b: List[float]) -> float:
@@ -54,6 +58,30 @@ def load_vector_index(index_path: str) -> Dict[str, List[float]]:
             raw = json.load(f)
         if not isinstance(raw, dict):
             return {}
+
+        # v2.13 SOURCE GUARD. Cosine similarity between vectors produced by
+        # DIFFERENT embedding models is meaningless -- the spaces are unrelated,
+        # so the scores are noise that looks like data. Indexes are now tagged
+        # with the engine that built them; an index from another engine is
+        # discarded rather than silently mixed. Untagged (pre-v2.13) indexes are
+        # also discarded: they were built against Ollama and we cannot know
+        # which model, so they are not safely comparable.
+        stored_src = raw.pop("__embed_source__", None)
+        try:
+            # index_tag, not active_source: the source alone cannot tell one
+            # llama-served embedding model from another, and a model swap with
+            # matching dimensions would otherwise reuse the old vectors.
+            from embeddings import index_tag
+            current_src = index_tag()
+        except Exception:
+            current_src = None
+        if current_src and stored_src != current_src:
+            print(f"[sage_rag] vector index was built by {stored_src or 'an untagged/legacy'} "
+                  f"backend, current is {current_src} -- discarding it. "
+                  f"Vectors from different embedding models are not comparable; "
+                  f"the index will rebuild as documents are searched.", flush=True)
+            return {}
+
         cleaned: Dict[str, List[float]] = {}
         for k, v in raw.items():
             if isinstance(v, list) and all(isinstance(x, (int, float)) for x in v):
@@ -75,6 +103,16 @@ def store_vector(index_path: str,
 
         # Update / add entry – ensure vector is stored as floats
         existing[filename] = [float(x) for x in vector]
+
+        # Tag the index with the engine that produced these vectors, so a later
+        # backend change is detected instead of silently poisoning similarity.
+        try:
+            from embeddings import index_tag
+            src = index_tag()
+            if src:
+                existing["__embed_source__"] = src
+        except Exception:
+            pass
 
         # Ensure the target directory exists
         dest_dir = os.path.dirname(os.path.abspath(index_path)) or "."
@@ -147,7 +185,9 @@ def semantic_search(query: str,
     index_dict = _index_cache[index_path]
 
     # Get embedding for the query; abort early on failure.
-    query_vec = get_embedding(query, ollama_url)
+    # The query side of the asymmetric pair -- see embeddings.TASK_QUERY.
+    from embeddings import TASK_QUERY as _TQ
+    query_vec = get_embedding(query, ollama_url, task=_TQ)
     if not query_vec:
         return []   # No usable vector → no results.
 
@@ -170,7 +210,9 @@ def semantic_search(query: str,
                 continue
         except Exception:
             continue
-        vec = get_embedding(text, ollama_url)
+        # The document side of the pair.
+        from embeddings import TASK_DOCUMENT as _TD
+        vec = get_embedding(text, ollama_url, task=_TD)
         if vec:
             index_dict[fname] = vec
             store_vector(index_path, fname, vec)

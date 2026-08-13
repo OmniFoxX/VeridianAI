@@ -122,9 +122,9 @@ function renderGpuCard(brand, info) {
         `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">${g.name}${g.vram_mb ? ` · ${Math.round(g.vram_mb/1024)}GB VRAM` : ''}</div>`
       ).join('');
     }
-    if (info.driver_version) details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Driver: ${info.driver_version}</div>`;
-    if (info.driver_info)    details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Driver: ${info.driver_info}</div>`;
-    if (info.rocm_version)   details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">ROCm: ${info.rocm_version}</div>`;
+    if (info.driver_version) details += `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Driver: ${info.driver_version}</div>`;
+    if (info.driver_info)    details += `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Driver: ${info.driver_info}</div>`;
+    if (info.rocm_version)   details += `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">ROCm: ${info.rocm_version}</div>`;
     if (info.arc_detected)   details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✦ Arc GPU · Xe Cores · AI Accelerated</div>`;
     if (info.openvino)       details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ OpenVINO available</div>`;
     if (info.level_zero)     details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ Level-Zero / oneAPI</div>`;
@@ -154,13 +154,13 @@ function renderNpuCard(info) {
     if (info.name)
       details += `<div style="font-size:12px;color:var(--text-muted);margin-top:3px">${info.name}</div>`;
     if (info.driver_version)
-      details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Driver: ${info.driver_version}</div>`;
+      details += `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Driver: ${info.driver_version}</div>`;
     if (info.xdna)
       details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✦ Ryzen AI · XDNA · AI Accelerated</div>`;
     if (info.lemonade)
       details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ Lemonade Server (NPU LLM runtime)</div>`;
     else if (info.xdna)
-      details += `<div style="font-size:11px;color:var(--text-faint);margin-top:2px">Runtime missing — install AMD Lemonade Server to run models on the NPU</div>`;
+      details += `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">Runtime missing — install AMD Lemonade Server to run models on the NPU</div>`;
     if (info.vitis_ai)
       details += `<div style="font-size:11px;color:var(--teal);margin-top:2px">✓ VitisAI (ONNX Runtime EP)</div>`;
   }

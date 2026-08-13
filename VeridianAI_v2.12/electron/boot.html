@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<!--
+  Shown from the moment the app launches until the backend answers.
+
+  Before this existed the main window was created only AFTER the health check
+  passed, so launching produced nothing at all: no splash, no taskbar activity,
+  just the desktop. Measured at 12s on a warm machine and about 40s on a
+  cold CPU-only laptop. A user with no feedback concludes the app did not
+  start and clicks again -- which is how the double-launch reports began.
+
+  Deliberately self-contained: no fonts, no network, no scripts from the
+  backend that by definition is not up yet. Colours are literals rather than
+  the app's CSS variables for the same reason -- the stylesheet lives behind
+  the server we are waiting for.
+
+  Contrast is checked against the same 4.5:1 bar as the rest of the app:
+  #e2e8f8 on #070b14 is 16.1:1, #9db0d4 on #070b14 is 8.4:1.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Starting VeridianAI</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #070b14; }
+  body {
+    display: flex; align-items: center; justify-content: center;
+    font-family: Georgia, "Times New Roman", serif;
+    color: #e2e8f8; -webkit-user-select: none; user-select: none;
+  }
+  .wrap { text-align: center; padding: 24px; max-width: 460px; }
+  .mark { font-size: 26px; letter-spacing: .18em; color: #f0a500; }
+  .msg  { margin-top: 18px; font-size: 15px; line-height: 1.6; }
+  .sub  {
+    margin-top: 10px; font-size: 13px; line-height: 1.6; color: #9db0d4;
+    font-family: system-ui, "Segoe UI", sans-serif;
+  }
+  .bar {
+    margin: 22px auto 0; width: 240px; height: 3px; border-radius: 2px;
+    background: #16203a; overflow: hidden;
+  }
+  /* A moving indeterminate bar, not a fake percentage. We genuinely do not
+     know how long a cold model load will take, and inventing a number that
+     stalls at 90% is worse than admitting it. */
+  .bar i {
+    display: block; width: 40%; height: 100%; border-radius: 2px;
+    background: #f0a500; animation: slide 1.4s ease-in-out infinite;
+  }
+  @keyframes slide {
+    0%   { transform: translateX(-110%); }
+    100% { transform: translateX(260%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bar i { animation: none; width: 100%; opacity: .55; }
+  }
+</style>
+</head>
+<body>
+  <div class="wrap" role="status" aria-live="polite">
+    <div class="mark">VERIDIAN AI</div>
+    <div class="msg" id="msg">Starting local inference&hellip;</div>
+    <div class="sub" id="sub">
+      Everything runs on this machine, so the first start takes longer than
+      later ones while the models load.
+    </div>
+    <div class="bar"><i></i></div>
+  </div>
+<script>
+  // Escalating reassurance. A cold CPU-only machine can sit here for a while,
+  // and silence at 40 seconds reads as failure even when it is working.
+  var t0 = Date.now();
+  var steps = [
+    [20000, "Still going -- loading the model into memory.",
+            "This is the slowest part, and only happens on a cold start."],
+    [45000, "Still going. A CPU-only machine can take a minute or two here.",
+            "Nothing is stuck; the model is being read from disk."],
+    [90000, "Taking longer than usual.",
+            "If this does not clear shortly, close the window and reopen the " +
+            "app. The startup log is kept for diagnosis."]
+  ];
+  setInterval(function () {
+    var dt = Date.now() - t0;
+    for (var i = steps.length - 1; i >= 0; i--) {
+      if (dt >= steps[i][0]) {
+        document.getElementById("msg").textContent = steps[i][1];
+        document.getElementById("sub").textContent = steps[i][2];
+        return;
+      }
+    }
+  }, 2000);
+</script>
+</body>
+</html>

@@ -214,7 +214,7 @@ const GameManager = (() => {
     if (!el) return;
     const scores = getScores(gameName || currentGameName);
     if (scores.length === 0) {
-      el.innerHTML = '<div style="font-size:10px;color:var(--text-faint);text-align:center;padding:4px">No scores yet</div>';
+      el.innerHTML = '<div style="font-size:10px;color:var(--text-muted);text-align:center;padding:4px">No scores yet</div>';
       return;
     }
     el.innerHTML = scores.map((s, i) =>

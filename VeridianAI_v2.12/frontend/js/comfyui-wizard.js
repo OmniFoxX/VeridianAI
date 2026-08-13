@@ -181,7 +181,7 @@ const ComfyUIWizard = (() => {
                for="wiz-install-dir"
                data-tip="Where to install ComfyUI. Leave blank for the default location.">
           Install location
-          <span style="color:var(--text-faint);font-size:0.8em">
+          <span style="color:var(--text-muted);font-size:0.8em">
             (blank = default)
           </span>
         </label>

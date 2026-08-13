@@ -1,3 +1,71 @@
+# Release checklist — order matters
+
+Written down because the order is not guessable and gets re-derived every time.
+
+## Both trees, every release
+
+```
+1.  edit code
+2.  bump_version.bat                     (in EACH tree - they bump separately)
+3.  python backend\build_integrity.py genmanifest
+4.  package:
+      portable  -> zip the tree / tools\make_release.ps1
+      store     -> npm run build-store    (runs verify_store_build.js first)
+5.  python backend\build_integrity.py verify      -> expect "official"
+```
+
+**Step 3 must come before step 4.** `build_manifest.json` is listed in
+`extraFiles`, so electron-builder copies whatever exists at build time. Generate
+the manifest afterwards and the package ships the previous one, and the app
+reports itself `modified` on a build where nothing is actually wrong.
+
+**Step 3 must run once per tree, from that tree's own copy of the script.**
+`build_integrity.py` derives the project root from its own location, so running
+the Store tree's copy manifests the Store tree only.
+
+## The three commands
+
+| Command | When |
+|---|---|
+| `genmanifest` | after **every** change to a hashed file, before packaging |
+| `verify` | after installing, to confirm `official` |
+| `selftest` | only when changing `build_integrity.py` itself |
+
+### Never run `keygen` again
+
+It was run once (2026-07-05). The private key lives at
+`sage_data/.oai_signing_key.pem` — outside the project, like the Fernet key —
+and `backend/build_pubkey.pem` ships with the app so it can check its own
+signature.
+
+Re-running `keygen` rotates that key. Every previously released build then
+verifies against the wrong public key and reports **`foreign_key`** — which is
+the status meaning "signed by someone who is not the publisher". There is no way
+to un-rotate it. It is guarded against overwriting without `--force`; do not
+supply `--force`.
+
+**Back up the private key.** Lose it and you cannot sign another release under
+the same identity. It belongs with the Fernet key and the memory chain in the
+same backup set.
+
+## Which files are hashed
+
+`.py .js .html .css .bat .ps1 .vbs .webmanifest`, minus `EXCLUDE_DIRS` and
+`EXCLUDE_FILES` in `build_integrity.py`.
+
+Not hashed, so they never require a re-manifest: `.md`, `.txt`, `.json`,
+`.gguf`, models, and everything under `electron/` (its JavaScript is packed into
+`app.asar` at build time and is not present loose in an installed package —
+hashing it made every build read as `modified`).
+
+**The rule that keeps tripping this:** excluding a file from `extraFiles` and
+excluding it from the manifest are two halves of one decision. A file that is
+hashed but not shipped is reported missing, and no amount of re-running
+`genmanifest` will fix it — the manifest is describing a file the package
+cannot contain.
+
+---
+
 # Build supply-chain posture (npm)
 
 Written 2026-08-04, the day the "Shai-Hulud" / `keyv` worm compromised ~434 npm

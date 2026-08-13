@@ -269,15 +269,51 @@ class Journalist:
             return 0.0
         return len(a & b) / len(a | b)
 
+    # v2.13.18: per-turn budget, raised AND made particular-aware.
+    #
+    # 280 characters is a fine budget for "user asked about X, assistant
+    # answered Y" -- the gist is the content and it compresses honestly. It is
+    # the wrong budget for a turn whose value IS its specifics: a week-long
+    # itinerary keeps the trip and loses the addresses, phone numbers and
+    # times; a quoted figure keeps the claim and loses the number.
+    #
+    # Raising the number alone would not fix that. It would keep whichever
+    # characters happened to come FIRST, which for an itinerary is the preamble
+    # and for a document is the abstract -- in both cases the part that could be
+    # reconstructed. What cannot be reconstructed sits further in.
+    #
+    # So: truncate the PROSE to budget, then re-append any particulars that
+    # fell outside the window, verbatim. The narrative shortens; the phone
+    # number survives.
+    TURN_CHARS = 900
+
     @staticmethod
     def _render(turns: List[Dict], theme: List[str]) -> str:
+        try:
+            from craiid import particulars as _pt
+        except Exception:
+            try:
+                import particulars as _pt      # type: ignore
+            except Exception:
+                _pt = None
+        try:
+            budget = int(os.environ.get("CRAIID_TURN_CHARS",
+                                        Journalist.TURN_CHARS))
+        except Exception:
+            budget = Journalist.TURN_CHARS
+
         lines = []
         if theme:
             lines.append("Theme: " + ", ".join(theme[:8]))
         for t in turns:
-            c = " ".join(str(t.get("content", "")).split())
-            if len(c) > 280:
-                c = c[:280] + "..."
+            raw = str(t.get("content", ""))
+            if _pt is not None:
+                c = _pt.preserve(raw, budget)
+            else:
+                # Extractor unavailable -> previous behaviour, not a crash.
+                c = " ".join(raw.split())
+                if len(c) > budget:
+                    c = c[:budget] + "..."
             lines.append(f"- {t.get('role', '?')}: {c}")
         return "\n".join(lines)
 
@@ -377,31 +413,29 @@ class Journalist:
 
     # ---- nomic embed tier client (defensive) ----
     def _embed(self, texts):
-        """Embed via the nomic embed tier (llama-server, OpenAI-compatible).
-        Returns a list of vectors, or None on ANY failure (tier down, timeout,
-        bad response) so the summarizer falls back to lexical scoring."""
+        """Embed via backend/embeddings.py, which tries the local embed tier
+        first and Ollama second. Returns a list of vectors, or None on ANY
+        failure so the summarizer falls back to lexical scoring.
+
+        v2.13: was a private llama-server client bolted on here. It only ever
+        spoke to PORT_LLAMA_EMBED, and nothing could launch a server there, so
+        this returned None every time and the caller quietly used lexical
+        matching -- for months, without a word in any log. The shared front
+        door speaks both dialects and warns once when neither answers.
+        """
         if not texts:
             return None
         try:
-            import json as _json
-            import os as _os
-            import urllib.request
-            from net_guard import safe_urlopen
-            try:
-                from config import LLAMA_EMBED_URL as _url
-            except Exception:
-                _url = _os.environ.get("LLAMA_EMBED_URL", "http://127.0.0.1:11437")
-            body = _json.dumps({"input": list(texts), "model": "nomic-embed-text"}).encode("utf-8")
-            req = urllib.request.Request(
-                _url.rstrip("/") + "/v1/embeddings", data=body,
-                headers={"Content-Type": "application/json"},
-            )
-            with safe_urlopen(req, timeout=6) as resp:
-                data = _json.loads(resp.read().decode("utf-8"))
-            vecs = [d.get("embedding") for d in data.get("data", [])]
-            if vecs and len(vecs) == len(texts) and all(isinstance(v, list) and v for v in vecs):
-                return vecs
-            return None
+            import sys as _sys
+            from pathlib import Path as _Path
+            _bk = str(_Path(__file__).resolve().parent.parent)
+            if _bk not in _sys.path:
+                _sys.path.insert(0, _bk)
+            # Conversation turns are compared to EACH OTHER for centrality,
+            # not matched against a query -- so they are a clustering task, not
+            # the document half of a document/query pair.
+            from embeddings import embed as _embed_fn, TASK_CLUSTERING
+            return _embed_fn(list(texts), task=TASK_CLUSTERING)
         except Exception:
             return None
 

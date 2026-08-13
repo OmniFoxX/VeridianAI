@@ -439,7 +439,7 @@
               class="setting-label"
               data-tip="How many model layers to offload to the GPU. -1 = all (fastest if they fit in VRAM); lower keeps more on the CPU to save VRAM."
               >GPU Layers
-              <span style="color: var(--text-faint)">(-1 = all)</span></label
+              <span style="color: var(--text-muted)">(-1 = all)</span></label
             >
             <input
               aria-label="GPU Layers (-1 = all)"
@@ -1365,6 +1365,29 @@
                 † et tu, Brute? - Kill Switch -
               </button>
             </div>
+            <!-- Your data. Deliberately a sibling of the Kill Switch and in
+                 the same panel as Burn: find it, keep it, or destroy it, all
+                 in one place. Under MSIX the install folder is unreachable and
+                 the data is NOT there anyway -- it is in sage_data, at a
+                 redirected path no user would guess. -->
+            <div class="setting-group">
+              <label class="setting-label">Your data</label>
+              <div class="voice-extras">
+                <span id="data-folder-path" class="voice-extras-note"
+                  >Archives, uploads, downloads, snapshots and the
+                  documentation are stored on this computer.</span
+                >
+                <button
+                  type="button"
+                  class="voice-extras-btn"
+                  id="open-data-folder-btn"
+                  onclick="openDataFolder()"
+                  data-tip="Open the folder where VeridianAI keeps your data"
+                >
+                  Open Data Folder
+                </button>
+              </div>
+            </div>
             <div class="setting-group">
               <label class="setting-label"
                 >Voice —
@@ -1379,17 +1402,25 @@
                   Refresh
                 </button></label
               >
-              <div
-                id="voice-setup-hint"
-                style="
-                  font-size: 0.8em;
-                  opacity: 0.9;
-                  margin: 2px 0;
-                  display: none;
-                  white-space: pre-wrap;
-                  user-select: all;
-                "
-              ></div>
+              <!-- Voice extras. One line and one button; everything else
+                   (what gets installed, where it lands, how to remove it) is
+                   in the README. A settings panel is not documentation, and a
+                   wall of pip syntax there was long enough to give the tab a
+                   horizontal scrollbar. -->
+              <div id="voice-setup-hint" class="voice-extras" style="display: none">
+                <span id="voice-extras-note" class="voice-extras-note"
+                  >Voice service requires external files and is opt-in.</span
+                >
+                <button
+                  type="button"
+                  class="voice-extras-btn"
+                  id="voice-install-btn"
+                  onclick="voiceInstallExtras()"
+                  data-tip="Downloads the speech-recognition packages into your VeridianAI data folder"
+                >
+                  Download Voice Services
+                </button>
+              </div>
               <label
                 class="hw-toggle"
                 style="
@@ -1450,18 +1481,12 @@
                   class="hw-toggle-label"
                   id="voice-wake-label"
                   data-tip="Hands-free: always listen for the wake word, then take the next sentence as a command."
-                  >Wake word (always listening) — opt-in</span
+                  >Wake word (always listening)</span
                 >
               </label>
-              <div
-                id="voice-wake-note"
-                style="font-size: 0.8em; opacity: 0.85; margin-top: 2px"
-              >
-                🔒 Offline &amp; private: audio is transcribed on this machine
-                and immediately discarded — nothing is recorded or uploaded.
-                Recognized text enters only your normal (encrypted) chat.
-                Always-listening keeps your microphone open until you switch it
-                back off.
+              <div id="voice-wake-note" class="voice-extras-note">
+                Offline: audio is transcribed on this machine and discarded.
+                Keeps your microphone open until switched off.
               </div>
             </div>
           </div>
@@ -1471,6 +1496,23 @@
           <button class="action-btn secondary" onclick="reloadModels()">
             ↻  Refresh Models
           </button>
+          <!-- Deliberately here, and deliberately not near anything one-click.
+               Rotation is irreversible and invalidates every existing
+               integration; reaching it should take a decision, not a stray
+               tap. Same reasoning that moved Export away from Burn. -->
+          <button
+            class="action-btn secondary"
+            id="rotate-key-btn"
+            onclick="rotateApiKey()"
+            data-tip="Issue a new API key and revoke the current one"
+          >
+            &#128273;&nbsp;Rotate API Key
+          </button>
+          <div id="rotate-key-note" class="voice-extras-note" style="margin-top: 4px">
+            The API key lets external tools (Continue.dev, Claude Desktop, curl)
+            reach this machine. Rotating issues a new one and immediately
+            invalidates the old.
+          </div>
         </div>
         <!-- Plugins panel -->
         <div
@@ -1512,6 +1554,14 @@
             data-tip="Print chat"
           >
             🖨️ Print
+          </button>
+          <button
+            class="toolbar-btn"
+            id="export-toolbar-btn"
+            onclick="openExportPanel()"
+            data-tip="Export your data - readable or portable"
+          >
+            📤 Export
           </button>
           <button
             class="toolbar-btn"
@@ -1947,6 +1997,12 @@
     <script src="/static/js/app.js?v=2.9.10"></script>
     <script src="/static/js/auth.js?v=2.11.15"></script>
     <script src="/static/js/skills.js?v=2.11.15"></script>
+    <script src="/static/js/optional-engines.js?v=2.13.16"></script>
+    <script src="/static/js/boot-status.js?v=2.14.0"></script>
+    <script src="/static/js/data-folder.js?v=2.14.0"></script>
+    <script src="/static/js/modal-a11y.js?v=2.14.0"></script>
+    <script src="/static/js/data-export.js?v=2.14.0"></script>
+    <script src="/static/js/api-key.js?v=2.14.0"></script>
     <!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
      during the WCAG-pass edit. Without this line, the IIFE in
      command-palette.js never runs, the Ctrl+Shift+Space keydown listener

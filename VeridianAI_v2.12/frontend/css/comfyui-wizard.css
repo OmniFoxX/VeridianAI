@@ -57,7 +57,7 @@
 .wizard-close {
   background: none;
   border: none;
-  color: var(--text-faint, #888);
+  color: var(--text-muted, #888);
   font-size: 1.2rem;
   cursor: pointer;
   padding: 4px 8px;
@@ -178,7 +178,7 @@
 .wizard-status {
   font-family: 'JetBrains Mono', monospace;
   font-size: 0.78rem;
-  color: var(--text-faint, #888);
+  color: var(--text-muted, #888);
   background: var(--bg-input, #111);
   border: 1px solid var(--border, #333);
   border-radius: 4px;
@@ -255,7 +255,7 @@
   background: none;
   border: 1px solid var(--border, #333);
   border-radius: 4px;
-  color: var(--text-faint, #aaa);
+  color: var(--text-muted, #aaa);
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.9rem;
   padding: 8px 16px;
@@ -336,7 +336,7 @@
 }
 
 .wizard-model-meta {
-  color: var(--text-faint, #888);
+  color: var(--text-muted, #888);
   font-size: 0.8rem;
   font-family: 'JetBrains Mono', monospace;
 }
@@ -359,7 +359,7 @@
   background: none;
   border: 1px solid var(--border, #333);
   border-radius: 4px;
-  color: var(--text-faint, #888);
+  color: var(--text-muted, #888);
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.82rem;
   padding: 6px 12px;
@@ -388,7 +388,7 @@
 .wizard-gpu-line {
   font-family: 'Rajdhani', sans-serif;
   font-size: 0.82rem;
-  color: var(--text-faint, #888);
+  color: var(--text-muted, #888);
   background: var(--bg-input, #111);
   border: 1px solid var(--border, #333);
   border-radius: 6px;

@@ -85,7 +85,11 @@
 
   --text: #e2e8f8;
   --text-muted: #7890b8;
-  --text-faint: #3a506a;
+  /* DEPRECATED -- do not use for new work. Measured 2.13-2.39:1 on every
+     dark surface and never met AA. Aliased to --text-muted so any theme or
+     future reference inherits a passing colour instead of a failing one.
+     Informational text of any size belongs on --text-muted. */
+  --text-faint: #7890b8;
 
   --gold: #f0a500;
   --gold-dim: #b07800;
@@ -125,8 +129,16 @@
 /* Light theme — warm parchment, WCAG AA, easy on the eyes
    Contrast ratios (against --bg #d8d0c4):
      --text       #2c2418  ~12:1  AAA
-     --text-muted #5a4d3e  ~5.6:1 AA
-     --text-faint #857562  ~3.5:1 AA-large
+     --text-muted #30281e  >=4.72:1 AA on all five surfaces
+     --text-faint          DEPRECATED, now an alias of --text-muted.
+       It was 1.45-1.85:1 here and 2.13-2.39:1 on dark, and every one of its
+       32 usages turned out to be informational -- navigation labels, status
+       messages, button labels, a disclaimer, driver diagnostics, and the
+       toggle knob that indicates a control's state. Nothing needed the
+       exemption, so nothing kept it.
+     Ratios are against the FLATTENED surface, not --bg alone: the --surface
+     tokens are rgba(), so a colour that passes on --bg can still fail on
+     --surface-3. That gap is why this went unnoticed for months.
      --gold       #8a5500  ~5.1:1 AA
      --teal       #14665f  ~5.0:1 AA                           */
 [data-theme="light"] {
@@ -142,27 +154,40 @@
   --text: #1e180e;
   /* v2.12.7 WCAG 2.2 AA: darkened so muted text clears 4.5:1 on both --bg
      (4.64:1) and --surface (4.99:1) in the parchment theme. */
-  --text-muted: #403528;
-  --text-faint: #857562;
+  --text-muted: #30281e;  /* WCAG 2.2 AA: was #403528, which passed on --bg/--surface but not on --surface-2 (4.40) or --surface-3 (3.88) -- those pairings were never in the audit matrix. Now >=4.5 on all five. */
+  /* DEPRECATED -- see the note in :root. Was 1.45-1.85:1 here. */
+  --text-faint: #30281e;
 
   /* v2.12.7 WCAG: --gold does double duty (accent TEXT + button background).
      On parchment it must be dark enough to read as text on the light surface,
      so it clears 4.5:1 on --bg (4.58:1) and --surface (4.92:1). The few gold
      BUTTONS flip to cream ink in the light-theme overrides below so they still
      pass. (Dark theme keeps bright gold — see :root.) */
-  --gold: #523000;
+  /* v2.14 WCAG 1.4.3: #523000 was tuned against --bg (4.58) and --surface
+     (4.92) and stopped there; it reached only 4.32 on --surface-2 and 3.84 on
+     --surface-3. This is the same ladder gap twice -- the fix that blessed it
+     looked at two surfaces out of five. Gold BUTTONS keep cream ink, which
+     only improves as the background darkens. */
+  --gold: #422600;
   --gold-dim: #5e3600;
   --gold-glow: rgba(138, 85, 0, 0.12);
   --gold-glow2: rgba(138, 85, 0, 0.05);
 
-  --teal: #0f5850;
+  /* v2.14 WCAG 1.4.3: #0c4942 cleared the 3:1 BORDER threshold but --teal is
+     also used as TEXT (4 declarations), where it needs 4.5:1 and reached only
+     3.34 on --surface-3. Darkened again; still the focus-ring colour, now with
+     margin on both thresholds. (Earlier note: was #0f5850, 2.70:1, failing
+     1.4.11 for the users who depend on the focus ring most.) */
+  --teal: #08322e;
   --teal-dim: #0a4a44;
   --teal-glow: rgba(20, 102, 95, 0.1);
 
   /* v2.12.7 WCAG: 5.02:1 on --surface, 4.67:1 on --bg */
-  --error: #6e1010;
-  --success: #1e5c36;
-  --warning: #a07018;
+  --error: #550c0c;  /* WCAG 2.2 AA: was #6e1010, which cleared --bg/--surface but not --surface-2 (4.43) or --surface-3 (3.91). Now carries real error text (.status-text.is-error), so it has to be readable on every surface. */
+  /* v2.14 WCAG 1.4.3: was #1e5c36 at 2.59:1 on --surface-3. */
+  --success: #11331e;
+  /* v2.14 WCAG 1.4.3: was #a07018 at 1.42:1 on --surface-3. */
+  --warning: #3b2909;
 }
 
 [data-theme="light"] body::before {
@@ -213,6 +238,26 @@
 [data-theme="light"] .message-bubble code {
   background: rgba(138, 132, 123, 0.7);
   color: #14665f;
+}
+
+/* v2.14 WCAG 1.4.3 -- status chips get OPAQUE backgrounds on parchment.
+   These were 10-12% tints, too weak to control anything: the text inside was
+   still effectively sitting on --surface-3 and inherited its failures
+   (--success 2.59:1, --warning 1.42:1). An opaque chip has ONE fixed
+   background, so the ratio cannot drift as the panel behind it darkens --
+   which is why these land at 8.8-10.2:1 rather than scraping 4.5:1.
+   The dark theme keeps its tints; they were never the problem. */
+[data-theme="light"] .socials-warn {
+  background: #f7e3b0;
+  border-color: #8a6414;
+}
+[data-theme="light"] .hw-badge.available {
+  background: #cfe6d4;
+  border-color: #2f6b3d;
+}
+[data-theme="light"] .hw-badge.unavailable {
+  background: #dcd8d2;
+  border-color: #7a7166;
 }
 
 [data-theme="light"] .message-bubble pre {
@@ -625,7 +670,7 @@ body::after {
   padding: 10px 4px;
   background: transparent;
   border: none;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-family: var(--font-body);
   font-size: 11px;
   font-weight: 600;
@@ -722,7 +767,7 @@ body::after {
 }
 .hw-badge.unavailable {
   background: rgba(100, 120, 160, 0.1);
-  color: var(--text-faint);
+  color: var(--text-muted);
   border: 1px solid var(--border);
 }
 
@@ -780,7 +825,11 @@ body::after {
   left: 3px;
   width: 13px;
   height: 13px;
-  background: var(--text-faint);
+  /* The knob IS the state indicator (WCAG 1.4.11), not decoration.
+     On --text-faint the OFF state was 2.13:1 dark / 1.45:1 parchment
+     against its own track -- visually an empty track, not an off one.
+     --text-muted gives 5.44:1 / 4.72:1. ON was already fine (--gold). */
+  background: var(--text-muted);
   border-radius: 50%;
   transition:
     transform var(--t) var(--ease),
@@ -964,7 +1013,7 @@ body::after {
 }
 .plugin-meta {
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
@@ -1003,7 +1052,7 @@ body::after {
   font-family: var(--font-display);
   font-size: 15px;
   letter-spacing: 0.2em;
-  color: var(--text-faint);
+  color: var(--text-muted);
   text-shadow: 0 0 20px rgba(240, 165, 0, 0.15);
 }
 
@@ -1045,10 +1094,12 @@ body::after {
 }
 
 .message.user .message-role {
-  color: var(--teal-dim);
+  color: var(--teal);  /* was --teal-dim: 3.29:1 parchment, 3.22:1 dark --
+     its only text usage, so the usage moved rather than the token */
 }
 .message.assistant .message-role {
-  color: var(--gold-dim);
+  color: var(--gold);  /* was --gold-dim: 3.41:1 on parchment --surface-3 --
+     its only text usage, so the usage moved rather than the token */
 }
 
 .message-bubble {
@@ -1505,8 +1556,10 @@ pre:hover .copy-btn {
   text-align: center;
   font-size: 11px;
   line-height: 1.4;
-  color: var(--text-faint);
-  opacity: 0.85;
+  color: var(--text-muted);
+  /* opacity REMOVED: it multiplies into the composited text colour, which
+     took --text-muted from 4.72:1 down to 3.76:1 on parchment --surface-3.
+     A disclaimer that must be read cannot be faded. */
   padding: 0 10px;
 }
 
@@ -1555,7 +1608,7 @@ pre:hover .copy-btn {
 }
 
 .user-input::placeholder {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .user-input:focus {
@@ -1625,14 +1678,74 @@ pre:hover .copy-btn {
   padding: 0 2px;
 }
 
+/* The app's primary error channel -- NOT decoration.
+ *
+ * This was 11px italic in --text-faint, which composites to ~1.7:1 on the
+ * parchment surfaces. A backend failure detail was being written here and was
+ * unreadable, so a wake-word toggle that failed with a perfectly good 503
+ * message looked like a checkbox silently undoing itself. The user reasonably
+ * concluded the button was broken; the button was fine and the message was
+ * invisible.
+ *
+ * --text-muted is the readable floor (>=4.7:1 on every surface in both themes
+ * after the v2.13.17 parchment fix). Anything carrying diagnostic text has to
+ * clear that bar, whatever else it does.
+ */
+/* Voice extras row. --text-muted and --teal both clear 4.5:1 on every surface
+   in both themes after the v2.13.17 parchment corrections; 24px minimum target
+   per WCAG 2.2 AA 2.5.8. */
+.voice-extras {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 4px 0;
+}
+.voice-extras-note {
+  font-size: 0.85em;
+  color: var(--text-muted);
+}
+.voice-extras-btn {
+  min-height: 28px;
+  min-width: 24px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--teal);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 0.88rem;
+  transition: background var(--t);
+}
+.voice-extras-btn:hover:not(:disabled) {
+  background: var(--surface);
+}
+.voice-extras-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+.voice-extras-btn:disabled {
+  opacity: 1;
+  cursor: default;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
 .status-text {
-  font-size: 11px;
-  color: var(--text-faint);
+  font-size: 12px;
+  color: var(--text-muted);
   font-style: italic;
+}
+/* Errors get their own weight. setStatusError() adds this; setStatus() clears
+   it, so a stale red message cannot outlive the condition that caused it. */
+.status-text.is-error {
+  color: var(--error);
+  font-style: normal;
+  font-weight: 600;
 }
 .token-count {
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-family: var(--font-mono);
 }
 
@@ -1748,13 +1861,13 @@ pre:hover .copy-btn {
 
 .game-hint {
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 .game-controls {
   padding: 10px 14px;
   font-size: 11px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   line-height: 1.9;
   white-space: pre;
   font-family: var(--font-mono);
@@ -1779,7 +1892,7 @@ pre:hover .copy-btn {
 
 /* ── Misc helpers ---------------------------------------------- */
 .loading-placeholder {
-  color: var(--text-faint);
+  color: var(--text-muted);
   font-size: 12px;
   font-style: italic;
   padding: 8px 0;
@@ -1851,8 +1964,8 @@ pre:hover .copy-btn {
   align-items: center;
 }
 .scoreboard-clear {
-  font-size: 9px;
-  color: var(--text-faint);
+  font-size: 11px;  /* was 9px */
+  color: var(--text-muted);
   cursor: pointer;
   border: none;
   background: none;
@@ -2246,7 +2359,7 @@ pre:hover .copy-btn {
 }
 .archive-item-meta {
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--text-muted);
   margin-top: 2px;
 }
 /* v2.12.9 archive rename affordance. A real <button>, so the global
@@ -2343,7 +2456,7 @@ pre:hover .copy-btn {
   font-size: 10px;
 }
 .api-key-display .key-status.none {
-  color: var(--text-faint);
+  color: var(--text-muted);
 }
 
 /* ── Multi-model row --------------------------------------------- */

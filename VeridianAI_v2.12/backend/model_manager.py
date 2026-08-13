@@ -61,6 +61,8 @@ from config import (
     LLAMA_SAGE_URL,
     LLAMA_DAEMON_URL,
     NPU_LLM_URL,
+    MODEL_SAGE,
+    MODEL_DAEMON,
 )
 
 # --- Backend tag constants (single source of truth) --------------------------
@@ -77,6 +79,32 @@ TIERS: Tuple[Tuple[str, str, str, str], ...] = (
     (BACKEND_LLAMA_SAGE,    "Sage",   LLAMA_SAGE_URL,    "openai"),
     (BACKEND_LLAMA_DAEMON,  "Daemon", LLAMA_DAEMON_URL,  "openai"),
 )
+
+# Turn-terminator strings per tier, read once from each model's own chat
+# template. Sent as `stop` alongside the --override-kv applied at tier launch:
+# two independent brakes on the same failure, because a server build that
+# ignores the override would otherwise put us straight back to a model that
+# never stops. Empty for a self-consistent model, which sends no `stop` at all.
+_STOP_CACHE: Dict[str, List[str]] = {}
+
+
+def _tier_stop_strings(tier_label: str) -> List[str]:
+    if tier_label in _STOP_CACHE:
+        return _STOP_CACHE[tier_label]
+    out: List[str] = []
+    try:
+        from gguf_probe import stop_strings
+        path = {"Sage": MODEL_SAGE, "Daemon": MODEL_DAEMON}.get(tier_label)
+        if path:
+            out = stop_strings(path)
+            if out:
+                print(f"[ModelManager] {tier_label}: stop sequences {out} "
+                      f"(from the model's chat template)")
+    except Exception as e:
+        print(f"[ModelManager] stop-sequence probe failed for {tier_label}: {e}")
+        out = []
+    _STOP_CACHE[tier_label] = out
+    return out
 
 # v2.11.12: NPU tier (AMD Lemonade Server — OpenAI-compatible, serves models
 # on the Ryzen AI XDNA NPU). Kept out of the static TIERS tuple because its
@@ -1157,6 +1185,9 @@ class ModelManager:
             "temperature": options.get("temperature",
                                         self.config.get("temperature", 0.5)),
         }
+        _stops = _tier_stop_strings(tier_label)
+        if _stops:
+            payload["stop"] = _stops
         if options.get("top_p") is not None:
             payload["top_p"] = float(options["top_p"])
         if options.get("top_k") is not None:

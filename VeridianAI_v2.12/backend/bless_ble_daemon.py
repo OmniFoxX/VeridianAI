@@ -125,7 +125,8 @@ def _configured_nickname() -> str:
     """v2.12.2: BLE announce name follows the owner's assistant_name (the
     v2.12.1 socials-reply rename never reached the BLE announce path)."""
     try:
-        with open(Path(__file__).resolve().parent.parent / "config.json",
+        from state_paths import CONFIG_FILE as _cf   # v2.13
+        with open(_cf,
                   encoding="utf-8") as f:
             return (json.load(f).get("sage", {}).get("assistant_name")
                     or "Sage").strip() or "Sage"

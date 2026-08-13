@@ -37,3 +37,18 @@ Pillow>=9.0.0
 # installed" -- but it ships by default so YubiKey enrollment works
 # out of the box.
 fido2>=1.1.3
+# Browser automation. NOT optional despite the note in the root requirements:
+# browser_tool.py imports playwright.async_api at module level, so without it
+# the [BROWSE:] tool cannot load at all -- which is what "plugin needed" meant
+# on a machine that had everything else.
+#
+# PINNED to a minor range on purpose. The Python package and the browser build
+# it downloads are versioned together; a package newer than the bundled browser
+# refuses to launch it and reports the browser as "not installed", which sends
+# you looking in exactly the wrong place. tools/bundle_playwright.ps1 fetches
+# the matching browser.
+playwright>=1.47,<1.60
+# browser_tool.py imports playwright_stealth at module level too. Omitting it
+# is what produced "No module named 'playwright_stealth'" in the 2.14.0 MSIX
+# while the portable build worked -- the dev machine had it, the bundle did not.
+playwright-stealth>=1.1.0

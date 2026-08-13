@@ -103,9 +103,27 @@ from fastapi import HTTPException, Request
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 from secret_locator import resolve_secret_file as _resolve_secret_file
+
+
+def _keystore_dir():
+    """v2.13: was hardcoded to _BACKEND_DIR.parent.parent / "sage_data",
+    which BYPASSED config.DATA_DIR and therefore the VERIDIAN_DATA_DIR
+    override. Caught on 2026-08-07 when a boot with the override set still
+    announced the keystore at the old sibling path -- under MSIX that
+    resolves inside C:\\Program Files\\WindowsApps and the write fails.
+
+    Every other module here already does the try-config/except-fallback
+    dance; this one was the outlier."""
+    try:
+        from config import DATA_DIR as _DD
+        return Path(_DD)
+    except Exception:
+        return _BACKEND_DIR.parent.parent / "sage_data"
+
+
 # v2.9 hardening: bearer-token store migrates out of the project into sage_data.
 KEYSTORE_PATH = _resolve_secret_file(
-    ".api_keystore.json", _BACKEND_DIR.parent.parent / "sage_data", _BACKEND_DIR)
+    ".api_keystore.json", _keystore_dir(), _BACKEND_DIR)
 
 # Tokens are prefixed so they're visually identifiable as OracleAI tokens
 # (mirrors OpenAI's `sk-` convention).
@@ -140,13 +158,36 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
-def _make_token_entry(raw: str, scopes: list, label: str) -> dict:
+# v2.14: OWNER_NS -- which profile a token acts as.
+#
+# Until now entries carried a *label* and nothing else, so every API request
+# was "someone holding a key" and resolved to the default namespace. UI actions
+# were attributable (a cookie session names the user); API actions were not.
+# That is an access-control gap as much as an audit one: any valid token
+# reached the owner's data.
+#
+# The convention deliberately matches main._session_ns:
+#
+#   owner_ns is None   -> the owner / shared store  (what _session_ns returns
+#                         for the owner, and in single-user mode)
+#   owner_ns is "abc"  -> that profile's namespace, and nothing else
+#
+# so a token principal drops into the existing namespace plumbing without a
+# parallel notion of identity. The KEY ABSENCE of "owner_ns" means a legacy
+# pre-v2.14 entry that was never bound -- distinct from a bound-to-owner entry
+# whose value is None. _migrate_ownership resolves those, loudly.
+OWNER_NS_KEY = "owner_ns"
+
+
+def _make_token_entry(raw: str, scopes: list, label: str,
+                      owner_ns=None) -> dict:
     """Build a hashed keystore entry. The raw token is never stored."""
     return {
         "prefix":     raw[:8],
         "hash":       _hash_token(raw),
         "scopes":     scopes,
         "label":      label,
+        OWNER_NS_KEY: owner_ns,
         "created":    time.strftime("%Y-%m-%dT%H:%M:%S"),
         "last_used":  None,
     }
@@ -216,17 +257,50 @@ def ensure_keystore() -> dict:
     """
     store = _load_keystore()
     if store is not None:
+        # Upgrading installs arrive here with unbound tokens. Migrate on the
+        # way in, so nothing downstream ever has to reason about the absence.
+        if migrate_ownership(store):
+            _save_keystore(store)
         return store
 
     # First boot: generate a default token, persist, and announce.
     store = _empty_keystore()
     token = _new_token()
     store["tokens"].append(
-        _make_token_entry(token, ["*"], "default (auto-generated on first boot)")
+        _make_token_entry(token, ["*"],
+                          "default (auto-generated on first boot)",
+                          owner_ns=None)   # explicitly the owner, not merely unset
     )
     _save_keystore(store)
     _print_first_run_banner(token)
     return store
+
+
+def _backup_set_paths() -> list:
+    """The files that must be snapshotted together, absolute and resolved.
+
+    The Fernet key, the memory chain log and the procedural store are only
+    meaningful as a SET: the key without the chain decrypts nothing, the chain
+    without the key is opaque, and a procedural store from a different run
+    matches neither. Resolved rather than relative because MSIX redirection
+    means the literal path and the real path are different directories.
+    """
+    try:
+        from state_paths import STATE_DIR, PROJECT_DIR  # type: ignore
+        cands = [Path(PROJECT_DIR) / "backend" / ".fernet_key",
+                 Path(STATE_DIR) / "memory_log" / "memory_chain.log",
+                 Path(STATE_DIR) / "procedural_memory" / "procedural.json"]
+    except Exception:
+        return ["backend/.fernet_key",
+                "sage_data/memory_log/memory_chain.log",
+                "sage_data/procedural_memory/procedural.json"]
+    out = []
+    for p in cands:
+        try:
+            out.append(str(p.resolve()))
+        except Exception:
+            out.append(str(p))
+    return out
 
 
 def _print_first_run_banner(token: str) -> None:
@@ -255,9 +329,16 @@ def _print_first_run_banner(token: str) -> None:
     print("      run rotate_api_key.bat in the project folder")
     print()
     print("  This key is part of the BACKUP SET. Back it up alongside:")
-    print("      backend/.fernet_key")
-    print("      sage_data/memory_log/memory_chain.log")
-    print("      sage_data/procedural_memory/procedural.json")
+    # Absolute and RESOLVED, not the old relative sketch.
+    #
+    # Under MSIX these three do not live where the relative form implies:
+    # writes to %APPDATA% are redirected into the package's LocalCache, so
+    # "sage_data/memory_log/..." names a directory the user can open and find
+    # empty while the real chain sits somewhere they have never seen. Telling
+    # someone to back up a path that is not the path is worse than saying
+    # nothing -- they would come away believing the chain was safe.
+    for _p in _backup_set_paths():
+        print(f"      {_p}")
     print(bar)
     print()
 
@@ -287,7 +368,25 @@ def _scope_satisfies(required: str, granted: List[str]) -> bool:
     return False
 
 
-def _verify_token(token: str, store: dict) -> Optional[List[str]]:
+def _principal(entry: dict) -> dict:
+    """The identity behind a verified token.
+
+    Returned instead of a bare scope list so the caller learns WHO is acting,
+    not merely what they may do. `bound` is False for a legacy entry that
+    predates ownership and has never been migrated -- callers treat that as
+    untrusted-for-namespace-purposes rather than silently as the owner.
+    """
+    scopes = entry.get("scopes", [])
+    return {
+        "scopes":   list(scopes) if isinstance(scopes, list) else ["*"],
+        "owner_ns": entry.get(OWNER_NS_KEY),
+        "label":    entry.get("label", "?"),
+        "prefix":   entry.get("prefix", ""),
+        "bound":    OWNER_NS_KEY in entry,
+    }
+
+
+def _verify_token(token: str, store: dict) -> Optional[dict]:
     """Return granted scopes if token is valid, else None.
 
     Supports both hashed entries (v2 keystore) and legacy plain-text
@@ -311,8 +410,7 @@ def _verify_token(token: str, store: dict) -> Optional[List[str]]:
                 continue  # fast prefix filter before the hash compare
             if secrets.compare_digest(token_hash, entry["hash"]):
                 entry["last_used"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-                scopes = entry.get("scopes", [])
-                return list(scopes) if isinstance(scopes, list) else ["*"]
+                return _principal(entry)
 
         # --- v1 legacy: plain-text entry ---
         elif "token" in entry:
@@ -325,8 +423,7 @@ def _verify_token(token: str, store: dict) -> Optional[List[str]]:
                     stacklevel=2,
                 )
                 entry["last_used"] = time.strftime("%Y-%m-%dT%H:%M:%S")
-                scopes = entry.get("scopes", [])
-                return list(scopes) if isinstance(scopes, list) else ["*"]
+                return _principal(entry)
 
     return None
 
@@ -393,17 +490,26 @@ def require_scope(scope: str) -> Callable:
                 401, "bearer token required; see first-run banner",
             )
         token = auth_hdr[7:].strip()
-        granted = _verify_token(token, store)
-        if granted is None:
+        principal = _verify_token(token, store)
+        if principal is None:
             raise HTTPException(401, "invalid token")
 
         # Scope check
-        if not _scope_satisfies(scope, granted):
+        if not _scope_satisfies(scope, principal["scopes"]):
             raise HTTPException(
                 403, f"token lacks required scope: {scope}",
             )
 
-        return {"scopes": granted}
+        # Publish the principal for the rest of the request. main._session_ns
+        # and main._is_owner read this, which is what confines an API caller
+        # to the profile its token belongs to. Without it, every token
+        # resolved to the default namespace regardless of who held it.
+        try:
+            request.state.api_principal = principal
+        except Exception:
+            pass   # a request object without .state is not worth failing over
+
+        return {"scopes": principal["scopes"], "principal": principal}
 
     # Give FastAPI a nice name in the OpenAPI dependency tree (if exposed).
     _dep.__name__ = f"require_scope__{scope.replace(':', '_').replace('*', 'any')}"
@@ -414,27 +520,146 @@ def require_scope(scope: str) -> Callable:
 # Rotation helper (called by rotate_api_key.py)
 # ---------------------------------------------------------------------------
 
-def rotate_default_token() -> str:
-    """Revoke the existing 'default' token entry and issue a fresh one.
+# ---------------------------------------------------------------------------
+# v2.14: per-profile token ownership
+# ---------------------------------------------------------------------------
 
-    Returns the new raw token (caller is responsible for displaying it).
-    Writes a hashed entry to the keystore -- raw token is never stored.
-    Does NOT touch additional tokens with other labels -- only entries
-    whose label starts with 'default' are rotated. Other labelled tokens
-    (e.g. a scoped Continue.dev key) survive the rotation unchanged.
+def _norm_ns(owner_ns):
+    """Normalise a namespace. Empty string and None both mean the owner."""
+    if owner_ns is None:
+        return None
+    ns = str(owner_ns).strip()
+    return ns or None
+
+
+def migrate_ownership(store: dict) -> int:
+    """Bind pre-v2.14 entries to the owner, and say so.
+
+    An install upgrading from 2.13 has one token that belongs to nobody. It
+    cannot be left unbound -- unbound would either be refused, breaking the
+    user's working editor integration on upgrade, or accepted as the owner,
+    which is the gap this release exists to close.
+
+    So it becomes the owner's: the owner created it and has been using it.
+    What matters is that this is ANNOUNCED rather than done quietly. A token
+    silently acquiring an identity it did not previously have is exactly what
+    an audit trail should be able to see. It is stamped on the entry too, so
+    the keystore carries its own history.
+
+    Returns the number of entries migrated.
     """
+    n = 0
+    for entry in store.get("tokens", []):
+        if OWNER_NS_KEY in entry:
+            continue
+        entry[OWNER_NS_KEY] = None            # owner / shared store
+        entry["migrated_from_unowned"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+        n += 1
+    if n:
+        print("[AUTH] v2.14 migration: %d API token(s) had no owning profile "
+              "and have been bound to the OWNER profile." % n, flush=True)
+        print("[AUTH] If any of them are used by someone other than the owner, "
+              "rotate them -- they now act as the owner.", flush=True)
+    return n
+
+
+def issue_token(owner_ns=None, label: str = "api", scopes=None) -> str:
+    """Mint a token bound to one profile. Returns the raw token ONCE."""
     store = _load_keystore() or _empty_keystore()
-    new_token = _new_token()
-
-    # Remove existing default(s)
-    store["tokens"] = [
-        t for t in store.get("tokens", [])
-        if str(t.get("label", "")).strip().lower() != "default"
-        and not str(t.get("label", "")).lower().startswith("default ")
-    ]
-
+    migrate_ownership(store)
+    raw = _new_token()
     store["tokens"].append(
-        _make_token_entry(new_token, ["*"], "default (rotated)")
-    )
+        _make_token_entry(raw, list(scopes or ["*"]), label,
+                          owner_ns=_norm_ns(owner_ns)))
     _save_keystore(store)
-    return new_token
+    return raw
+
+
+def rotate_token_for(owner_ns=None, label: str = None) -> str:
+    """Rotate the tokens belonging to ONE profile, leaving the rest alone.
+
+    This is the point of the exercise. Rotation used to be a system action --
+    one shared key, so replacing it broke every integration on the machine for
+    every profile, which is precisely why the button had to be owner-gated.
+    Bound tokens make it personal: a user who thinks their key leaked can
+    replace their own without asking anyone or disrupting anybody else.
+    """
+    ns = _norm_ns(owner_ns)
+    store = _load_keystore() or _empty_keystore()
+    migrate_ownership(store)
+
+    kept, revoked = [], 0
+    for t in store.get("tokens", []):
+        if t.get(OWNER_NS_KEY) == ns:
+            revoked += 1
+            continue
+        kept.append(t)
+    store["tokens"] = kept
+
+    raw = _new_token()
+    store["tokens"].append(
+        _make_token_entry(raw, ["*"],
+                          label or ("default (rotated)" if ns is None
+                                    else "rotated"),
+                          owner_ns=ns))
+    _save_keystore(store)
+    print("[AUTH] rotated %d token(s) for profile %s"
+          % (revoked, ns or "(owner)"), flush=True)
+    return raw
+
+
+def revoke_tokens_for(owner_ns) -> int:
+    """Revoke every token belonging to a profile. Called on user deletion.
+
+    A deleted account whose API key still works is deleted only in the UI.
+    Refuses to act on the owner namespace, because None is also what a
+    mistaken caller passes, and wiping the owner's keys by accident is not a
+    recoverable mistake.
+    """
+    ns = _norm_ns(owner_ns)
+    if ns is None:
+        raise ValueError("refusing to revoke the owner's tokens by namespace; "
+                         "call rotate_token_for(None) deliberately instead")
+    store = _load_keystore()
+    if not store:
+        return 0
+    before = len(store.get("tokens", []))
+    store["tokens"] = [t for t in store.get("tokens", [])
+                       if t.get(OWNER_NS_KEY) != ns]
+    removed = before - len(store["tokens"])
+    if removed:
+        _save_keystore(store)
+        print("[AUTH] revoked %d token(s) for deleted profile %s"
+              % (removed, ns), flush=True)
+    return removed
+
+
+def list_tokens(owner_ns=None, all_profiles: bool = False):
+    """Token METADATA for the UI. Never returns a hash or a raw token."""
+    store = _load_keystore() or _empty_keystore()
+    ns = _norm_ns(owner_ns)
+    out = []
+    for t in store.get("tokens", []):
+        if not all_profiles and t.get(OWNER_NS_KEY) != ns:
+            continue
+        out.append({
+            "label":     t.get("label", "?"),
+            "prefix":    t.get("prefix", ""),
+            "owner_ns":  t.get(OWNER_NS_KEY),
+            "scopes":    t.get("scopes", []),
+            "created":   t.get("created"),
+            "last_used": t.get("last_used"),
+            "bound":     OWNER_NS_KEY in t,
+            "migrated":  t.get("migrated_from_unowned"),
+        })
+    return out
+
+
+def rotate_default_token() -> str:
+    """Back-compat shim for rotate_api_key.py and pre-v2.14 call sites.
+
+    Kept because the standalone script is named in the first-run banner and in
+    the Store notes. It now routes through the per-profile path, so there is
+    one rotation implementation rather than two that can drift apart.
+    """
+    return rotate_token_for(None, label="default (rotated)")

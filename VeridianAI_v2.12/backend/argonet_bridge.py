@@ -43,6 +43,7 @@ from sage_messaging_adapter import (
     ChannelProfile,
     SageMessagingAdapter,
 )
+from state_paths import CONFIG_FILE  # v2.13 read-only-install support
 
 logger = logging.getLogger("sage.argonet")
 
@@ -136,7 +137,7 @@ def _default_identity() -> str:
     try:
         from config_store import OracleConfig
         from config import PROJECT_DIR
-        nn = str(OracleConfig.load(PROJECT_DIR / "config.json")
+        nn = str(OracleConfig.load(CONFIG_FILE)
                  .network.node_name or "").strip()
         if nn:
             return f"veridianai-{nn}"

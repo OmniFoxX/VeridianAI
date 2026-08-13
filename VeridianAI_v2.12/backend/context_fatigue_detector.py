@@ -221,8 +221,8 @@ def main():
     parser.add_argument(
         "--output",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "sage_data" / "downloads" / "coordinator_signal.json",
-        help="File to write the fatigue signal JSON (default: Downloads\\coordinator_signal.json)",
+        default=Path(__file__).resolve().parent.parent / "sage_data" / "logs" / "coordinator_signal.json",
+        help="File to write the fatigue signal JSON (default: **\\sage_data\\logs\\coordinator_signal.json)",
     )
     args = parser.parse_args()
 

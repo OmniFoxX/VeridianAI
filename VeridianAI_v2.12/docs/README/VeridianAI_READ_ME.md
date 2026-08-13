@@ -206,6 +206,32 @@ backend\.api_keystore.json
 sage_data\memory_log\memory_chain.log
 sage_data\procedural_memory\procedural.json
 
+### Where `sage_data` actually is
+
+Those paths are relative to the install, and on a **Microsoft Store (MSIX)
+install they are not literal**. A packaged app's writes to `%APPDATA%` are
+silently redirected by Windows into the package container, so the folder you
+can browse to may exist and be empty while the real one lives at:
+
+```
+%LOCALAPPDATA%\Packages\<package-family-name>\LocalCache\Roaming\veridianai\sage_data
+```
+
+Do not guess which is which. **Ask the running app** -- it is the process that
+owns the files:
+
+```
+curl http://127.0.0.1:8000/api/health
+```
+
+`data_dir` in that response is the resolved, authoritative location, and the
+first-run key banner prints the same absolute paths. Back up what those say,
+not what this page says.
+
+> This matters more than a normal path quirk: the memory chain is
+> tamper-evident, and a backup of the wrong directory is a backup of nothing
+> at all -- discovered at restore time, which is the worst possible moment.
+
 ## Configuration Reference
 config.json lives in the project root. Schema version 2 (since v2.2).
 
@@ -247,6 +273,145 @@ override routing manually via Settings.
 For Nemotron-class models, set `ollama_read_sec` to `54000` and
 `stall_token_sec` to `36000+` to prevent false stall detection during
 slow prefill on large context loads.
+
+### Bringing Your Own Models
+
+Any model you supply goes in **`sage_data\models\`** — never in `bundled_models\`.
+
+That distinction matters more than it looks. `bundled_models` lives inside the
+application folder, and on a Microsoft Store install that folder is inside
+`C:\Program Files\WindowsApps`, which is **read-only by design**. You cannot
+write there, and you should not try: taking ownership of `WindowsApps` breaks
+permission inheritance across the whole app subsystem and is difficult to undo.
+
+`sage_data\models\` is yours, is writable in every install type, and is
+checked **first** — a model you supply always wins over a bundled one of the
+same role.
+
+**Naming.** VeridianAI looks for specific filenames, so rename what you download:
+
+| Role | Filenames it looks for, in order |
+|------|----------------------------------|
+| Embedding | `nomic_embed_text_v2_moe.gguf`, then `nomic_embed_text_latest.gguf` |
+| Daemon / small chat | `qwen2.5_coder_1.5b_instruct.gguf`, then `qwen2.5_coder_1.5b_base.gguf` |
+
+Underscores, not hyphens. If you pulled the model through Ollama it will be
+sitting in Ollama's blob store under a `sha256-...` name with no extension —
+copy it out and rename it to one of the above. Downloading the `.gguf` directly
+from Hugging Face avoids that step entirely.
+
+Drop the file in, restart, and it is used. Nothing else to configure.
+
+**This does not affect the build integrity badge.** The signed manifest hashes
+source files only — `.py`, `.js`, `.html`, `.css`, `.bat`, `.ps1` — and has
+never included model weights. Adding, replacing or removing a `.gguf` cannot
+make the app report itself as modified.
+
+**Two things VeridianAI checks for you automatically:**
+
+- **Context window.** The trained context is read from the file, and the tier
+  is launched clamped to it. `nomic-embed-text-v1.5` trains to 2048 tokens;
+  `v2-moe` trains to 512. Running a model past its trained window is not an
+  error in llama.cpp — you simply get embeddings for text the model was never
+  taught to encode, with nothing to tell you.
+- **Stored vectors.** Semantic search indexes are tagged with the exact model,
+  vector dimension and prefix policy that produced them. Change the embedding
+  model and the old index is discarded and rebuilt rather than reused, because
+  similarity between vectors from two different models is not a worse
+  measurement — it is not a measurement. This matters especially here:
+  nomic v1.5 and v2-moe are **both 768-dimensional**, so nothing about the
+  shape of the output would reveal the swap.
+
+**Choosing an embedding model.** `v2-moe` is multilingual (8 experts, 2 active
+per token); `v1.5` is English-focused with four times the context. It is a
+trade, not an upgrade. Prefer a **Q8_0** quantization over Q4 for embeddings:
+quantization error costs more here than in a chat model, because retrieval uses
+the vector's exact geometry rather than sampling from a distribution over it.
+An F16 embedding model is usually two to three times larger than it needs to be.
+
+---
+
+### Pinning which Python VeridianAI uses
+
+The portable build finds Python through the Windows `py` launcher, which
+selects the **newest** version installed on the machine. That is usually what
+you want — until you install a newer Python for something unrelated. Packages
+you installed under the old one are still on disk, but the app is now asking a
+different interpreter, and optional components (speech recognition in
+particular) stop being found. Nothing was uninstalled; nothing reports an
+error; a feature simply stops existing.
+
+If that happens, or to prevent it, pin the interpreter. Either works:
+
+**Environment variable**
+
+```
+setx VERIDIAN_PYTHON "C:\Users\you\AppData\Local\Programs\Python\Python312\python.exe"
+```
+
+**Or a file** — create `python_pin.txt` next to `start.bat` containing one
+line, the full path to `python.exe`.
+
+The pin is checked before `py`. A pin pointing at a file that no longer exists
+is ignored with a warning and normal detection resumes, so a stale pin can
+never stop the app from starting.
+
+Every launch prints which interpreter it is using:
+
+```
+[extras] python 3.12.8 at C:\...\Python312\python.exe
+```
+
+If a feature that used to work has quietly stopped, check that line first.
+
+---
+
+### Voice Services (optional)
+
+Speech recognition is **not bundled**. It needs `openai-whisper` (which pulls in
+PyTorch) and `sounddevice` -- together several gigabytes, which is a poor trade
+to force on everyone for a feature many will not use.
+
+**To add it:** Settings -> Voice -> **Download Voice Services**, then restart.
+That is the whole procedure.
+
+**What happens when you press it**
+
+The packages are installed into `sage_data\pylibs\`, which VeridianAI adds to
+its module search path at startup. That folder is:
+
+- **yours** -- outside the application package, in your own data directory
+- **writable in every install type**, including a Microsoft Store install where
+  the app folder itself is read-only
+- **removable** -- delete the folder and voice support is gone; nothing else is
+  affected
+
+Nothing is written into the application itself, and nothing is installed
+system-wide. If you would rather do it by hand, any CPython 3.12 (win_amd64)
+will do:
+
+```
+pip install --target "<sage_data>\pylibs" openai-whisper sounddevice
+```
+
+The exact path for your install is reported by `GET /api/health` as `data_dir`
+-- worth checking rather than guessing, because a Store install redirects it.
+
+**Version matters.** These are binary wheels containing compiled extension
+modules, built against one specific Python ABI. Installing them with a Python
+other than 3.12 will appear to succeed and then fail at import, because pip
+resolves wheels for the interpreter running pip, not the one that will load
+them. The in-app button uses the correct interpreter automatically.
+
+**Privacy.** Audio is transcribed on this machine and discarded immediately;
+nothing is recorded, stored or uploaded. Recognised text enters your normal
+encrypted chat and nowhere else. The wake word ("always listening") keeps your
+microphone open until you switch it off, and is opt-in and off by default.
+
+A working microphone is also required -- the button installs software, not
+hardware.
+
+---
 
 ### Model-Aware Prompt Tiers
 

@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 9. Default page title (WCAG 2.4.2)
   document.title = "VeridianAI Chat";
 
-  console.log('%cVeridianAI v2.12 ready', 'color:#f0a500;font-size:14px;font-weight:bold;font-family:Georgia,serif');
+  console.log('%cVeridianAI v2.14 ready', 'color:#f0a500;font-size:14px;font-weight:bold;font-family:Georgia,serif');
 });
 
 function fitGameCanvas() {

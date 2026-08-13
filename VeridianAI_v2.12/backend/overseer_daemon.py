@@ -1,7 +1,7 @@
 """
-OracleAI Overseer Daemon v1.0.0
+VeridianAI Overseer Daemon v1.0.0
 --------------------------------
-Systems supervision for OracleAI v2.1.8+
+Systems supervision for VeridianAI v2.1.8+
 
 Responsibilities:
 - Heartbeat monitoring for Sage (9998), IPC bridge (9999, 9997)
@@ -15,9 +15,8 @@ Does NOT:
 - Execute tasks
 - Contain any LLM logic
 
-Cross-platform compatible. Designed for clean handoff to RAI OS HAL layer.
-
-Author: OracleAI Project
+Concept: Todd Darimont
+Author: Toga VeridianAI Project
 """
 from __future__ import annotations
 
@@ -44,9 +43,9 @@ from typing import Callable, Deque, Dict, Optional
 # ---------------------------------------------------------------------------
 
 # v2.1.8 deployment fix: PROJECT_ROOT is self-locating instead of
-# hardcoded to E:\OracleAI_v2.1.8. The overseer lives in backend/, so
+# hardcoded to E:\VeridianAI_v2.1.8.+ The overseer lives in backend/, so
 # parent.parent of this file is the project root. Lets the user rename
-# the project folder, lets OracleAI ship to other users, and matches
+# the project folder, lets VeridianAI ship to other users, and matches
 # the no-user-specific-hardcoding rule we apply everywhere else.
 # Falls back to the hardcoded path only if Path resolution fails (which
 # shouldn't happen on any real install, but defends against weird
@@ -54,13 +53,13 @@ from typing import Callable, Deque, Dict, Optional
 try:
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
 except Exception as _e:
-    # v2.2 (2026-05-29): previously fell back to r"E:\OracleAI_v2.1.8"
+    # v2.2 (2026-05-29): previously fell back to r"E:\VeridianAI_v2.1.8"
     # which was a Todd-specific path nobody else has. Self-location
     # has never actually failed in practice; the bare except was
     # defensive plumbing. If it ever does fail, we want a loud error,
     # not a silent pretend-this-is-Todd-laptop default.
     raise RuntimeError(
-        f"Cannot locate OracleAI project root from overseer_daemon.py: {_e}"
+        f"Cannot locate VeridianAI project root from overseer_daemon.py: {_e}"
     )
 
 # v2.1.8 follow-up (Todd, 2026-05-15): logs were going to
@@ -110,10 +109,12 @@ except Exception:
     _OVERSEER_GUARD_AVAILABLE = False
 
 _LOG_BASE.mkdir(parents=True, exist_ok=True)
+from state_paths import (CONFIG_FILE as _STATE_CONFIG, CHAT_MEMORY_FILE as _STATE_CHAT_MEMORY,
+                         LOCK_DIR as _STATE_LOCK_DIR, HASH_CHAIN_LOG as _STATE_HASH_CHAIN)  # v2.13
 
 LOG_PATH                   = _LOG_BASE / "overseer.log"
 OVERSEER_NOTIFICATIONS_PATH = _LOG_BASE / "overseer_notifications.json"
-LOCK_DIR                   = PROJECT_ROOT / "backend"
+LOCK_DIR                   = _STATE_LOCK_DIR   # v2.13: install dir may be read-only
 
 # Heartbeat settings
 HEARTBEAT_INTERVAL  = 10.0   # Seconds between heartbeat checks
@@ -138,11 +139,11 @@ CRAIID_POLL_INTERVAL = 30.0   # seconds between overseer polls
 
 # Monitored resources
 SHARED_RESOURCES = [
-    PROJECT_ROOT / "chat_memory.json",
-    PROJECT_ROOT / "backend" / "hash_chain.log",
+    _STATE_CHAT_MEMORY,
+    _STATE_HASH_CHAIN,
 ]
 
-# Daemon definitions — add new daemons here as OracleAI grows
+# Daemon definitions — add new daemons here as VeridianAI grows
 #
 # v2.1.8 deployment audit (Todd + Claude):
 #   * "sage" maps to backend/sage_daemon.py — the actual TCP listener
@@ -186,7 +187,7 @@ def _resolve_ollama_exe() -> str:
 def _ollama_port() -> int:
     try:
         from config_store import OracleConfig
-        return int(OracleConfig.load(PROJECT_ROOT / "config.json")
+        return int(OracleConfig.load(_STATE_CONFIG)
                    .network.ports.ollama_oracle or 11434)
     except Exception:
         return 11434
@@ -559,7 +560,7 @@ class OverseerDaemon:
 
     def start(self):
         log.info("=" * 60)
-        log.info("OracleAI Overseer Daemon v1.0.0 starting...")
+        log.info("VeridianAI Overseer Daemon v3.3.0 starting...")
         log.info(f"Project root : {PROJECT_ROOT}")
         log.info(f"Monitoring   : {list(DAEMON_REGISTRY.keys())}")
         log.info("=" * 60)
@@ -624,7 +625,7 @@ class OverseerDaemon:
                 )
                 self._notify_user(
                     f"ALERT: '{daemon_name}' is unresponsive and could not be "
-                    f"restarted automatically. Please check OracleAI."
+                    f"restarted automatically. Please check VeridianAI."
                 )
                 self._escalated[daemon_name] = True
             return
@@ -709,7 +710,7 @@ class OverseerDaemon:
                         # script), rather than chasing a silent non-respawn.
                         log.error(
                             f"[Overseer] Respawn of '{daemon_name}' BLOCKED "
-                            f"(strict_respawn): {_why}. Sage will remain DOWN "
+                            f"(strict_respawn): {_why}. Toga will remain DOWN "
                             f"until the script is restored or the baseline is "
                             f"re-recorded (delete its entry from "
                             f".entry_baselines.signed.json after verifying the "
@@ -992,7 +993,7 @@ class OverseerDaemon:
                         and conn.status == psutil.CONN_LISTEN and conn.pid):
                     self._daemon_procs["sage"] = _AdoptedProc(conn.pid)
                     log.info(
-                        f"[Overseer] Adopted boot-time Sage PID {conn.pid} on "
+                        f"[Overseer] Adopted boot-time Toga PID {conn.pid} on "
                         f"port {sage_port} - now tracked for a clean handoff."
                     )
                     return
@@ -1082,24 +1083,24 @@ class OverseerDaemon:
                 if psutil.pid_exists(old_pid):
                     p = psutil.Process(old_pid)
                     log.info(
-                        f"[Overseer] Sending graceful terminate to Sage "
+                        f"[Overseer] Sending graceful terminate to Toga "
                         f"PID {old_pid} for handoff..."
                     )
                     p.terminate()
                     try:
                         p.wait(timeout=10)
-                        log.info(f"[Overseer] Sage PID {old_pid} exited cleanly.")
+                        log.info(f"[Overseer] Toga PID {old_pid} exited cleanly.")
                     except psutil.TimeoutExpired:
                         log.warning(
-                            f"[Overseer] Sage PID {old_pid} did not respond "
+                            f"[Overseer] Toga PID {old_pid} did not respond "
                             f"to terminate() — force killing."
                         )
                         p.kill()
                         p.wait(timeout=3)
             except psutil.NoSuchProcess:
-                log.info("[Overseer] Sage was already down at handoff time.")
+                log.info("[Overseer] Toga was already down at handoff time.")
             except Exception as e:
-                log.warning(f"[Overseer] Error terminating Sage for handoff: {e}")
+                log.warning(f"[Overseer] Error terminating Toga for handoff: {e}")
         else:
             # FIX (#69 dry-run, Hermes 2026-06-08): the overseer only records
             # PIDs it spawns itself (_daemon_procs is populated in
@@ -1113,7 +1114,7 @@ class OverseerDaemon:
             # started it. This makes the handoff correct for the boot instance.
             sage_port = DAEMON_REGISTRY.get("sage", {}).get("port", 9998)
             log.warning(
-                "[Overseer] No tracked Sage process — discovering listener on "
+                "[Overseer] No tracked Toga process — discovering listener on "
                 f"port {sage_port} for graceful handoff."
             )
             terminated_any = False
@@ -1124,16 +1125,16 @@ class OverseerDaemon:
                         try:
                             p = psutil.Process(conn.pid)
                             log.info(
-                                f"[Overseer] Terminating untracked Sage "
+                                f"[Overseer] Terminating untracked Toga "
                                 f"PID {conn.pid} on port {sage_port}..."
                             )
                             p.terminate()
                             try:
                                 p.wait(timeout=10)
-                                log.info(f"[Overseer] Sage PID {conn.pid} exited cleanly.")
+                                log.info(f"[Overseer] Toga PID {conn.pid} exited cleanly.")
                             except psutil.TimeoutExpired:
                                 log.warning(
-                                    f"[Overseer] Sage PID {conn.pid} ignored "
+                                    f"[Overseer] Toga PID {conn.pid} ignored "
                                     f"terminate() — force killing."
                                 )
                                 p.kill()
@@ -1142,11 +1143,11 @@ class OverseerDaemon:
                         except psutil.NoSuchProcess:
                             pass
             except Exception as e:
-                log.warning(f"[Overseer] Port-based Sage discovery failed: {e}")
+                log.warning(f"[Overseer] Port-based Toga discovery failed: {e}")
             if not terminated_any:
                 log.warning(
                     f"[Overseer] No listener found on port {sage_port} — "
-                    "Sage may already be down. Proceeding with respawn."
+                    "Toga may already be down. Proceeding with respawn."
                 )
 
         # Reset restart counter so handoff doesn't burn one of the 3 attempts
@@ -1155,7 +1156,7 @@ class OverseerDaemon:
 
         # Trigger immediate respawn rather than waiting for heartbeat timeout
         # Add brief delay to ensure port 9998 is fully released before respawn
-        log.info("[Overseer] Triggering immediate Sage respawn for handoff...")
+        log.info("[Overseer] Triggering immediate Toga respawn for handoff...")
         
         # Wait for port to be fully released before respawn
         port_released = False
@@ -1172,7 +1173,7 @@ class OverseerDaemon:
         self._handle_unresponsive("sage")
 
         self._notify_user(
-            "CRAIID handoff complete — fresh Sage instance spawned after fatigue detection."
+            "CRAIID handoff complete — fresh Toga instance spawned after fatigue detection."
         )
 
     def _prune_notifications(self):

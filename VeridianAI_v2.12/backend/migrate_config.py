@@ -64,7 +64,15 @@ def _project_root() -> Path:
 
 
 def _config_json_path() -> Path:
-    return _project_root() / "config.json"
+    """v2.13: config.json follows STATE_DIR, not the project root. On an MSIX
+    install the project root is read-only, so writing the first-boot default
+    there failed (and, via tempfile, hung). state_paths keeps it in the project
+    root while that is writable -- portable behaviour is unchanged."""
+    try:
+        from state_paths import CONFIG_FILE
+        return CONFIG_FILE
+    except Exception:
+        return _project_root() / "config.json"
 
 
 def _backup_path(orig: Path) -> Path:

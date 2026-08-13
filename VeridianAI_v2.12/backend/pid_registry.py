@@ -32,11 +32,12 @@ import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from state_paths import STATE_DIR, CONFIG_FILE, PID_REGISTRY, CHAT_MEMORY_FILE, LOCK_DIR, HASH_CHAIN_LOG  # v2.13 read-only-install support
 
 # Ledger lives at the project root, next to start.bat, so Electron and
 # start.bat can both find it without knowing about sage_data's layout.
 ROOT = Path(os.environ.get("OAI_ROOT") or Path(__file__).resolve().parent.parent)
-REGISTRY_FILE = ROOT / ".oracle_pids.json"
+REGISTRY_FILE = PID_REGISTRY   # v2.13: STATE_DIR (install dir is read-only under MSIX)
 
 
 def _load_raw() -> List[Dict[str, Any]]:

@@ -1180,6 +1180,20 @@ def _build_author_digest(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                         })
                 # deeper history: prefer decompressed VLTS (clean text), else
                 # fall back to recent archive entries. Bounded; never raises.
+                # v2.13.18: preview truncation that keeps the particulars.
+                #
+                # These previews are what a recovering instance reads to know
+                # where the conversation was. Cut to a fixed length they keep
+                # the narrative and drop the specifics -- the addresses, times
+                # and figures that cannot be reconstructed from the gist. The
+                # extractor re-appends whatever fell outside the window.
+                def _keep(txt, budget):
+                    try:
+                        from craiid import particulars as _pt
+                        return _pt.preserve(str(txt), budget)
+                    except Exception:
+                        return " ".join(str(txt).split())[:budget]
+
                 hist = []
                 vlts = ctx.get("vlts") or []
                 if vlts:
@@ -1187,7 +1201,7 @@ def _build_author_digest(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                     for e in vlts[:8]:
                         t = e.get("text") if isinstance(e, dict) else str(e)
                         if t and str(t).strip():
-                            hist.append(str(t).strip()[:220])
+                            hist.append(_keep(str(t).strip(), 500))
                 else:
                     for e in (ctx.get("archives") or [])[:8]:
                         t = ""
@@ -1203,7 +1217,7 @@ def _build_author_digest(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                         else:
                             t = str(e)
                         if t and str(t).strip():
-                            hist.append(str(t).strip()[:220])
+                            hist.append(_keep(str(t).strip(), 500))
                     if hist:
                         digest["history_source"] = "archives"
                 digest["history_preview"] = hist
@@ -1218,8 +1232,52 @@ def _build_author_digest(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
                         if convo:
                             js = _journalist_mod.summarize_stream(convo, max_turns=14)
                             digest["theme"] = (js.get("theme") or [])[:10]
-                            digest["theme_summary"] = (js.get("text") or "")[:2000]
+                            # 2000 -> 6000. The summary now carries verbatim
+                            # particulars per turn, so the cap must leave room
+                            # for them or it clips exactly what was rescued.
+                            try:
+                                _tcap = int(os.environ.get("CRAIID_THEME_CHARS", "6000"))
+                            except Exception:
+                                _tcap = 6000
+                            digest["theme_summary"] = (js.get("text") or "")[:_tcap]
                             digest["summary_method"] = js.get("method")
+
+                            # --- CRAIID evidence ledger (v2.13.18) ----------
+                            # Keyed "evidence", NOT "sources".
+                            #
+                            # coordinator_signal already emits a `sources` key
+                            # and the overseer reads it as a source-HEALTH map
+                            # ({name: {status, entries_included}}) for its logs.
+                            # Different concept, different consumer, different
+                            # file. Reusing the name would have worked today --
+                            # they travel in separate payloads -- and become a
+                            # confusing collision the first time someone merged
+                            # the two paths. Deliberately OUTSIDE theme_summary's cap:
+                            # these are verbatim extracts and clipping them
+                            # would defeat the point of preserving them.
+                            #
+                            # Ranked by how often the assistant referenced each
+                            # URL in its own prose -- the sources it has been
+                            # citing are the ones it is about to cite again.
+                            try:
+                                from craiid import evidence_ledger as _el
+                                _convo_text = " ".join(
+                                    str(m.get("content", "")) for m in convo
+                                    if isinstance(m, dict))
+                                _src = _el.for_handoff(
+                                    conversation_text=_convo_text)
+                                if _src.get("sources"):
+                                    digest["evidence"] = _src
+                                    digest["evidence_rule"] = _el.CITATION_RULE
+                                    logger.info(
+                                        f"[CRAIID] evidence ledger: "
+                                        f"{_src['preserved']} preserved, "
+                                        f"{_src['gaps']} gap(s), "
+                                        f"{_src['total']} total source(s)")
+                            except Exception as _ee:
+                                # No ledger -> sources absent -> the handoff
+                                # behaves exactly as it did before this existed.
+                                logger.debug(f"[CRAIID] no evidence ledger: {_ee}")
                 except Exception:
                     pass
             except Exception:

@@ -53,8 +53,13 @@ BASE_DIR = PROJECT_DIR  # alias kept so existing route code keeps working
 FRONTEND_DIR = BASE_DIR / "frontend"
 PLUGINS_DIR = BASE_DIR / "plugins"
 MODELS_DIR = BASE_DIR / "models"
-CONFIG_FILE = BASE_DIR / "config.json"
-DOWNLOADS_DIR = BASE_DIR / "downloads"
+# v2.13: config.json is WRITTEN to (POST /api/config), so it must follow
+# STATE_DIR. This local constant used to shadow the state_paths one and was
+# passed explicitly to save_config(), so every settings save tried to write
+# into the read-only install dir and returned 500.
+from state_paths import CONFIG_FILE
+# v2.13: written to, so it must follow STATE_DIR (see sage_engine.py).
+from state_paths import DOWNLOADS_DIR
 
 
 # --------------------------------------------------------------------------- #
@@ -745,7 +750,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.13", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.14.1", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -861,12 +866,118 @@ for plugin_id, feature_name in feature_map.items():
     if plugin:
         sage_engine.set_feature(feature_name, plugin.get("enabled", False))
         print(
-            f"[PLUGIN SYNC] {plugin_id} → {feature_name} = {plugin.get('enabled', False)}")
+            f"[PLUGIN SYNC] {plugin_id} -> {feature_name} = {plugin.get('enabled', False)}")
 
-DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+except Exception as _e:
+    print(f"[main] WARNING: could not create {DOWNLOADS_DIR}: {_e}", flush=True)
 
 
 # --- Tier lifecycle startup (Phase 1D Step 4) -----------------------------
+@app.on_event("startup")
+async def _publish_docs_to_data_dir():
+    """Copy the shipped documentation into sage_data so the user can read it.
+
+    docs/ is PACKAGE content. On a Store install it lives inside
+    C:\Program Files\WindowsApps, which the user cannot browse -- so the
+    manuals, the security notes and the setup guides that were written FOR
+    them are the one part of the app they cannot reach. Documentation you
+    cannot open is not documentation.
+
+    Copied rather than linked, for two reasons:
+      * it then survives the app being uninstalled, which is exactly when
+        someone might want to read how to get their data back
+      * a copy can be opened, printed and annotated; package content cannot
+
+    Refreshed when the shipped docs are newer, so an update does not leave a
+    stale manual behind -- but a file the user has EDITED is left alone. Their
+    notes in the margin are worth more than our newer copy of a paragraph.
+
+    tools/ is deliberately NOT published: it is internal build tooling, not
+    user documentation.
+    """
+    def _copy():
+        try:
+            import shutil
+            src = Path(BASE_DIR).parent / "docs"
+            if not src.is_dir():
+                src = Path(__file__).resolve().parent.parent / "docs"
+            if not src.is_dir():
+                return
+            from state_paths import STATE_DIR
+            dst = Path(STATE_DIR) / "docs"
+            dst.mkdir(parents=True, exist_ok=True)
+
+            copied = skipped = 0
+            for s in src.rglob("*"):
+                if not s.is_file():
+                    continue
+                rel = s.relative_to(src)
+                d = dst / rel
+                try:
+                    d.parent.mkdir(parents=True, exist_ok=True)
+                    if d.exists():
+                        # Newer on disk than what we ship = the user changed
+                        # it. Leave it. Same mtime or older = ours is current.
+                        if d.stat().st_mtime > s.stat().st_mtime + 1:
+                            skipped += 1
+                            continue
+                        if d.stat().st_size == s.stat().st_size and \
+                           abs(d.stat().st_mtime - s.stat().st_mtime) <= 1:
+                            continue          # already up to date
+                    shutil.copy2(s, d)
+                    copied += 1
+                except Exception:
+                    continue
+            if copied or skipped:
+                print(f"[docs] published to {dst} "
+                      f"({copied} copied, {skipped} left as user-edited)",
+                      flush=True)
+        except Exception as e:
+            print(f"[docs] could not publish documentation: {e}", flush=True)
+
+    try:
+        # Off-thread: 27 small files is fast, but startup should never wait on
+        # disk it does not control.
+        await _run_in_threadpool(_copy)
+    except Exception:
+        pass
+
+
+@app.on_event("startup")
+async def _bootstrap_model_on_startup():
+    """Preselect a model once the tiers finish loading, without waiting to be
+    asked.
+
+    The tiers take ~40 s to come up on a cold start, so the first few model
+    lists are empty and the bootstrap correctly declines to latch on nothing.
+    Relying on the UI to ask again is fragile: it depends on which panel the
+    user opens and whether they dismissed an unrelated notice.
+
+    Polls until a model appears or the window expires, then stops for good.
+    A retry loop that keeps running after it has succeeded is just noise.
+    """
+    async def _runner():
+        deadline = time.time() + 180
+        while time.time() < deadline:
+            try:
+                if config.get("model_bootstrapped", False):
+                    return                      # already settled
+                models = await model_manager.list_models()
+                if models:
+                    _bootstrap_default_model(models)
+                    if config.get("model_bootstrapped", False):
+                        return
+            except Exception:
+                pass
+            await asyncio.sleep(5)
+    try:
+        asyncio.get_event_loop().create_task(_runner())
+    except Exception as e:
+        print(f"[bootstrap] startup retry unavailable: {e}", flush=True)
+
+
 @app.on_event("startup")
 async def _init_tier_cache_on_startup():
     """Seed the tier ctx cache so subsequent UI refreshes know what
@@ -878,7 +989,7 @@ async def _init_tier_cache_on_startup():
     if config.get("bitchat_autostart", False):
         await tier_lifecycle.ensure_bitchat_gateway()
     else:
-        print("[tier] bitchat: opt-in -- gateway NOT auto-started (no BLE scan at boot)")
+        print("[tier] Argo-Net: opt-in -- gateway NOT auto-started (no BLE scan at boot)")
 
 # --- Frontend cache-busting (2026-06-09) --------------------------------------
 # Electron/browser were serving STALE frontend code: the asset URLs carry a fixed
@@ -1286,7 +1397,16 @@ async def api_voice_status(request: Request):
         raise HTTPException(404)
     if voice_service is None:
         return {"available": False, "error": "voice service not initialised"}
-    return {"available": True, **voice_service.status()}
+    # extras_dir makes the setup hint copy-pasteable. An instruction the user
+    # has to reconstruct a path for is an instruction most people abandon --
+    # and under MSIX the real sage_data is redirected somewhere they would
+    # never guess (see /api/health data_dir).
+    try:
+        from state_paths import data_dir as _dd
+        _extras = str(_dd() / "pylibs")
+    except Exception:
+        _extras = ""
+    return {"available": True, **voice_service.status(), "extras_dir": _extras}
 
 
 @app.post("/api/voice/transcribe")
@@ -1304,6 +1424,119 @@ async def api_voice_transcribe(request: Request, payload: dict | None = None):
     except Exception as e:
         raise HTTPException(503, _safe_detail(e))
     return {"ok": True, "text": text or ""}
+
+
+# --- Optional voice extras: install on request -----------------------------
+# Speech recognition needs openai-whisper (which pulls torch) and sounddevice.
+# Together that is gigabytes, so it is not bundled -- but "not bundled" must not
+# mean "not obtainable". The packages go into sage_data/pylibs, which start.py
+# puts on sys.path: user-owned space, outside the application package, writable
+# in every install shape including a read-only Store install.
+#
+# Explicitly user-initiated. Nothing here runs unless a button is pressed.
+_voice_install = {"state": "idle", "detail": "", "started": 0.0}
+_voice_install_lock = threading.Lock()
+
+_VOICE_PACKAGES = ["openai-whisper", "sounddevice"]
+
+
+def _voice_extras_dir() -> str:
+    try:
+        from state_paths import data_dir
+        d = data_dir() / "pylibs"
+        d.mkdir(parents=True, exist_ok=True)
+        return str(d)
+    except Exception:
+        return ""
+
+
+def _voice_install_worker(target: str) -> None:
+    """pip install --target, reported through _voice_install.
+
+    --target rather than a plain install: the interpreter itself may be inside
+    a read-only package, and even when it is not, keeping optional extras out
+    of the app's own site-packages means uninstalling them is deleting a folder.
+    """
+    import subprocess
+    # --prefer-binary, NOT --only-binary=:all:.
+    #
+    # The stricter flag was a mistake with a plausible-sounding reason. Binary
+    # wheels must match the interpreter's ABI, so forbidding source builds
+    # sounds like the safe choice -- except openai-whisper publishes NO wheel
+    # at all, only an sdist. pip therefore found zero candidates and reported
+    # "from versions: none", which reads like the package does not exist rather
+    # than like a flag excluded it.
+    #
+    # --prefer-binary gets the right thing for both kinds: wheels for torch,
+    # numpy and sounddevice (which do carry compiled extensions and would be
+    # miserable to build), and the sdist for openai-whisper, which is pure
+    # Python and installs from source without a compiler.
+    # Build isolation: use it when it CAN work, disable it when it cannot.
+    #
+    # openai-whisper ships no wheel, so pip has to build it. pip normally
+    # builds in an isolated environment, which requires the `venv` module --
+    # and the embeddable CPython we bundle for the Store build does not include
+    # venv. pip then falls back to the running interpreter's setuptools, which
+    # embeddable also omits, and dies with:
+    #
+    #     pyproject_hooks._impl.BackendUnavailable: Cannot import setuptools
+    #
+    # The portable build runs on the user's system Python, which usually HAS
+    # venv, and there isolation is the better choice -- it keeps build-time
+    # dependencies out of the runtime environment. So detect rather than
+    # hardcode: this same code serves two very different interpreters.
+    #
+    # bundle_python.ps1 now ships setuptools + wheel, which is what makes the
+    # no-isolation path viable at all.
+    import importlib.util as _ilu
+    _has_venv = _ilu.find_spec("venv") is not None
+    cmd = [sys.executable, "-m", "pip", "install", "--target", target,
+           "--no-cache-dir", "--prefer-binary"]
+    if not _has_venv:
+        cmd.append("--no-build-isolation")
+    cmd += _VOICE_PACKAGES
+    try:
+        with _voice_install_lock:
+            _voice_install.update(state="running", detail="downloading...",
+                                  started=time.time())
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+        if proc.returncode == 0:
+            with _voice_install_lock:
+                _voice_install.update(state="done",
+                                      detail="installed - restart VeridianAI")
+        else:
+            tail = (proc.stderr or proc.stdout or "").strip().splitlines()[-3:]
+            with _voice_install_lock:
+                _voice_install.update(state="failed", detail=" ".join(tail)[:300])
+    except Exception as e:
+        with _voice_install_lock:
+            _voice_install.update(state="failed", detail=str(e)[:300])
+
+
+@app.post("/api/voice/install")
+async def api_voice_install(request: Request):
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    with _voice_install_lock:
+        if _voice_install["state"] == "running":
+            return {"state": "running", "detail": _voice_install["detail"]}
+    target = _voice_extras_dir()
+    if not target:
+        return {"state": "failed", "detail": "no writable extras directory"}
+    threading.Thread(target=_voice_install_worker, args=(target,),
+                     daemon=True, name="voice-extras-install").start()
+    return {"state": "running", "detail": "starting", "target": target}
+
+
+@app.get("/api/voice/install")
+async def api_voice_install_status(request: Request):
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    with _voice_install_lock:
+        d = dict(_voice_install)
+    if d["state"] == "running" and d["started"]:
+        d["elapsed"] = int(time.time() - d["started"])
+    return d
 
 
 @app.post("/api/voice/wake")
@@ -2099,9 +2332,115 @@ async def comfyui_enable_directml(request: Request):
     return JSONResponse({"started": True})
 
 
+# --- CRAIID evidence capture ------------------------------------------------
+# Tool results are loop-local: `tool_results_acc` is created fresh per request,
+# injected into a COPY of the message list, and discarded. They never enter
+# chat_history, so at a CRAIID fatigue handoff the Journalist summarises a
+# conversation that has never contained the pages the assistant read. It keeps
+# the URLs it typed and loses everything it fetched -- then reconstructs
+# authors and figures from memory and gets them confidently wrong.
+#
+# This intercepts at the ONE place every tool result passes through, rather
+# than at the ~10 assignment sites. Two reasons, and the second matters more:
+#   1. Ten edits is ten chances to miss one.
+#   2. A tool added later is captured automatically. A list of call sites
+#      would silently stop covering the codebase the day someone adds a tool
+#      and does not know this exists.
+#
+# Recording is best-effort and fully swallowed: the agentic loop must never
+# fail because a ledger write did.
+class _RecordingToolResults(dict):
+    """A dict that also files externally-sourced results into the evidence
+    ledger. Behaves exactly like the plain dict it replaced."""
+
+    __slots__ = ("_ns", "_on")
+
+    def __init__(self, ns=None):
+        super().__init__()
+        self._ns = ns
+        try:
+            self._on = bool(config.get("craiid_evidence_enabled", True))
+        except Exception:
+            self._on = True
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        if not self._on:
+            return
+        try:
+            from craiid import evidence_ledger
+            evidence_ledger.record(str(key), str(value), ns=self._ns)
+        except Exception:
+            pass          # never let bookkeeping break the turn
+
+
+# --- First-boot model selection --------------------------------------------
+# Out of the box the primary slot is empty, so the very first thing a new user
+# meets is a dropdown they must understand before the app will answer anything.
+# For someone evaluating the app in five minutes -- a Store reviewer, or anyone
+# deciding whether this is worth their time -- that reads as "does not work".
+#
+# A ONE-SHOT LATCH, not a fallback. It fires once, when a model first becomes
+# available, and then never again. That distinction matters: "the user cleared
+# the selection deliberately" and "nobody has ever configured this" look
+# identical in the config, and a fallback would silently overrule the first one
+# every time the app started. The latch tells them apart.
+def _preferred_bootstrap_model(models: list) -> str:
+    """Which model to open with, given no prior choice.
+
+    Prefers a locally-served bundled model over anything on Ollama. Not because
+    it is better -- it is smaller and weaker -- but because it is GUARANTEED
+    PRESENT and fast to first token. A first run that answers in seconds with a
+    modest model beats one that stalls on a 9B while the user wonders whether
+    they broke something. They can change it in one click, once they know the
+    app works.
+    """
+    def _pick(pred):
+        for m in models:
+            try:
+                if pred(m):
+                    return m.get("id") or ""
+            except Exception:
+                continue
+        return ""
+
+    return (_pick(lambda m: str(m.get("tier", "")).lower() == "daemon")
+            or _pick(lambda m: str(m.get("backend", "")).startswith("llama_"))
+            or _pick(lambda m: True))
+
+
+def _bootstrap_default_model(models: list) -> None:
+    """Never raises: failing to preselect a model is a worse first run, not a
+    broken one."""
+    try:
+        if config.get("model_bootstrapped", False):
+            return
+        if config.get("default_model"):
+            # Upgrading an install that was configured before this existed.
+            # Latch it without touching their choice.
+            config["model_bootstrapped"] = True
+            save_config(config)
+            return
+        if not models:
+            return          # tiers still loading; the UI polls again shortly
+        pick = _preferred_bootstrap_model(models)
+        if not pick:
+            return
+        config["default_model"] = pick
+        config["model_bootstrapped"] = True
+        save_config(config)
+        print(f"[bootstrap] first run: primary model set to '{pick}'. "
+              f"This happens once; your choice is respected from here on, "
+              f"including choosing none.", flush=True)
+    except Exception as e:
+        print(f"[bootstrap] could not preselect a model: {e}", flush=True)
+
+
 @app.get("/api/models")
 async def api_list_models():
-    return {"models": await model_manager.list_models()}
+    models = await model_manager.list_models()
+    _bootstrap_default_model(models)
+    return {"models": models, "default_model": config.get("default_model")}
 
 
 @app.post("/api/models/load")
@@ -2166,8 +2505,27 @@ async def api_models_refresh(request: Request):
     _owner_gate(request, "models")  # v2.12.8 owner, or "models" grant (semgrep+AC)
     tier_result = await tier_lifecycle.refresh_if_needed(config)
     models = await model_manager.list_models()
+    # The UI's Refresh Models button lands here (settings.js:342), NOT on
+    # GET /api/models. The first-run bootstrap was hooked only to the GET,
+    # whose sole caller is the optional-engines banner -- which returns early
+    # once dismissed. A first-run user could therefore dismiss an unrelated
+    # notice and never get a model preselected at all.
+    _bootstrap_default_model(models)
     return {
         "models": models,
+        # v2.14.1: the SELECTION travels with the model list.
+        #
+        # The bootstrap works -- it logs "[bootstrap] first run: primary model
+        # set to ..." and writes config. But the UI populated its dropdown from
+        # window._appConfig, a snapshot taken by loadSettings() BEFORE this
+        # call, so on a first run it read the pre-bootstrap value (null) and
+        # left the box on "Select Model". Correct backend, stale client.
+        #
+        # Returning it here means the answer arrives with the question, and no
+        # restart is needed for it to take effect. That matters: an OOB Store
+        # reviewer installs, accepts the disclaimer, types hello. They do not
+        # relaunch first.
+        "default_model":   config.get("default_model"),
         "restarted_tiers": tier_result.get("restarted", []),
         "warnings":        tier_result.get("warnings", []),
     }
@@ -2250,6 +2608,10 @@ async def api_burn(payload: dict, request: Request):
         raise HTTPException(400, "burn requires explicit confirmation")
     import shutil as _shutil
     ns = _safe_ns(_session_ns(request))
+    # Recorded BEFORE the wipe: this destroys the chain it would be written to.
+    # The entry survives in whatever backup or replica exists, which is the
+    # only place a destruction record is any use.
+    _audit_api_action(request, "data.burn", {"profile": ns or "(owner)"})
     removed = []
     errors = []
 
@@ -2291,6 +2653,15 @@ async def api_burn(payload: dict, request: Request):
             from config import (MEMORY_DIR, PROCEDURAL_DIR, SNAPSHOT_DIR,
                                 UPLOAD_DIR, LOG_DIR)
             _rm_file(str(Path(BASE_DIR) / "chat_memory.json"))
+            # The CRAIID evidence ledger lives beside chat_memory.json and
+            # holds fetched page content and personal particulars. ZDR is a
+            # promise, not a preference -- "burn everything" has to include it.
+            #
+            # The non-owner branch already covers it (that path wipes the whole
+            # namespace directory); this explicit list did not, so the owner --
+            # the person most likely to have used research tools -- was the one
+            # left with residue.
+            _rm_file(str(Path(BASE_DIR) / ".evidence_ledger.dat"))
             _rm_tree_contents(str(Path(BASE_DIR) / "archives"))
             _rm_tree_contents(str(Path(BASE_DIR) / "downloads"))
             _rm_tree_contents(str(MEMORY_DIR))
@@ -2460,6 +2831,165 @@ async def api_set_browser_config(payload: dict, request: Request):
     return {"persist_cookies": val}
 
 
+# --- API key rotation -------------------------------------------------------
+# The key exists so external tools (Continue.dev, Claude Desktop, curl) can
+# reach this machine. Until now it could only be rotated by running a .bat that
+# the package does not even ship -- so in practice a leaked key could not be
+# replaced from inside the app at all.
+#
+# OWNER-GATED, and this is the part worth being clear about: the keystore is
+# APP-WIDE (auth._keystore_dir -> DATA_DIR), a single .api_keystore.json whose
+# entries carry LABELS, not owners. There is no per-user key. Rotating
+# therefore invalidates every integration on the machine, for every profile --
+# which makes it a system action, not a personal one.
+@app.post("/api/auth/rotate-key")
+async def api_rotate_api_key(payload: dict, request: Request):
+    """Issue a new API key and revoke the current one.
+
+    Requires {"confirm": "ROTATE"}. The confirmation string is not
+    decoration -- it stops a stray click, a replayed request or a curious
+    script from silently breaking the user's editor integration. Same
+    reasoning as Burn's {"confirm": "BURN"}.
+
+    The new token is returned ONCE. It is stored hashed, so if it is lost the
+    only remedy is to rotate again -- which is the same property that makes a
+    leaked keystore useless to whoever finds it.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    if payload.get("confirm") != "ROTATE":
+        raise HTTPException(400, "rotation requires explicit confirmation")
+
+    # v2.14: rotation is now PER PROFILE, so it is no longer owner-only.
+    # It had to be owner-gated while one shared key served everyone --
+    # rotating it broke every integration on the machine for every profile,
+    # which made a personal security action into a system-wide outage. With
+    # tokens bound to profiles, a user who suspects their own key leaked can
+    # replace it without permission from anyone and without disturbing
+    # anybody else. That is the whole point of binding them.
+    ns = _session_ns(request)          # None => the owner's own tokens
+    is_owner = _is_owner(request)
+    if ns is None and not is_owner:
+        # Signed out, or an unbound legacy token: no profile to rotate FOR.
+        # Refusing beats guessing -- a wrong guess here revokes someone
+        # else's working key.
+        return _cloak_not_found()
+
+    try:
+        import auth
+        token = auth.rotate_token_for(ns)
+        who = "owner" if ns is None else ("profile " + str(ns))
+        print("[AUTH] API key rotated by explicit user action for %s; "
+              "previous token(s) for that profile revoked." % who, flush=True)
+        _audit_api_action(request, "auth.rotate_key", {"profile": ns or "(owner)"})
+        return {
+            "ok": True,
+            "token": token,
+            "shown_once": True,
+            "scope": "owner" if ns is None else "profile",
+            "note": ("Copy this now. It is stored hashed and cannot be shown "
+                     "again. Any tool using your previous key must be updated."
+                     + ("" if ns is None else
+                        " Only your own key changed -- other profiles are "
+                        "unaffected.")),
+        }
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "rotate")}
+
+
+# --- Data export ------------------------------------------------------------
+# Everything is Fernet-encrypted at rest, which is right for a memory tool and
+# meant there was no way to get your own data OUT. Printing produced a blob;
+# copying the folder produced files nothing else opens. For an app whose premise
+# is that the data belongs to the user, "yours, but only in here" is not
+# ownership.
+#
+# Localhost-only and namespace-scoped, like the rest of the data surface.
+@app.get("/api/export/inventory")
+async def api_export_inventory(request: Request):
+    """What can be exported, with file counts and sizes.
+
+    The checklist shows this BEFORE the user chooses. Uploads and snapshots can
+    run to gigabytes, and someone selecting everything should be doing so
+    knowingly rather than discovering it as a progress bar that never moves.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import data_export
+        inv = data_export.inventory(_safe_ns(_session_ns(request)))
+        inv["can_portable"] = _session_ns(request) is None
+        return inv
+    except Exception as e:
+        return {"sections": [], "total_bytes": 0, "error": _safe_detail(e, "export")}
+
+
+@app.post("/api/export")
+async def api_export_build(payload: dict, request: Request):
+    """Build an export zip. Explicit user action only -- never automatic."""
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import data_export
+        ns = _safe_ns(_session_ns(request))
+        _audit_api_action(request, "data.export", {
+            "profile": ns or "(owner)",
+            "mode": payload.get("mode"),
+            "sections": payload.get("sections"),
+        })
+        result = await _run_in_threadpool(
+            data_export.build,
+            ns,
+            str(payload.get("mode", "readable")),
+            payload.get("sections") or None,
+            ns is None,          # is_owner: the Fernet key is APP-WIDE, so only
+                                 # the owner may take it (see data_export docs)
+        )
+        return result
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "export")}
+
+
+# --- Optional-engine notice (Ollama) ---------------------------------------
+# The Oracle tier runs on Ollama, which is NOT bundled: it is a separate
+# third-party install and a Store package may not fetch one at runtime.
+#
+# Before this, a Store user simply had no Oracle tier and was never told why or
+# that it was even an option -- the app degraded silently, which is the one
+# failure mode this codebase keeps paying for. first_run.js does ask on the
+# portable build, but it returns immediately for Store builds (correctly: every
+# other thing it does is a runtime download).
+#
+# So the notice lives here instead of in the installer path, is driven by
+# OBSERVED tier reachability rather than by build type, and only ever offers a
+# LINK. Opening a browser is not an install, so this is Store-legal and the
+# same code serves both builds -- one path, not two.
+@app.get("/api/notices/ollama")
+async def api_get_ollama_notice():
+    """Whether to offer the optional-engine notice. Dismissal is permanent."""
+    try:
+        import ui_prefs
+        return {"dismissed": bool(ui_prefs.get("ollama_notice_dismissed", False)),
+                "url": "https://ollama.com/download"}
+    except Exception:
+        # A missing prefs store must not make the notice nag forever.
+        return {"dismissed": True, "url": "https://ollama.com/download"}
+
+
+@app.post("/api/notices/ollama")
+async def api_dismiss_ollama_notice(payload: dict):
+    """Dismiss (or restore) the notice. Deliberately NOT owner-gated: this is a
+    per-install UI preference with no security surface, and gating it would
+    leave a non-owner staring at a banner they cannot silence."""
+    try:
+        import ui_prefs
+        val = bool(payload.get("dismissed", True))
+        ui_prefs.set("ollama_notice_dismissed", val)
+        return {"dismissed": val}
+    except Exception as e:
+        return {"dismissed": True, "error": _safe_detail(e, "notice")}
+
+
 @app.on_event("startup")
 async def _apply_devmode_on_startup():
     """Apply saved Developer Mode state so the log consoles start hidden
@@ -2539,13 +3069,40 @@ async def api_delete_tavily(request: Request):
 
 
 # --- Archive Routes -----------------------------------------------------------
+def _api_principal(request: Request):
+    """The bound API token behind this request, if it came in over the API.
+
+    auth.require_scope stashes this on request.state after verifying the
+    bearer token. Absent for UI requests, which authenticate by cookie.
+    """
+    try:
+        return getattr(request.state, "api_principal", None)
+    except Exception:
+        return None
+
+
 def _session_ns(request: Request):
     """Per-user namespace for the signed-in NON-owner, so each user sees only their
     own conversations/archives. None for the owner or when multi-user is off ->
-    the existing shared store, unchanged."""
+    the existing shared store, unchanged.
+
+    v2.14: an API request now resolves to the namespace its TOKEN belongs to.
+    Previously a bearer token carried no identity, so this found no cookie and
+    returned None -- meaning every API caller landed in the owner's store
+    regardless of whose key it was. That was the access-control half of the
+    attribution gap, and it is closed here rather than at each of the ~40 call
+    sites, because a containment rule enforced in one place is a rule you can
+    actually verify."""
     try:
         if not config.get("multiuser_enabled", False):
             return None
+
+        # The token wins over the cookie: a request carrying a bound API token
+        # IS that profile acting, whatever session cookie happens to ride along.
+        pr = _api_principal(request)
+        if pr is not None:
+            return _safe_ns(pr.get("owner_ns")) if pr.get("owner_ns") else None
+
         import session as _session
         s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
         if s and not s.get("is_owner"):
@@ -2562,11 +3119,81 @@ def _is_owner(request: Request) -> bool:
     try:
         if not config.get("multiuser_enabled", False):
             return True
+
+        # v2.14: a token bound to a non-owner profile is NOT the owner, no
+        # matter what cookie accompanies it. An UNBOUND legacy token is not
+        # the owner either -- it predates ownership, so its holder is unknown,
+        # and "unknown" must not open owner-gated surfaces. Fail closed: the
+        # migration binds those on the next boot anyway.
+        pr = _api_principal(request)
+        if pr is not None:
+            if not pr.get("bound"):
+                return False
+            return pr.get("owner_ns") is None
+
         import session as _session
         s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
         return bool(s and s.get("is_owner"))
     except Exception:
         return False
+
+
+def _audit_api_action(request: Request, action: str, detail: dict = None):
+    """Record an action in the hash-chained log, attributed to whoever took it.
+
+    The gap this closes: UI actions were attributable because a cookie session
+    names the user, but API actions arrived as "someone holding the default
+    key" and the record could say WHAT happened and not WHO did it. An audit
+    control that cannot answer who-did-what is not an audit control.
+
+    Both paths are attributed here, not just the API one. A record where half
+    the entries name an actor and half do not is harder to reason about than
+    one that always does, and the session path costs nothing to include.
+
+    Deliberately best-effort: an audit write must never be the reason a user's
+    action fails. The chain is tamper-EVIDENT, not tamper-proof, and a gap in
+    it is visible as a gap -- which is the honest failure mode.
+    """
+    try:
+        who, kind = None, None
+        pr = _api_principal(request)
+        if pr is not None:
+            kind = "api"
+            who = {
+                "via":          "api_token",
+                "token_label":  pr.get("label"),
+                "token_prefix": pr.get("prefix"),
+                "profile":      pr.get("owner_ns") or "(owner)",
+                "bound":        bool(pr.get("bound")),
+            }
+        else:
+            kind = "ui"
+            username, ns = None, None
+            try:
+                import session as _session
+                _s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
+                if _s:
+                    username = _s.get("username")
+                    ns = _s.get("ns") if not _s.get("is_owner") else None
+            except Exception:
+                pass
+            who = {
+                "via":      "session",
+                "username": username,
+                "profile":  ns or "(owner)",
+            }
+
+        meta = {"kind": "action", "channel": kind, "action": action,
+                "actor": who}
+        if detail:
+            meta["detail"] = detail
+
+        memory_logger.log(
+            "[AUDIT] %s via %s as %s" % (action, who.get("via"),
+                                         who.get("profile")),
+            role="audit", token_prob=None, metadata=meta)
+    except Exception as _audit_err:
+        print(f"[AUDIT] could not record {action}: {_audit_err}", flush=True)
 
 
 def _owner_gate(request: Request, cap: str = None):
@@ -2672,7 +3299,10 @@ def _downloads_dir_for_ns(ns):
 
 def _uploads_dir_for_ns(ns):
     base = sage_engine.user_data_dir(ns)
-    d = (base / "uploads") if base else (BASE_DIR / "uploads")
+    # v2.13: shared fallback follows STATE_DIR, not the (possibly read-only)
+    # install dir. Namespaced uploads under base/ are already sage_data-rooted.
+    from state_paths import UPLOADS_DIR as _UP
+    d = (base / "uploads") if base else _UP
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -2972,7 +3602,18 @@ async def api_get_memory(request: Request):
 
 @app.post("/api/chat-memory")
 async def api_save_memory(payload: dict, request: Request):
-    sage_engine.save_chat_memory(payload.get("history", []), _session_ns(request))
+    _hist = payload.get("history", [])
+    _ns = _session_ns(request)
+    sage_engine.save_chat_memory(_hist, _ns)
+    # An empty history is the UI's Clear Chat (chat.js:1605). The thread is
+    # being reset, so its evidence goes too -- keeping sources from a
+    # conversation the user just erased would be its own kind of leak.
+    if not _hist:
+        try:
+            from craiid import evidence_ledger as _el
+            _el.clear(_ns)
+        except Exception:
+            pass
     return {"success": True}
 
 
@@ -3639,9 +4280,47 @@ async def api_save_to_downloads(payload: dict, request: Request):
 # --- Health Check ---
 @app.get("/api/health")
 async def health(request: Request):
-    # Lock to localhost - external callers get nothing
-    if request.client.host not in ("127.0.0.1", "::1"):
-        raise HTTPException(status_code=404)
+    # Lock to localhost - external callers get nothing.
+    #
+    # This one cannot rely on _lan_exposure_guard's default-deny: /api/health
+    # is explicitly ON the peer surface (_REMOTE_OK_PREFIXES), so the guard
+    # waves remote callers straight through and the check has to happen HERE.
+    # Every other endpoint is cloaked pre-routing without anyone remembering
+    # to; this is the exception, which is exactly why it uses the shared
+    # helpers rather than its own idea of "local". The previous inline test
+    # missed ::ffff:127.0.0.1 -- stricter than _is_local_client, so it leaked
+    # nothing, but it would 404 a legitimate loopback caller arriving over a
+    # v4-mapped v6 socket and read as "backend down".
+    if not _is_local_client(request):
+        return _cloak_not_found()
+
+    # v2.13: this used to fall off the end of the function and return None,
+    # which FastAPI serialised as `null`. Electron's readiness poll only checks
+    # the status code, so 200/null read as healthy -- and during the Store
+    # debugging this was the first endpoint anyone hit and the last one that
+    # told them anything. A health check that cannot distinguish "up" from
+    # "up and correctly configured" is decoration.
+    #
+    # data_dir is reported RESOLVED, and that matters more than it looks.
+    # An MSIX package silently redirects writes to %APPDATA% into its own
+    # LocalCache, so the path Electron COMPUTES is not the path the backend
+    # WRITES to. Two plausible sage_data directories, one of them a phantom,
+    # and the live one holds the API key, config.json and the memory chain.
+    # This is the process that actually owns the files, so this is the answer
+    # that counts -- and the backup set has to follow it, not the phantom.
+    try:
+        from state_paths import data_dir as _data_dir, STATE_DIR as _state_dir
+        _dd, _sd = str(_data_dir()), str(_state_dir)
+    except Exception as _pe:
+        _dd = _sd = f"(unresolved: {_pe})"
+
+    return {
+        "status":      "ok",
+        "version":     app.version,
+        "data_dir":    _dd,
+        "state_dir":   _sd,
+        "store_build": os.environ.get("VERIDIAN_STORE_BUILD") == "1",
+    }
 
 
 # --- Per-user auth (Phase 2): accounts, login, sessions ---------------------
@@ -4024,6 +4703,10 @@ async def api_auth_users_create(request: Request, payload: dict):
     if payload.get("restricted"):
         import access_policy as _ap
         _ap.set_policy(r["username"], {"socials_allowed": False})
+    _audit_api_action(request, "users.create", {
+        "username": r.get("username"),
+        "restricted": bool(payload.get("restricted")),
+    })
     return {"ok": True, "users": _users.list_users()}
 
 
@@ -4039,6 +4722,21 @@ async def api_auth_users_delete(request: Request, payload: dict):
     if not r.get("success"):
         raise HTTPException(400, r.get("error", "could not delete user"))
     _session.destroy_user_sessions(target)   # kick any active sessions for that account
+    # v2.14: and revoke their API tokens. Killing the sessions but leaving the
+    # bearer tokens live would delete the account from the UI only -- the
+    # holder could keep reaching the API as a profile that no longer exists.
+    revoked = 0
+    try:
+        if r.get("ns"):
+            import auth as _auth
+            revoked = _auth.revoke_tokens_for(r["ns"])
+    except Exception as _rev_err:
+        print(f"[USERS] token revoke failed for {target}: {_rev_err}")
+    _audit_api_action(request, "users.delete", {
+        "username": target,
+        "tokens_revoked": revoked,
+        "wipe_requested": bool(payload.get("wipe_data")),
+    })
     wiped = False
     if payload.get("wipe_data") and r.get("ns"):
         # Erase the user's isolated data dir. Guarded: only ever removes a path
@@ -5394,7 +6092,8 @@ async def ws_chat(websocket: WebSocket):
                 # ======================================================
                 if agentic and (web_ok or code_ok):
                     max_steps = 27
-                    tool_results_acc = {}
+                    # Same dict, plus evidence capture. See _RecordingToolResults.
+                    tool_results_acc = _RecordingToolResults(_ws_ns)
 
                     # v2.1.4: auto-capture of repeated tool failures.
                     # Tracks (action_type, content_key) → attempt count

@@ -32,9 +32,10 @@ from time_manager import TimeManager  # noqa: E402
 
 # Resolve sage_data via config so the script works on any install.
 import config  # noqa: E402
+from state_paths import CHAT_MEMORY_FILE as _STATE_CHAT  # v2.13
 PROJECT_ROOT = BACKEND.parent
 PROCEDURAL_FILE = config.PROCEDURAL_DIR / "procedural.json"
-CHAT_MEMORY_FILE = PROJECT_ROOT / "chat_memory.json"
+CHAT_MEMORY_FILE = _STATE_CHAT   # v2.13: STATE_DIR-aware
 ARCHIVES_DIR = PROJECT_ROOT / "archives"
 CHAIN_DIGEST_FILE = config.MEMORY_DIR / "chain_digest.json"
 

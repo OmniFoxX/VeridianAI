@@ -341,7 +341,19 @@ async function reloadModels() {
   try {
     const resp = await fetch("/api/models/refresh", { method: "POST" });
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    const { models, restarted_tiers, warnings } = await resp.json();
+    const { models, restarted_tiers, warnings, default_model } =
+      await resp.json();
+
+    // v2.14.1: the server may have just PICKED a model for us (first run).
+    // window._appConfig was captured by loadSettings() before this request,
+    // so it cannot know that yet -- reading it here is what left a first-run
+    // user staring at "Select Model" while the backend had already chosen.
+    // Take the server's answer and update the snapshot so the rest of the
+    // page agrees with it.
+    if (typeof default_model === "string" && default_model) {
+      window._appConfig = window._appConfig || {};
+      window._appConfig.default_model = default_model;
+    }
 
     // Populate dropdowns
     sel.innerHTML = '<option value="">— Select Model —</option>';
@@ -706,7 +718,7 @@ async function loadTavilyStatus() {
     const el = document.getElementById("tavily-status");
     if (el) {
       if (data.has_key) {
-        el.innerHTML = `<span class="key-status">✓ Key set</span> <span style="font-size:11px;color:var(--text-faint)">${data.masked}</span>`;
+        el.innerHTML = `<span class="key-status">✓ Key set</span> <span style="font-size:11px;color:var(--text-muted)">${data.masked}</span>`;
       } else {
         el.innerHTML = '<span class="key-status none">No key set</span>';
       }

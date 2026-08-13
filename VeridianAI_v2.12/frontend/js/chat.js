@@ -396,7 +396,7 @@ function handleToolResult(data) {
     if (bubble) {
       const resultTag = document.createElement("div");
       resultTag.style.cssText =
-        "font-size:11px;color:var(--text-faint);padding:2px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px";
+        "font-size:11px;color:var(--text-muted);padding:2px 0 6px;border-bottom:1px solid var(--border);margin-bottom:6px";
       const preview = (data.output || "").substring(0, 150);
       resultTag.textContent = preview ? `✓ ${preview}…` : "✓ Done";
       bubble.appendChild(resultTag);
@@ -649,7 +649,7 @@ function handleWarmContextRestored(data) {
   const css =
     "margin-top:8px;padding:8px 10px;border-radius:6px;" +
     "background:rgba(58,166,201,0.10);border:1px solid rgba(58,166,201,0.45);" +
-    "color:var(--text-faint);font-size:12px;line-height:1.5";
+    "color:var(--text-muted);font-size:12px;line-height:1.5";
   if (streamEl) {
     const bubble = streamEl.querySelector(".message-bubble");
     if (bubble) {
@@ -681,7 +681,7 @@ function handleAiqNudgeReceived(data) {
   const css =
     "margin-top:8px;padding:8px 10px;border-radius:6px;" +
     "background:rgba(46,204,113,0.12);border:1px solid rgba(46,204,113,0.5);" +
-    "color:var(--text-faint);font-size:12px;line-height:1.5;" +
+    "color:var(--text-muted);font-size:12px;line-height:1.5;" +
     "box-shadow:0 0 0 2px rgba(46,204,113,0.15)";
   if (streamEl) {
     const bubble = streamEl.querySelector(".message-bubble");
@@ -716,7 +716,7 @@ function handleStallDetected(data) {
       banner.style.cssText =
         "margin-top:8px;padding:8px 10px;border-radius:6px;" +
         "background:rgba(255,180,0,0.12);border:1px solid rgba(255,180,0,0.45);" +
-        "color:var(--text-faint);font-size:12px;line-height:1.5";
+        "color:var(--text-muted);font-size:12px;line-height:1.5";
       banner.innerHTML =
         `<strong style="color:#e0a020">⚠ Stall detected — run aborted</strong><br>` +
         `${escapeHtml(reason)}<br>` +
@@ -1067,7 +1067,26 @@ function setStreamingState(active) {
 
 function setStatus(msg) {
   const el = document.getElementById("status-text");
-  if (el) el.textContent = msg;
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("is-error");
+}
+
+/* Same channel, but styled so a failure cannot be mistaken for chatter.
+ *
+ * Everything used to go through setStatus() into 11px italic --text-faint text
+ * (~1.7:1 on parchment). A backend 503 with a perfectly clear reason landed
+ * there and was unreadable, so a failing toggle read as a checkbox undoing
+ * itself for no reason. An error nobody can see is the same as no error at all,
+ * except it also costs the user their trust in the control.
+ *
+ * role=alert so it is announced rather than silently repainted. */
+function setStatusError(msg) {
+  const el = document.getElementById("status-text");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.add("is-error");
+  try { el.setAttribute("role", "alert"); } catch (e) {}
 }
 
 /* --- Voice: push-to-talk + opt-in wake word + offline speak-back ---------
@@ -1080,10 +1099,7 @@ let _voiceBusy = false;
 async function voiceRefreshStatus() {
   const el = document.getElementById("voice-status");
   const hint = document.getElementById("voice-setup-hint");
-  if (hint) {
-    hint.style.display = "none";
-    hint.textContent = "";
-  }
+  if (hint) hint.style.display = "none";
   try {
     const d = await (await fetch("/api/voice/status")).json();
     if (!d || !d.available) {
@@ -1091,7 +1107,8 @@ async function voiceRefreshStatus() {
       return;
     }
     const c = d.capabilities || {};
-    if (c.can_transcribe && c.can_record) {
+    const ready = !!(c.can_transcribe && c.can_record);
+    if (ready) {
       const eng = c.whisper
         ? c.cuda
           ? "Whisper (GPU)"
@@ -1099,35 +1116,131 @@ async function voiceRefreshStatus() {
         : "PocketSphinx";
       if (el)
         el.textContent =
-          "ready · " +
+          "ready \u00b7 " +
           eng +
           (d.vad && d.vad.enabled
             ? d.vad.webrtcvad
-              ? " · VAD"
-              : " · gate"
+              ? " \u00b7 VAD"
+              : " \u00b7 gate"
             : "") +
-          (d.wake_active ? " · wake on" : "");
+          (d.wake_active ? " \u00b7 wake on" : "");
     } else {
-      const need = [];
-      if (!c.can_transcribe) need.push("openai-whisper");
-      if (!c.can_record) need.push("sounddevice");
-      if (el) el.textContent = "needs setup — install, then restart VeridianAI";
-      if (hint) {
-        // Show the EXACT interpreter running the app so deps land in the right place.
-        const py = d.python ? '"' + d.python + '"' : "py";
-        hint.textContent =
-          "Install into the interpreter running VeridianAI, then restart:\n" +
-          py +
-          " -m pip install " +
-          (need.join(" ") || "openai-whisper sounddevice") +
-          (d.python_version
-            ? "\n(running Python " + d.python_version + ")"
-            : "");
-        hint.style.display = "block";
-      }
+      // One line and one button. Everything else -- what gets installed, where
+      // it lands, how to remove it -- belongs in the README. The version this
+      // replaces printed a full pip invocation with an absolute path into the
+      // settings panel: long enough to give the tab a horizontal scrollbar,
+      // and still not an explanation of what the user was agreeing to.
+      // Name the missing piece. The verbose hint this replaced did say which
+      // package was absent, and dropping that detail in the name of brevity
+      // turned a precise message into a wrong one: "not installed" reads as
+      // "nothing is here" when in fact one of two components is missing and
+      // the other is working fine. One word is enough; zero words is not.
+      const missing = [];
+      if (!c.can_transcribe) missing.push("speech recognition");
+      if (!c.can_record) missing.push("microphone input");
+      if (el) el.textContent = missing.length ? missing.join(" + ") + " missing"
+                                             : "not installed";
+      if (hint) hint.style.display = "flex";
+      voiceRefreshInstallButton();
     }
+    // Never leave a control live that cannot succeed. The wake-word toggle
+    // used to stay enabled with no engine behind it: ticking it produced a 503
+    // whose message rendered in near-invisible text, so the checkbox looked
+    // like it silently undid itself and the user blamed the button.
+    _voiceReflectCapability(ready);
   } catch (e) {
     if (el) el.textContent = "unavailable";
+  }
+}
+
+/* Reflect install state on the one button. Poll only while work is happening;
+   an idle app should not be talking to itself. */
+let _voiceInstallPoll = null;
+
+async function voiceRefreshInstallButton() {
+  const btn = document.getElementById("voice-install-btn");
+  const note = document.getElementById("voice-extras-note");
+  if (!btn) return;
+  let d = {};
+  try {
+    d = await (await fetch("/api/voice/install")).json();
+  } catch (e) {
+    return;
+  }
+  if (d.state === "running") {
+    btn.disabled = true;
+    btn.textContent = "Downloading\u2026";
+    if (note)
+      note.textContent =
+        "Downloading voice services" +
+        (d.elapsed ? " \u00b7 " + d.elapsed + "s" : "") +
+        " \u2014 this is a large download.";
+    if (!_voiceInstallPoll)
+      _voiceInstallPoll = setInterval(voiceRefreshInstallButton, 3000);
+    return;
+  }
+  if (_voiceInstallPoll) {
+    clearInterval(_voiceInstallPoll);
+    _voiceInstallPoll = null;
+  }
+  if (d.state === "done") {
+    btn.disabled = true;
+    btn.textContent = "Installed";
+    if (note) note.textContent = "Restart VeridianAI to enable voice service.";
+    return;
+  }
+  btn.disabled = false;
+  btn.textContent = "Download Voice Services";
+  if (note) {
+    note.textContent =
+      d.state === "failed"
+        ? "Download failed. See the README for manual setup."
+        : "Voice service requires external files and is opt-in.";
+  }
+  if (d.state === "failed" && d.detail) setStatusError("Voice: " + d.detail);
+}
+
+async function voiceInstallExtras() {
+  // Opt-in, and it says what it costs before it starts. A multi-gigabyte
+  // download that begins on a single click is a nasty surprise on a metered
+  // or slow connection.
+  const ok = await oracleConfirm(
+    "Download voice services?\n\n" +
+      "\u2022 Adds speech recognition (openai-whisper, sounddevice).\n" +
+      "\u2022 Several gigabytes; the download may take a while.\n" +
+      "\u2022 Installs into your VeridianAI data folder, not the app itself.\n" +
+      "\u2022 Restart afterwards to enable it.",
+    { title: "Voice services", okLabel: "Download" },
+  );
+  if (!ok) return;
+  try {
+    await fetch("/api/voice/install", { method: "POST" });
+  } catch (e) {
+    setStatusError("Voice: " + (e && e.message ? e.message : e));
+    return;
+  }
+  voiceRefreshInstallButton();
+}
+
+function _voiceReflectCapability(ok) {
+  const why =
+    "Speech recognition is not available in this build - see the voice " +
+    "section in Settings for what it needs.";
+  const wake = document.getElementById("toggle-voice-wake");
+  if (wake) {
+    wake.disabled = !ok;
+    if (!ok) {
+      wake.checked = false;
+      wake.setAttribute("aria-disabled", "true");
+      wake.setAttribute("data-tip", why);
+    } else {
+      wake.removeAttribute("aria-disabled");
+    }
+  }
+  const mic = document.getElementById("voice-mic-btn");
+  if (mic) {
+    mic.disabled = !ok;
+    if (!ok) mic.setAttribute("data-tip", why);
   }
 }
 
@@ -1159,10 +1272,10 @@ async function voicePushToTalk() {
     } else if (r.ok && d.ok) {
       setStatus("Didn't catch anything — try again");
     } else {
-      setStatus("Voice: " + (d.detail || d.error || "HTTP " + r.status));
+      setStatusError("Voice: " + (d.detail || d.error || "HTTP " + r.status));
     }
   } catch (e) {
-    setStatus("Voice error: " + (e && e.message ? e.message : e));
+    setStatusError("Voice error: " + (e && e.message ? e.message : e));
   } finally {
     _voiceBusy = false;
     if (btn) {
@@ -1195,7 +1308,7 @@ async function voiceToggleWake(on) {
     });
     const d = await r.json().catch(() => ({}));
     if (!r.ok || d.ok === false) {
-      setStatus("Wake word: " + (d.detail || d.error || "HTTP " + r.status));
+      setStatusError("Wake word: " + (d.detail || d.error || "HTTP " + r.status));
       if (t) t.checked = false;
       return;
     }
@@ -1208,7 +1321,7 @@ async function voiceToggleWake(on) {
       if (t) t.checked = false;
     }
   } catch (e) {
-    setStatus("Wake word error: " + (e && e.message ? e.message : e));
+    setStatusError("Wake word error: " + (e && e.message ? e.message : e));
     if (t) t.checked = false;
   }
 }
@@ -1785,7 +1898,7 @@ async function showLoadArchive() {
           <div class="loading-placeholder">Loading archives…</div>
         </div>
         <div id="archive-preview-box" style="display:none;margin-top:12px;padding:10px;background:var(--surface-3);border-radius:var(--radius-sm);border:1px solid var(--border)">
-          <div style="font-size:11px;color:var(--text-faint);margin-bottom:6px">Preview:</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Preview:</div>
           <div id="archive-preview-content" style="font-size:12px;color:var(--text-muted);max-height:120px;overflow-y:auto"></div>
         </div>
         <div class="modal-actions">

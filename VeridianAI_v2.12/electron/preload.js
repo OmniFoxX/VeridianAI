@@ -41,7 +41,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // explicitly listed here. This prevents a compromised renderer
   // from firing arbitrary IPC events into main.js.
   send: (channel, data) => {
-    const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick'];
+    // 'open-data-folder' carries NO payload, deliberately. main.js resolves
+    // the path itself, so the renderer can ask to open the user's own data
+    // folder and cannot ask to open anything else. A channel that accepted a
+    // path would be a file-explorer-anywhere primitive handed to web content.
+    const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick',
+                     'open-data-folder'];
     if (allowed.includes(channel)) {
       ipcRenderer.send(channel, data);
     }

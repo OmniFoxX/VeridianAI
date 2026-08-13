@@ -82,8 +82,22 @@ _BACKEND_DIR: Path = next(
 _ROOT_DIR:    Path = _BACKEND_DIR.parent
 _CRAIID_DIR:  Path = _BACKEND_DIR / "craiid"
 
+def _state_chat_memory() -> Path:
+    """v2.13: chat_memory.json moves to STATE_DIR when the install dir is
+    read-only (MSIX). Imported lazily + defensively because craiid/ is not
+    always on sys.path with backend/."""
+    try:
+        import sys as _s
+        if str(_BACKEND_DIR) not in _s.path:
+            _s.path.insert(0, str(_BACKEND_DIR))
+        from state_paths import CHAT_MEMORY_FILE
+        return CHAT_MEMORY_FILE
+    except Exception:
+        return _ROOT_DIR / "chat_memory.json"
+
+
 # Input sources
-_CHAT_MEMORY_FILE: Path = _ROOT_DIR / "chat_memory.json"
+_CHAT_MEMORY_FILE: Path = _state_chat_memory()   # v2.13: STATE_DIR-aware
 _ARCHIVES_DIR:     Path = _ROOT_DIR / "archives"
 _VLTS_DIR:         Path = _CRAIID_DIR / "vlts_archives"   # Phase 2
 
