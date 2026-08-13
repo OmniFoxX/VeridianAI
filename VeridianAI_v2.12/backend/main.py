@@ -1518,10 +1518,8 @@ def _voice_install_worker(target: str) -> None:
         # Keep the exception CLASS, which is the part with diagnostic value,
         # and send the rest to the server log behind a reference.
         with _voice_install_lock:
-            _voice_install.update(
-                state="failed",
-                detail="%s - %s" % (type(e).__name__,
-                                    _safe_detail(e, "voice install")))
+            _voice_install.update(state="failed",
+                                  detail=_safe_detail(e, "voice install"))
 
 
 @app.post("/api/voice/install")
@@ -4323,7 +4321,13 @@ async def health(request: Request):
         from state_paths import data_dir as _data_dir, STATE_DIR as _state_dir
         _dd, _sd = str(_data_dir()), str(_state_dir)
     except Exception as _pe:
-        _dd = _sd = f"(unresolved: {_pe})"
+        # /api/health is the one endpoint reachable before anything else works,
+        # so it is also the one most likely to be hit while something is broken
+        # -- which is exactly when an exception's text is most likely to carry
+        # an absolute path or an internal detail. The real error goes to the
+        # server log; the response says only that it could not be resolved.
+        _dd = _sd = "(unresolved - see server log %s)" % _safe_detail(
+            _pe, "health path resolution")
 
     return {
         "status":      "ok",

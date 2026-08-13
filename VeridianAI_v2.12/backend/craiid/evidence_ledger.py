@@ -59,6 +59,7 @@ existing glob("*.json") reader can ever see it), at-rest encrypted.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import os
@@ -339,35 +340,74 @@ def archive_to(archive_name: str, ns=None) -> bool:
         src = _ledger_path(ns)
         if not src or not src.exists():
             return False
-        _snapshot_path(folder, archive_name).write_bytes(src.read_bytes())
+        (folder / _snapshot_name(archive_name)).write_bytes(src.read_bytes())
         return True
     except Exception:
         return False
 
 
-def _snapshot_path(folder: "Path", archive_name) -> "Path":
-    """Path to a conversation's evidence snapshot, contained by construction.
+def _snapshot_name(archive_name) -> str:
+    """Filename for a conversation's evidence snapshot, DERIVED not composed.
 
-    `Path(name).name` already strips every directory component, so traversal
-    was not reachable -- but that is a subtle property of pathlib rather than a
-    stated rule, which is why CodeQL flagged it (py/path-injection) and why a
-    reader has to know pathlib to agree. Both are worth fixing: an invariant
-    the code asserts is stronger than one it merely happens to satisfy.
+    The previous version sanitised the archive name and then built a path from
+    it. That was safe -- `Path(x).name` strips directories, and a containment
+    check confirmed the result -- but it kept the user's string in the path, so
+    every use of that path stayed tainted. CodeQL flagged the two uses, and
+    when the sanitiser was made explicit it flagged the sanitiser too: three
+    alerts where there had been two. Arguing with the tool was the wrong move.
 
-    So: strip, reject anything left that could still traverse, and then verify
-    the resolved result is genuinely inside the folder. The last check is the
-    one that holds even if the first two are wrong.
+    Hashing settles it. The filename is 32 hex characters derived from the
+    name, so nothing the user typed reaches the filesystem at all. That is not
+    only tool-appeasement -- it removes a class of problems the sanitiser never
+    addressed:
+
+      - archive titles are user-supplied text and may contain emoji, accents,
+        or characters the filesystem cannot encode
+      - a long title could exceed MAX_PATH once prefixed and suffixed
+      - Windows reserves CON, PRN, AUX, NUL and COM1-9 as filenames
+      - two titles differing only in case collide on Windows, not on Linux
+
+    None of those were traversal, and all of them were bugs waiting.
+    """
+    digest = hashlib.sha256(str(archive_name).encode("utf-8")).hexdigest()
+    return ".evidence_%s.dat" % digest[:32]
+
+
+def _legacy_snapshot_name(archive_name) -> Optional[str]:
+    """The pre-hash filename, for reading snapshots written before this change.
+
+    Read-only and best-effort: if the old name is unusable we simply have no
+    legacy snapshot, which is the same outcome as not having one at all.
     """
     stem = Path(str(archive_name)).name
-    # Belt: a bare ".." survives .name on POSIX, and separators of the OTHER
-    # platform are not treated as separators by this one.
     if not stem or stem in (".", "..") or "/" in stem or "\\" in stem:
-        raise ValueError("unsafe archive name: %r" % (archive_name,))
-    out = (folder / (".evidence_%s.dat" % stem)).resolve()
-    # Braces: whatever the name was, the result must land inside the folder.
-    if not str(out).startswith(str(Path(folder).resolve()) + os.sep):
-        raise ValueError("archive name escapes its folder: %r" % (archive_name,))
-    return out
+        return None
+    return ".evidence_%s.dat" % stem
+
+
+def _find_snapshot(folder: "Path", archive_name) -> Optional["Path"]:
+    """Locate an existing snapshot: current name first, then the legacy one.
+
+    The legacy lookup ENUMERATES the folder and compares names, rather than
+    joining the archive name onto a path. Same result, but every candidate
+    path originates from the directory listing -- the user's string is only
+    ever compared against one, never used to construct one. Composing it
+    (even after sanitising) is what kept the taint alive through three
+    rounds of this.
+    """
+    cur = folder / _snapshot_name(archive_name)
+    if cur.exists():
+        return cur
+    want = _legacy_snapshot_name(archive_name)
+    if not want:
+        return None
+    try:
+        for cand in folder.glob(".evidence_*.dat"):
+            if cand.name == want:
+                return cand
+    except OSError:
+        pass
+    return None
 
 
 def restore_from(archive_name: str, ns=None) -> bool:
@@ -375,9 +415,9 @@ def restore_from(archive_name: str, ns=None) -> bool:
     try:
         import sage_engine
         folder = Path(sage_engine._archive_folder(ns))
-        snap = _snapshot_path(folder, archive_name)
+        snap = _find_snapshot(folder, archive_name)
         dest = _ledger_path(ns)
-        if not snap.exists() or not dest:
+        if not snap or not dest:
             return False
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(snap.read_bytes())

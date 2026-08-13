@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.14.2",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "cdadb2cb5bb4432e9944e67581b2a846",
-    "built_utc": "2026-08-13T01:52:14.312933+00:00",
+    "build_id": "bcd7cbd955324677b5c2d781489f990f",
+    "built_utc": "2026-08-13T02:32:13.792490+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -77,7 +77,7 @@
       "backend/craiid/craiid_author_compression_integration.py": "f98ffaa5063155f7eec8d175e9689cc5764a3d9e9011685147d799a0cdcf1c70",
       "backend/craiid/craiid_compression_core_v3.py": "5a7d5a61a25593c21135ce59826836477e104dde29106ecc39869ddabdf4bb96",
       "backend/craiid/craiid_compression_validation_v4.py": "509f09080878f10a1af9e2ee5e6b1f61b22815664a52fb30c1a9cced399d7105",
-      "backend/craiid/evidence_ledger.py": "7bf6addfd0e2a68a0991f46640293560c2da2f72b6a92a21ff9c217066aed36d",
+      "backend/craiid/evidence_ledger.py": "1ce761899f21ba3f10068e064a1de3859959032e66c8861e840df594a1ebc9c6",
       "backend/craiid/fatigue_injector.py": "71e5cf1ff30707a90971d3d10916c22c422a2c52df0b264e88272a01ce6851e7",
       "backend/craiid/integrity_check.py": "b53ebe63cb997c7fe16ce60c6a86c63e412106f4261b95b1c0e2bed237eed8a6",
       "backend/craiid/journalist.py": "54a39c517d0ad58d2266955c7d85caa8a66070647a8db64865a170de40cc49e4",
@@ -105,7 +105,7 @@
       "backend/ipc_bridge.py": "2a82afbe8098ca13749724ca6ff6aa7b2e08cd5b18b2928a4f0647ed1b8cde31",
       "backend/ipc_monitor.py": "4062abdbb61858bc455340e3d9f6547795c498fffc9910aca41c423782e38502",
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
-      "backend/main.py": "e34ee3f9387ffa50b524056c1250deeec10d0cff382c1ccf2b152d73b2217136",
+      "backend/main.py": "ba8fba069f4a7bc7d9654f23cd8b8a10be3adadc786e8c6d43e19644679a75c0",
       "backend/mcp_handlers.py": "886d21465015351c1d846055535e0f25feaf64030c66ffae1ab048b2d547fd6e",
       "backend/mcp_server.py": "8264c2ae141a52127e6b0af7dba71ffe409b934209a6602eb0ff5453fccce448",
       "backend/memory_logger_surprise.py": "d431d17d793ae6f201b66164187bc2154c71480f98cfbb3ca7075bb24b6693e5",
@@ -237,5 +237,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "YYmF7AnVo6GKei7NMGJz7g3AR0L3fdZv74FEFPyT78H5uhDcmevP1AwvqrU+Nudz7IQaFlTASt1ELduH2XyIAg=="
+  "signature_b64": "SAa1KteNS+HzKUQa/bgquckIaSTTh/s05Az0oSYOoenV3FcGW2+7xaQlf2fBvPwpeoWN0LlamvEdBZQLrXL5Bw=="
 }
