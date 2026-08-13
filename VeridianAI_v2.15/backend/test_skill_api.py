@@ -70,11 +70,22 @@ def test_promote_flow_gated():
     assert pr["ok"] is False and "network.outbound" in pr["verdict"]["needs_approval"]
 
 
-def test_browse_bad_peer_graceful():
+def test_browse_private_address_rejected():
+    """A loopback/private peer URL is refused OUTRIGHT by the SSRF address policy --
+    it is not a "graceful ok:false" any more. This test asserted the old contract and
+    had been failing red since the July hardening; corrected in v2.15 rather than
+    relaxed, because a soft failure here is exactly the shape an SSRF probe wants."""
     app, s = _fresh_app()
     c = TestClient(app)
     r = c.post("/api/skills/browse", json={"base_url": "http://127.0.0.1:9/"})
-    assert r.status_code == 200 and r.json()["ok"] is False
+    assert r.status_code == 400 and "not allowed" in r.json()["detail"]
+
+
+def test_browse_bad_scheme_rejected():
+    app, s = _fresh_app()
+    c = TestClient(app)
+    r = c.post("/api/skills/browse", json={"base_url": "file:///etc/passwd"})
+    assert r.status_code == 400
 
 
 def test_inprocess_peer_roundtrip():

@@ -322,7 +322,20 @@ def verify(root: Path = None, manifest_path: Path = None, pub_path: Path = None)
         else:
             res["status"] = "official"
     except Exception as e:
-        res["status"] = "error"; res["error"] = f"{type(e).__name__}: {e}"
+        # v2.15 (CodeQL py/stack-trace-exposure #156): this is returned verbatim
+        # by GET /api/build/integrity, and a verification failure here is mostly
+        # filesystem-shaped -- the message names manifest paths and install
+        # layout. Full text to the server log; the caller gets the type and a
+        # correlation ref, which is enough to match the two up.
+        import logging as _logging, uuid as _uuid
+        _ref = _uuid.uuid4().hex[:8]
+        try:
+            _logging.getLogger("veridian").warning(
+                "[build_integrity %s] verify failed: %r", _ref, e)
+        except Exception:
+            pass
+        res["status"] = "error"
+        res["error"] = "%s (ref %s)" % (type(e).__name__, _ref)
     return res
 
 

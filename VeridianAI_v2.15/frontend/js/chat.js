@@ -826,8 +826,17 @@ async function generateImageManual() {
         content: prompt,
         ts: new Date().toISOString(),
       });
+      // v2.15: constrain the mimetype here too. handleImageGenerated (~:746)
+      // has always allowlisted it against raster image types; this call site
+      // interpolated it raw. Same value, same purpose, two call sites, one
+      // guarded -- and appendImageResult's scheme check was the only thing
+      // standing behind it. That backstop holds today, which is exactly why
+      // this went unnoticed; if anyone ever loosens that regex, this line
+      // becomes live. One rule, applied at both call sites.
+      const _imt = /^image\/(png|jpe?g|gif|webp|bmp)$/i.test(result.mimetype || "")
+        ? result.mimetype : "image/png";
       appendImageResult(
-        `data:${result.mimetype || "image/png"};base64,${result.data}`,
+        `data:${_imt};base64,${result.data}`,
         prompt,
       );
       if (input) {

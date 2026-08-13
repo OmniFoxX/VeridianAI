@@ -883,4 +883,16 @@ def handle_jsonrpc(request: Dict[str, Any], ns=None) -> Dict[str, Any] | None:
             return _ok({})
         return _err(-32601, f"Method not found: {method}")
     except Exception as e:
-        return _err(-32603, f"Internal error: {type(e).__name__}: {e}")
+        # v2.15 (CodeQL py/stack-trace-exposure #157/#158): /mcp/v1/jsonrpc is a
+        # TOKEN-authenticated surface, so this was the widest of the four -- an
+        # exception raised deep in a tool could carry namespaces, key prefixes
+        # and absolute paths straight back to an API caller. Full text to the
+        # server log, correlation ref to the client.
+        import logging as _logging, uuid as _uuid
+        _ref = _uuid.uuid4().hex[:8]
+        try:
+            _logging.getLogger("veridian").warning(
+                "[mcp %s] %s failed: %r", _ref, method, e)
+        except Exception:
+            pass
+        return _err(-32603, "Internal error (ref %s)" % _ref)

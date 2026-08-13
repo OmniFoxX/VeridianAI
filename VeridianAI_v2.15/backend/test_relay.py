@@ -67,6 +67,55 @@ def test_source_no_request_returns_false():
     assert asyncio.run(run()) is False
 
 
+def test_pinned_base_keeps_host_and_encodes_path():
+    """v2.15 SSRF fix. Two properties in one round-trip:
+
+    1. The PIN -- RelayClient dials the base it was handed (in production an IP
+       literal that net_guard.pinned_base already validated) while the Host header
+       still carries the original name, so the peer's virtual hosting keeps working
+       and the name is never re-resolved between check and request.
+    2. The QUOTE -- request_id arrives from the RELAY, not from us. A hostile relay
+       that answers with a slash/query/fragment must not be able to steer the path.
+    """
+    seen = {}
+
+    async def echo_app(scope, receive, send):
+        seen["path"] = scope["path"]
+        seen["raw_path"] = scope.get("raw_path") or b""
+        seen["query_string"] = scope.get("query_string") or b""
+        seen["host"] = dict((k.decode(), v.decode())
+                            for k, v in scope["headers"]).get("host")
+        await send({"type": "http.response.start", "status": 200,
+                    "headers": [(b"content-type", b"application/json")]})
+        await send({"type": "http.response.body",
+                    "body": b'{"ready": true, "response": {"pinned": true}}'})
+
+    async def run():
+        transport = httpx.ASGITransport(app=echo_app)
+        async with httpx.AsyncClient(transport=transport,
+                                     base_url="http://198.51.100.7:80") as client:
+            cli = RelayClient("http://198.51.100.7:80",
+                              host_header="relay.example.com")
+            return await cli.await_response(client, "abc/def?x=1",
+                                            timeout=2, poll_interval=0.05)
+
+    res = asyncio.run(run())
+    assert res["ok"] and res["response"] == {"pinned": True}
+    assert seen["host"] == "relay.example.com", seen["host"]
+    assert b"%2F" in seen["raw_path"] and b"%3F" in seen["raw_path"], seen["raw_path"]
+    assert seen["query_string"] == b"", seen["query_string"]
+
+
+def test_unpinned_caller_unchanged():
+    """The source-loop and LAN relays pass a bare URL with no pin -- no Host override,
+    so behaviour is byte-identical to pre-v2.15."""
+    cli = RelayClient("http://relay/")
+    assert cli.relay == "http://relay"
+    assert cli.host_header is None and cli.sni_hostname is None
+    src = RelaySource("http://relay/", "peerA", None)
+    assert src.relay == "http://relay" and src.host_header is None
+
+
 if __name__ == "__main__":
     import traceback
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

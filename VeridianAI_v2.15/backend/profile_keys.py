@@ -39,6 +39,7 @@ from pathlib import Path
 from typing import Optional
 
 import keywrap
+import ns_guard
 
 __all__ = [
     "keywrap_path", "has_profile_key", "profile_key_info",
@@ -61,16 +62,30 @@ def _data_dir() -> Optional[Path]:
 
 
 def _user_dir(ns) -> Optional[Path]:
-    """sage_data/users/<ns>, or None for the owner / shared store."""
+    """sage_data/users/<ns>, or None for the owner / shared store.
+
+    FAILS CLOSED on a bad namespace. Until v2.15 the fallback below read
+    `base / "users" / str(ns)` -- building a key path from an UNVALIDATED
+    namespace whenever importing sage_engine happened to raise. Every
+    keywrap.py path flows through this function, so that one `except` branch
+    was the reason six keywrap alerts were real rather than noise. The
+    namespace is now validated FIRST, so both branches are safe and the
+    resilience the fallback was there to provide is kept.
+    """
     if not ns:
         return None
+    ns = ns_guard.safe_ns(ns)          # raises InvalidNamespace; never scrubs
     try:
         import sage_engine
         d = sage_engine.user_data_dir(ns)
-        return Path(d) if d else None
+        if d:
+            return Path(d)
+    except ns_guard.InvalidNamespace:
+        raise                           # never downgrade a containment failure
     except Exception:
-        base = _data_dir()
-        return (base / "users" / str(ns)) if base else None
+        pass                            # sage_engine unavailable -> fall back
+    base = _data_dir()
+    return (base / "users" / ns) if base else None
 
 
 def keywrap_path(ns) -> Optional[Path]:

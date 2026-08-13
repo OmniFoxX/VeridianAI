@@ -94,8 +94,13 @@ ok("her export built", al.get("ok") is True, al)
 with zipfile.ZipFile(al["path"]) as z:
     names = z.namelist()
     blob = b"".join(z.read(n) for n in names if not n.endswith("/"))
-for secret in (b"OWNER CHAIN ENTRY", b"private procedure", b"OWNER LAB RESULT"):
-    ok("absent from her export: %s" % secret.decode(), secret not in blob)
+# These are CANARY MARKERS planted in the owner's data, not credentials -- the
+# assertion is that they are ABSENT from another profile's export. CodeQL raised
+# py/clear-text-logging-sensitive-data (#152) on the old name `secret` reaching
+# the print in ok(). Renamed rather than dismissed: nothing sensitive was ever
+# logged, and the alert was pointing at a genuinely misleading variable name.
+for marker in (b"OWNER CHAIN ENTRY", b"private procedure", b"OWNER LAB RESULT"):
+    ok("absent from her export: %s" % marker.decode(), marker not in blob)
 ok("no nested export zip", not [n for n in names
                                 if n.startswith("downloads/") and n.endswith(".zip")],
    names)

@@ -27,10 +27,9 @@ from pathlib import Path
 import httpx
 from fastapi import APIRouter, HTTPException, Request
 
-import ipaddress
-import socket
-from urllib.parse import urlparse, quote
+from urllib.parse import quote
 
+import net_guard
 import skill_keys
 from wan_guard import AbuseGuard
 
@@ -111,48 +110,40 @@ def _safe_detail(exc, where=""):
     return "internal error (ref %s)" % _ref
 
 
-def _resolve_validated(url: str):
-    """Parse + validate a URL and return (scheme, host, port, ip, netloc).
+def _url_error(exc):
+    """Translate net_guard's transport-agnostic UrlNotAllowed into the HTTP 400 this
+    router has always returned. Message strings are unchanged."""
+    return HTTPException(400, str(exc))
 
-    Validates EVERY address `host` resolves to (getaddrinfo, not just gethostbyname's
-    first record -- closes the multi-A-record bypass) and returns the exact IP so the
-    caller can PIN it: the connection then uses the same address we validated, which
-    closes the DNS-rebinding TOCTOU (the name can't re-resolve to an internal IP
-    between the check and the request). Raises on any private/loopback/etc. address
-    or a resolution failure."""
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(400, "url must be http or https")
-    host = parsed.hostname
-    if not host:
-        raise HTTPException(400, "url missing host")
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+def _resolve_validated(url: str):
+    """Thin wrapper over net_guard.resolve_validated, which is now the SINGLE
+    implementation of the outbound address policy -- see net_guard for why it moved
+    there (relay_client cannot import FastAPI). Returns (scheme, host, port, ip,
+    netloc); the ip is the pin."""
     try:
-        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
-        raise HTTPException(400, "could not resolve host")
-    ip_pin = None
-    for info in infos:
-        ip_s = info[4][0]
-        try:
-            ip = ipaddress.ip_address(ip_s)
-        except ValueError:
-            continue
-        # is_unspecified blocks 0.0.0.0 / ::; is_multicast blocks 224.0.0.0/4.
-        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
-                or ip.is_multicast or ip.is_unspecified):
-            raise HTTPException(400, "target address not allowed")
-        if ip_pin is None:
-            ip_pin = ip_s
-    if ip_pin is None:
-        raise HTTPException(400, "could not resolve host")
-    return parsed.scheme, host, port, ip_pin, parsed.netloc
+        return net_guard.resolve_validated(url)
+    except net_guard.UrlNotAllowed as e:
+        raise _url_error(e)
 
 
 def _validate_external_url(url: str) -> None:
-    """SSRF guard for the relay path (which routes through RelayClient rather than the
-    pinned GET below). Validates scheme + every resolved address."""
+    """Scheme + address verdict with no pin. Anything that goes on to make the
+    request should use _pinned_relay or _pinned_get instead, so the address that was
+    validated is the address actually dialled."""
     _resolve_validated(url)
+
+
+def _pinned_relay(url: str):
+    """Validate a relay URL and return (base_url, host_header, sni_hostname) to hand
+    to RelayClient/RelaySource. base_url addresses the validated IP literal, so httpx
+    never re-resolves the name -- the same DNS-rebinding guarantee _pinned_get gives
+    the direct-peer path. Before v2.15 the relay path validated and then threw the
+    pin away, which is what CodeQL py/full-ssrf was pointing at."""
+    try:
+        return net_guard.pinned_base(url)
+    except net_guard.UrlNotAllowed as e:
+        raise _url_error(e)
 
 
 async def _pinned_get(client, base_url: str, path: str):
@@ -161,13 +152,11 @@ async def _pinned_get(client, base_url: str, path: str):
     hostname. httpx is handed an IP literal, so it never re-resolves the name -- the
     address we validated is exactly the address we talk to (DNS-rebinding safe).
     Verified against httpx 0.28 for http and https (self-signed SNI round-trip)."""
-    scheme, host, port, ip, netloc = _resolve_validated(base_url)
-    ip_host = ("[%s]" % ip) if ":" in ip else ip   # bracket IPv6 literals
-    pinned_url = "%s://%s:%d%s" % (scheme, ip_host, port, path)
-    req = client.build_request("GET", pinned_url, headers={"Host": netloc})
-    if scheme == "https":
+    pinned, netloc, sni = _pinned_relay(base_url)
+    req = client.build_request("GET", pinned + path, headers={"Host": netloc})
+    if sni:
         ext = dict(req.extensions)
-        ext["sni_hostname"] = host     # TLS SNI + cert check use the hostname, not the IP
+        ext["sni_hostname"] = sni   # TLS SNI + cert check use the hostname, not the IP
         req.extensions = ext
     return await client.send(req)
 
@@ -261,9 +250,12 @@ async def skills_browse(payload: dict, request: Request):
     relay = (payload.get("relay") or "").strip().rstrip("/")
     target = (payload.get("target") or "").strip()
     if relay and target:
-        _validate_external_url(relay)
+        # Validate AND pin -- RelayClient dials the address that was checked, not a
+        # fresh resolution of the name (CodeQL py/full-ssrf, relay path).
+        _base, _host, _sni = _pinned_relay(relay)
         from relay_client import RelayClient
-        res = await RelayClient(relay).request(target, {"path": "catalog"}, timeout=30.0)
+        res = await RelayClient(_base, _host, _sni).request(
+            target, {"path": "catalog"}, timeout=30.0)
         if not res.get("ok"):
             return {"ok": False, "reason": res.get("reason", "relay failed"), "items": []}
         data = res.get("response") or {}
@@ -296,9 +288,11 @@ async def skills_fetch(payload: dict, request: Request):
     relay = (payload.get("relay") or "").strip().rstrip("/")
     target = (payload.get("target") or "").strip()
     if relay and target and hid:
-        _validate_external_url(relay)
+        # Validate AND pin -- see /browse above.
+        _base, _host, _sni = _pinned_relay(relay)
         from relay_client import RelayClient
-        res = await RelayClient(relay).request(target, {"path": "object", "id": hid}, timeout=30.0)
+        res = await RelayClient(_base, _host, _sni).request(
+            target, {"path": "object", "id": hid}, timeout=30.0)
         if not res.get("ok"):
             return {"ok": False, "reason": res.get("reason", "relay failed"), "verdict": None}
         obj = res.get("response") or {}

@@ -14,6 +14,7 @@ v2.1.1 additions:
 
 import json, os, re, subprocess, sys, tempfile, threading, time, urllib.request
 from net_guard import safe_urlopen
+import ns_guard
 import base64, mimetypes
 from datetime import datetime
 from pathlib import Path
@@ -330,16 +331,24 @@ VIBE_PROMPTS = {
 # The owner / single-user keeps the existing shared paths, so their data is
 # unchanged. ns is None for owner / multi-user-off; a string for a real user.
 def user_data_dir(ns):
-    """Per-user data root sage_data/users/<ns>, or None for owner/shared."""
+    """Per-user data root sage_data/users/<ns>, or None for owner/shared.
+
+    SECURITY: the namespace rule is ENFORCED here, at the point the path is
+    built. ns_guard.safe_ns raises InvalidNamespace on anything outside
+    ^[A-Za-z0-9_-]{1,64}$, so no '../', drive letter, UNC prefix or absolute
+    path can enter through this segment.
+
+    v2.15: this used to be a COMMENT asserting that callers had already applied
+    main.py's _safe_ns. That was true of the routes and false of at least one
+    other caller (profile_keys._user_dir had an unvalidated fallback), which is
+    what CodeQL's py/path-injection alerts were pointing at. A check in another
+    file is not a guarantee here. See docs/security/CODEQL_TRIAGE_PLAN_2026-08-13.md.
+    """
     if not ns:
         return None
+    ns = ns_guard.safe_ns(ns)      # validate BEFORE anything else can fail
     from config import DATA_DIR
-    # SECURITY: callers pass `ns` only after _safe_ns() has constrained it to
-    # _NS_RE (^[A-Za-z0-9_-]{1,64}$); it cannot contain a slash, backslash, dot or
-    # colon, so no '../' or absolute-path traversal is possible via the namespace
-    # segment below. (Archive routes now apply _safe_ns() like the upload/download
-    # routes already did.)
-    return DATA_DIR / "users" / str(ns)
+    return DATA_DIR / "users" / ns
 
 
 def user_prompt_file(ns):

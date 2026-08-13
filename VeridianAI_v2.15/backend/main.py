@@ -889,7 +889,11 @@ except Exception as _e:
 # --- Tier lifecycle startup (Phase 1D Step 4) -----------------------------
 @app.on_event("startup")
 async def _publish_docs_to_data_dir():
-    """Copy the shipped documentation into sage_data so the user can read it.
+    # r-string: the docstring contains a literal Windows path. "\P" is not a
+    # valid escape -- Python raises SyntaxWarning today and is scheduled to make
+    # it a SyntaxError, which would take main.py out entirely on a future
+    # interpreter. Nothing here needs escape interpretation.
+    r"""Copy the shipped documentation into sage_data so the user can read it.
 
     docs/ is PACKAGE content. On a Store install it lives inside
     C:\Program Files\WindowsApps, which the user cannot browse -- so the
@@ -1356,9 +1360,43 @@ async def favicon():
     return JSONResponse({"ok": True})
 
 
+def _scrub_probe_errors(obj):
+    """Strip probe exception text from a hardware report, in place-ish.
+
+    hw_utils sets info["error"] = str(e) when a GPU/NPU probe fails (three
+    sites). That text is genuinely useful -- it is what identified the missing
+    MSVC runtime and the Vulkan questions -- and it can also name driver paths
+    and local filesystem layout. So it is kept for the owner and removed for
+    everyone else, rather than deleted outright or shown to everyone."""
+    if isinstance(obj, dict):
+        return {k: ("(probe error hidden; see server log)" if k == "error"
+                    and isinstance(v, str) else _scrub_probe_errors(v))
+                for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_scrub_probe_errors(x) for x in obj]
+    return obj
+
+
 @app.get("/api/hardware")
-async def api_hardware():
-    return detect_hardware()
+async def api_hardware(request: Request):
+    """Hardware probe report.
+
+    v2.15 (CodeQL py/stack-trace-exposure #153): hw_utils puts raw probe
+    exception text into info["error"], and this returned it to any caller. The
+    OWNER keeps the full text -- diagnosing a silent tier failure is exactly
+    what it is for -- while other profiles get the report with those strings
+    removed. The panel still loads for everyone; only the exception text is
+    owner-only."""
+    _hw = detect_hardware()
+    if _is_owner(request):
+        return _hw
+    try:
+        import logging as _logging
+        _logging.getLogger("veridian").info(
+            "[hw] probe errors withheld from a non-owner caller")
+    except Exception:
+        pass
+    return _scrub_probe_errors(_hw)
 
 
 # --- IP access control (denylist / lockdown allowlist) -- localhost-only mgmt --
@@ -2567,18 +2605,25 @@ async def api_get_config(request: Request):
 # a single containment primitive reused by the burn / settings / upload /
 # image-write / account-wipe paths below. HIPAA §164.312(a)(1) access control.
 import re as _re_pt
-_NS_RE = _re_pt.compile(r"^[A-Za-z0-9_-]{1,64}$")
+import ns_guard
+_NS_RE = ns_guard.NS_RE          # ONE regex, defined in ns_guard
 
 
 def _safe_ns(ns):
-    """Return ns unchanged if it is a valid namespace token, else raise.
-    None (owner / single-user) passes through untouched."""
-    if ns is None:
-        return None
-    ns = str(ns)
-    if not _NS_RE.match(ns):
+    """Return ns unchanged if it is a valid namespace token, else HTTP 400.
+    None (owner / single-user) passes through untouched.
+
+    v2.15: the RULE moved to ns_guard and is now enforced where paths are
+    actually built (sage_engine.user_data_dir, profile_keys._user_dir). This
+    wrapper only translates InvalidNamespace into the HTTP error this API has
+    always returned, so every route below behaves exactly as before. It used to
+    be the ONLY enforcement point, with everything downstream relying on a
+    comment saying it had been applied -- which had drifted twice by v2.15.
+    See docs/security/CODEQL_TRIAGE_PLAN_2026-08-13.md."""
+    try:
+        return ns_guard.safe_ns(ns)
+    except ns_guard.InvalidNamespace:
         raise HTTPException(400, "invalid namespace")
-    return ns
 
 
 def _within(child, parent) -> bool:
@@ -2722,7 +2767,13 @@ async def api_burn(payload: dict, request: Request):
             except Exception:
                 pass
     except Exception as e:
-        errors.append(str(e))
+        # v2.15 (CodeQL py/stack-trace-exposure #155): this returned raw
+        # exception text to the caller, and burn walks per-profile directories
+        # -- so the message could name paths belonging to other profiles. The
+        # per-file appends above are already scoped to a path the caller owns;
+        # this outer one is not, so it goes through _safe_detail (full text to
+        # the server log, correlation ref to the client).
+        errors.append(_safe_detail(e, "burn"))
 
     print(f"[BURN] ns={ns or 'owner'} removed={removed} errors={len(errors)}")
     return {"ok": not errors, "scope": ("user:" + str(ns)) if ns else "owner",
@@ -4739,8 +4790,11 @@ async def api_sn_pair_test(payload: dict):
 # --- Downloads (Sage output files) -------------------------------------------
 @app.get("/api/downloads")
 async def api_list_downloads(request: Request):
+    # v2.15: the last of the five downloads routes to resolve a namespace. All
+    # five now go through _safe_ns; previously only the save route did, which is
+    # the kind of split that reads as deliberate long after it stopped being so.
     files = []
-    _dir = _downloads_dir_for_ns(_session_ns(request))
+    _dir = _downloads_dir_for_ns(_safe_ns(_session_ns(request)))
     if _dir.exists():
         for f in sorted(_dir.iterdir(), reverse=True):
             if f.is_file():
@@ -4754,14 +4808,19 @@ async def api_list_downloads(request: Request):
 
 @app.get("/api/downloads/{filename}")
 async def api_download_file(filename: str, request: Request, dl: bool = False):
+    # v2.15: resolve AND validate the namespace ONCE, before it builds a path.
+    # This route used to call _session_ns twice -- unguarded for the path, then
+    # guarded for the decryption key one line later. Two resolutions of the same
+    # thing is how the guarded and unguarded versions drift apart.
+    ns = _safe_ns(_session_ns(request))
     name = Path(filename).name              # basename only -> no cross-user traversal
-    path = _downloads_dir_for_ns(_session_ns(request)) / name
+    path = _downloads_dir_for_ns(ns) / name
     if not path.exists():
         raise HTTPException(404, "File not found")
     import atrest as _atrest
     import mimetypes as _mt
-    # Same namespace the path was built from, one line above.
-    _data = _atrest.read_file_auto(str(path), ns=_safe_ns(_session_ns(request)))
+    # Same namespace object the path was built from.
+    _data = _atrest.read_file_auto(str(path), ns=ns)
     _media = _mt.guess_type(name)[0] or "application/octet-stream"
     _disp = "attachment" if dl else "inline"      # ?dl=1 -> 'Save a copy' (plaintext download)
     return Response(content=_data, media_type=_media,
@@ -4770,7 +4829,11 @@ async def api_download_file(filename: str, request: Request, dl: bool = False):
 
 @app.delete("/api/downloads/{filename}")
 async def api_delete_download(filename: str, request: Request):
-    path = _downloads_dir_for_ns(_session_ns(request)) / Path(filename).name
+    # v2.15: was the only downloads route building a path from an UNVALIDATED
+    # namespace and then deleting what it found. The write route forty lines
+    # below always applied _safe_ns; this one did not.
+    ns = _safe_ns(_session_ns(request))
+    path = _downloads_dir_for_ns(ns) / Path(filename).name
     if path.exists():
         path.unlink()
         return {"success": True}
@@ -4779,8 +4842,12 @@ async def api_delete_download(filename: str, request: Request):
 
 @app.delete("/api/downloads")
 async def api_clear_downloads(request: Request):
+    # v2.15: guarded for the same reason as the single-file delete above. CodeQL
+    # did not flag this one -- it resolves a directory rather than a file path --
+    # but it unlinks EVERY file in whatever directory the namespace resolves to,
+    # so it is the route where an unvalidated ns would cost the most.
     count = 0
-    _dir = _downloads_dir_for_ns(_session_ns(request))
+    _dir = _downloads_dir_for_ns(_safe_ns(_session_ns(request)))
     if _dir.exists():
         for f in _dir.iterdir():
             if f.is_file():
@@ -6060,18 +6127,65 @@ def _bb_final_buf(transcript, who):
     return ""
 
 
+# A gate test is what makes a Build Battle submission verifiable instead of
+# judged on prose: the finalists' code is actually RUN against it. So this has to
+# keep working for its real use -- naming one of the project's own test files.
+# What it must not do is accept a PATH.
+_BB_GATE_SUBDIRS = ("", "gates")
+
+
+def _bb_gate_roots():
+    """Directories a gate test may live in: the backend dir and its gates/."""
+    import os as _os
+    _f = globals().get("__file__")
+    if not _f:
+        return []
+    _base = Path(_os.path.dirname(_os.path.abspath(_f)))
+    return [(_base / s) if s else _base for s in _BB_GATE_SUBDIRS]
+
+
 def _bb_resolve_gate_path(p):
-    """Resolve a gate-test path: as-is, or relative to the backend dir."""
+    """Resolve a gate-test NAME to a file inside the backend directory.
+
+    v2.15 SECURITY FIX -- CodeQL py/path-injection #145/#146, and considerably
+    worse than that label suggests. This function used to try the supplied value
+    AS-IS first, so an ABSOLUTE path was accepted. `GATE: <path>` is an ordinary
+    line of chat-message text (:6337) on a /ws/chat connection that requires only
+    *a* session, not the owner's -- and the file it named was read (:6272) and
+    then written into a temp dir and EXECUTED as a Python subprocess
+    (`_bb_run_gate`), with stdout and stderr returned to the caller. That is a
+    read-and-execute primitive available to any authenticated profile, and it
+    goes around per-profile encryption rather than through it, because the
+    subprocess runs as the backend and can read every profile's keys. It also
+    composed with `api_save_to_downloads`, whose filename scrub permits `.py`:
+    write a file, then name it. Even non-Python targets leaked, since a
+    SyntaxError traceback quotes the offending source line into stderr.
+
+    Now: a NAME, not a path. No separators, no `..`, not absolute, must match
+    `test_*.py`, must resolve inside the backend directory (or its `gates/`
+    subdirectory), confirmed with `_within` so a symlink cannot lead out.
+    Returns None otherwise -- callers already handle "gate test not found".
+
+    Behaviour change: absolute paths no longer resolve. That capability IS the
+    vulnerability; naming a project test file, which is the documented use, is
+    unaffected.
+    """
     import os as _os
     if not p:
         return None
-    cands = [p]
-    _f = globals().get("__file__")
-    if _f:
-        cands.append(_os.path.join(_os.path.dirname(_os.path.abspath(_f)), p))
-    for cand in cands:
-        if _os.path.isfile(cand):
-            return cand
+    name = str(p).strip().strip('"').strip("'")
+    if (not name or "/" in name or "\\" in name or ".." in name
+            or ":" in name or "\x00" in name or _os.path.isabs(name)):
+        return None
+    if not (name.startswith("test_") and name.endswith(".py")):
+        return None
+    for root in _bb_gate_roots():
+        cand = root / name
+        try:
+            if cand.is_file() and _within(cand, root):
+                return str(cand)
+        except OSError:
+            continue
     return None
 
 
@@ -6101,6 +6215,16 @@ async def _bb_run_gate(candidate_code, test_content, module_name, test_filename,
         origin="build_battle")
     if not _c.allowed:
         return False, "[CUSTOMS] " + (_c.correction or "candidate rejected")
+    # v2.15: the gate TEST content also enters the subprocess, and until now
+    # nothing inspected it. The comment above was written when the candidate was
+    # the only way in; the test file became a second entrance and did not get a
+    # door. Contained by _bb_resolve_gate_path as well -- this is defence in
+    # depth, not the primary control.
+    _ct = customs_daemon.inspect(
+        "code", {"code": str(test_content or ""), "timeout": int(timeout)},
+        origin="build_battle_gate")
+    if not _ct.allowed:
+        return False, "[CUSTOMS] gate test rejected: " + (_ct.correction or "")
     cb = _b64.b64encode((candidate_code or "").encode("utf-8")).decode("ascii")
     tb = _b64.b64encode((test_content or "").encode("utf-8")).decode("ascii")
     driver = (
@@ -6442,6 +6566,7 @@ async def ws_chat(websocket: WebSocket):
     # Per-user namespace for this connection (non-owner -> isolated store; owner /
     # single-user -> shared). Used for the agent's memory recall + conversation save.
     _ws_ns = None
+    _ws_ns_invalid = False
     try:
         if _preauth:
             # From the verified bearer token. None here means the OWNER'S
@@ -6452,8 +6577,23 @@ async def ws_chat(websocket: WebSocket):
             _wss = _session.get_session(websocket.cookies.get(_AUTH_COOKIE))
             if _wss and not _wss.get("is_owner"):
                 _ws_ns = _wss.get("ns")
+        # v2.15 containment fix. Validate HERE, and treat a malformed namespace as
+        # FATAL rather than letting it fall into the `except` below -- because in
+        # this function `_ws_ns = None` does not mean "no namespace", it means
+        # "the OWNER'S shared store". Downgrading a bad namespace to None would
+        # therefore hand a non-owner connection the owner's data, silently, along
+        # the recovery path. ns_guard is used directly rather than _safe_ns: an
+        # HTTPException has no meaning on an accepted WebSocket.
+        # CodeQL did not flag this one; it is the same class as the downloads
+        # routes and the failure mode is worse.
+        _ws_ns = ns_guard.safe_ns(_ws_ns)
+    except ns_guard.InvalidNamespace:
+        _ws_ns_invalid = True
     except Exception:
         _ws_ns = None
+    if _ws_ns_invalid:
+        await websocket.close(code=1008)   # policy violation; never fall back
+        return
     # Bind this connection's namespace for the browser plugin so each user's
     # Sage drives her own persistent profile (per-user isolation).
     try:
