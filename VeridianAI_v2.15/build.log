@@ -1,0 +1,111 @@
+npm notice run veridianai@2.14.2 build-store-test
+npm notice run node verify_store_build.js && npm run genmanifest && electron-builder --win appx -c.appx.publisher="CN=46BD9046-C73A-4C1C-81C3-6702E8ABC061, OID.2.25.311729368913984317654407730594956997722=1" -c.artifactName=VeridianAI-TEST-UNSIGNED.appx
+  [ok] bundled model(s): nomic_embed_text_v2_moe.gguf, qwen2.5_coder_1.5b_instruct.gguf
+  [ok] bundled Chromium present (675 MB)
+  [ok] Store build preflight passed (16 extraFiles entries, bundled Python present).
+npm notice run veridianai@2.14.2 genmanifest
+npm notice run py ../backend/build_integrity.py genmanifest
+{
+  "status": "written",
+  "manifest": "E:\\MentiSphereSoftwareStaging\\STAGING\\WinStoreApp\\VeridianAI_v2.14.1\\build_manifest.json",
+  "files": 199,
+  "sensitive": 23,
+  "fingerprint": "a6275345d8a615469f687dcb404d87cf"
+}
+  ΓÇó electron-builder  version=26.15.3 os=10.0.26200
+  ΓÇó loaded configuration  file=package.json ("build" field)
+  ΓÇó executing @electron/rebuild  electronVersion=42.7.1 arch=x64 buildFromSource=false workspaceRoot=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\electron projectDir=./ appDir=./
+  ΓÇó installing native dependencies  arch=x64
+  ΓÇó completed installing native dependencies
+  ΓÇó packaging       platform=win32 arch=x64 electron=42.7.1 appOutDir=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked
+  ΓÇó downloaded      label=electron progress=100%
+  ΓÇó downloaded electron zip extracted successfully  output=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked
+  ΓÇó searching for node modules  pm=npm searchDir=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\electron
+  ΓÇó searching for node modules  pm=traversal searchDir=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\electron
+  ΓÇó using manual traversal of node_modules to build dependency tree
+  ΓÇó no node modules returned while searching directories  searchDirectories=[""]
+  ΓÇó updating asar integrity executable resource  executablePath=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\VeridianAI.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\winldd-1007\PrintDeps.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\python.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\pythonw.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\ffmpeg-1011\ffmpeg-win64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\cffi-gen-src.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\dotenv.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\f2py.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\fastapi.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\httpx.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\idna.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\normalizer.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\numpy-config.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\pip.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\pip3.12.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\playwright.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\pip3.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\uvicorn.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\watchfiles.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\websockets.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Scripts\wheel.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-batched-bench.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-bench.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-completion.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-gemma3-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-fit-params.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-gguf-split.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-llava-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-minicpmv-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-imatrix.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-mtmd-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-mtmd-debug.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-quantize.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-perplexity.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-qwen2vl-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-results.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-template-analysis.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-server.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium_headless_shell-1217\chrome-headless-shell-win64\chrome-headless-shell.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-tokenize.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-tts.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\rpc-server.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-batched.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-bench.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-embedding.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-gemma3-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-gguf.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-lookup.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-llava-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-ls-sycl-device.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-minicpmv-cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-perplexity.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-quantize.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-simple.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-tokenize.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-server.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\backend\llama-cpp-ipex-llm-2.3.0b20250424-win\llama-speculative.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\chrome.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\chrome_proxy.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\chrome_pwa_launcher.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\elevation_service.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\elevated_tracing_service.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\notification_helper.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\playwright-browsers\chromium-1217\chrome-win64\setup.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\cli-32.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\cli-64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\cli-arm64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\cli.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\gui-32.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\gui-64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\gui-arm64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\setuptools\gui.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\playwright\driver\node.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\t32.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\t64-arm.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\t64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\w32.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\w64-arm.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\python\Lib\site-packages\pip\_vendor\distlib\w64.exe
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\win-unpacked\VeridianAI.exe
+  ΓÇó building        target=AppX arch=x64 file=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\VeridianAI-TEST-UNSIGNED.appx
+  ΓÇó AppX is not signed  reason=Windows Store only build
+  ΓÇó signing with signtool.exe  path=E:\MentiSphereSoftwareStaging\STAGING\WinStoreApp\VeridianAI_v2.14.1\dist\VeridianAI-TEST-UNSIGNED.appx

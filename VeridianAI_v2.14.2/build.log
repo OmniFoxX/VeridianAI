@@ -1,3 +1,0 @@
-npm notice run veridianai@2.12.16 build-store-test
-npm notice run echo ERROR: the Microsoft Store package is NOT built from this tree. Use STAGING\\WinStoreApp\\VeridianAI_v2.12\\electron. This tree has no extraFiles, so it would produce an appx containing only the Electron shell. && exit 1
-ERROR: the Microsoft Store package is NOT built from this tree. Use STAGING\\WinStoreApp\\VeridianAI_v2.12\\electron. This tree has no extraFiles, so it would produce an appx containing only the Electron shell. 
