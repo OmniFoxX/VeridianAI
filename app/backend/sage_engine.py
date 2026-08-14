@@ -411,18 +411,38 @@ def _safe_archive_name(filename):
 
 
 def load_chat_memory(ns=None) -> list:
+    """The live conversation. Encrypted at rest as of v2.15.
+
+    `load_json_auto` reads an encrypted blob OR legacy plaintext JSON, so a
+    file written before v2.15 still opens and no migration pass is needed --
+    it is re-written encrypted on the next save.
+    """
     mf = _memory_file(ns)
     if mf.exists():
         try:
-            content = mf.read_text(encoding="utf-8").strip()
-            return json.loads(content) if content else []
+            blob = mf.read_bytes()
+            if not blob.strip():
+                return []
+            return atrest.load_json_auto(blob, ns=ns)
         except Exception:
             return []
     return []
 
 
 def save_chat_memory(history: list, ns=None):
-    _memory_file(ns).write_text(json.dumps(history, indent=2), encoding="utf-8")
+    """Write the live conversation, ENCRYPTED AT REST.
+
+    v2.15: this wrote plain JSON -- for the owner and for every profile, since
+    _memory_file(ns) serves both. Archives beside it were encrypted, so a
+    profile's saved history was protected while the conversation they were
+    actually having sat readable on disk. That also meant a portable export,
+    which copies files verbatim, carried the current conversation out in the
+    clear no matter what passphrase was set.
+
+    Same call the archive path uses (see save_archive), so there is one way to
+    put conversation data on disk rather than two.
+    """
+    _memory_file(ns).write_bytes(atrest.dump_json_encrypted(history, ns=ns))
 
 
 # --- v2.12.9 custom archive titles -----------------------------------------

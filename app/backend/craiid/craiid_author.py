@@ -188,6 +188,28 @@ log = _setup_logging()
 # Source loaders
 # ---------------------------------------------------------------------------
 
+def _decode_chat_memory(raw: bytes):
+    """chat_memory.json is at-rest encrypted as of v2.15; older files are plain
+    JSON. atrest.load_json_auto handles both, so a tree part-way through the
+    migration still reads.
+
+    The import is guarded because this module is runnable on its own, away from
+    the backend package -- in which case a plaintext file is all there is to
+    read anyway.
+    """
+    try:
+        import atrest
+    except Exception:
+        return json.loads(raw.decode("utf-8", "replace"))
+    # SYSTEM TIER (owner scope): _CHAT_MEMORY_FILE is the OWNER's root
+    # conversation, not a profile's, and the CRAIID author runs as background
+    # work with nobody signed in -- there is no session whose key could be
+    # used. save_chat_memory writes that file with ns=None, so the system key
+    # is the key it was encrypted under. Same classification as this module's
+    # other at-rest reads.
+    return atrest.load_json_auto(raw)
+
+
 def _load_chat_memory(
     tail_entries: int = _CHAT_TAIL_ENTRIES,
     history_entries: int = _CHAT_HISTORY_ENTRIES,
@@ -211,9 +233,9 @@ def _load_chat_memory(
         return [], [], "missing"
 
     try:
-        raw = _CHAT_MEMORY_FILE.read_text(encoding="utf-8")
-        data = json.loads(raw)
-    except (json.JSONDecodeError, OSError) as exc:
+        raw = _CHAT_MEMORY_FILE.read_bytes()
+        data = _decode_chat_memory(raw)
+    except (json.JSONDecodeError, OSError, ValueError) as exc:
         log.error("Failed to read chat_memory.json: %s", exc)
         return [], [], "error"
 
