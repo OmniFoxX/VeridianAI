@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title VeridianAI v2.14 - Startup
+title VeridianAI v2.15 - Startup
 
 :: ---------------------------------------------------------------
 :: Non-interactive mode for Electron (and future self-update use)
@@ -29,7 +29,7 @@ if /I "%~1"=="--mode" (
 :: --- Interactive path (human double-click) ---------------------
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.14.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.15.0          ^|
 echo  +===============================================+
 echo.
 echo  Select backend for this session:
@@ -54,7 +54,7 @@ if !errorlevel!==2 (
 title VeridianAI v2.14
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.14.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.15.0          ^|
 echo  +===============================================+
 echo.
 :: ============================================================================

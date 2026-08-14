@@ -44,9 +44,19 @@ Both files are written into the same temporary folder, then your test is run.
 
 ### 1. Write the test
 
-Put it in the **`backend`** folder (or `backend/gates/`), named `test_<something>.py`.
+Put it in **`sage_data/gate_tests/`**, named `test_<something>.py`. Create that
+folder if it is not there yet.
 
-`backend/test_fizzbuzz.py`:
+Use that location on **every** install. It is the only one that works on a
+Microsoft Store (MSIX) build, where the application itself lives under
+`WindowsApps` and Windows will not let you put a file there. `sage_data` is
+yours and is writable in every build.
+
+The application's own `backend/` folder also works on a portable or dev install,
+and is where the project's own `test_*.py` already live — but a gate test you
+keep there will vanish on a Store install, so prefer `sage_data/gate_tests/`.
+
+`sage_data/gate_tests/test_fizzbuzz.py`:
 
 ```python
 # The submission will be saved as fizzbuzz.py because this file is
@@ -109,15 +119,23 @@ A submission that fails the gate cannot win on style.
 The name must:
 
 - be a **name, not a path** — `test_fizzbuzz.py`, never `C:\...\test_fizzbuzz.py`
-  and never `subfolder/test_fizzbuzz.py`
+  and never `gate_tests/test_fizzbuzz.py`
 - start with **`test_`**
 - end with **`.py`**
-- exist in `backend/` or `backend/gates/`
+- exist in one of the searched folders, which are, in order:
+  1. `sage_data/gate_tests/` — **works everywhere, including the Store build**
+  2. the application's `backend/`
+  3. the application's `backend/gates/`
 
-Anything else is refused and you get:
+Anything else is refused, and the message tells you the exact folders it
+searched on this install:
 
 ```
-> _Gate test not found: <what you typed> -- skipping the execution gate._
+> _Gate test not found: `whatever you typed`. Give a FILE NAME, not a path --
+> it must look like `test_something.py` and live in one of:_
+>   - E:\sage_data\gate_tests
+>   - E:\VeridianAI\backend
+>   - E:\VeridianAI\backend\gates
 ```
 
 The battle still runs; it just falls back to judging on the code alone.
@@ -135,7 +153,8 @@ used: naming your own test file was always the point.
 
 | Symptom | Cause |
 |---|---|
-| "Gate test not found" | You gave a path, or the name does not start with `test_`, or the file is not in `backend/` |
+| "Gate test not found" | You gave a path, or the name does not start with `test_`, or the file is not in one of the searched folders. The message lists them — check the spelling against it |
+| Works on the portable copy, not on the Store one | The test is in `backend/`, which is read-only under `WindowsApps`. Move it to `sage_data/gate_tests/` |
 | Every submission FAILS with `ModuleNotFoundError` | Your test imports the wrong name. `test_fizzbuzz.py` must `import fizzbuzz` |
 | Everything PASSES even when it shouldn't | Your test never calls `sys.exit(1)` on failure. Without a non-zero exit code the gate reads success |
 | "no code block could be extracted" | The Builder answered in prose without a code block. Not a gate problem |

@@ -46,7 +46,7 @@ def ok(name, cond, detail=""):
 SRC = io.open(MAIN, encoding="utf-8").read()
 TREE = ast.parse(SRC)
 WANT = {"_within", "_bb_gate_roots", "_bb_resolve_gate_path"}
-WANT_CONST = {"_BB_GATE_SUBDIRS"}
+WANT_CONST = {"_BB_GATE_SUBDIRS", "_BB_GATE_DATA_SUBDIR"}
 defs = [n for n in TREE.body if isinstance(n, ast.FunctionDef) and n.name in WANT]
 consts = [n for n in TREE.body if isinstance(n, ast.Assign)
           and any(isinstance(t, ast.Name) and t.id in WANT_CONST for t in n.targets)]
@@ -56,7 +56,12 @@ if missing:
     print("FATAL: could not find %s in main.py" % sorted(missing))
     sys.exit(1)
 
-NS = {"Path": Path, "os": os, "__file__": MAIN}
+# DATA_DIR stands in for sage_data. A temp dir keeps the test independent of
+# whatever this machine actually has.
+import tempfile
+_FAKE_DATA = Path(tempfile.mkdtemp(prefix="bbgate_data_"))
+(_FAKE_DATA / "gate_tests").mkdir(parents=True, exist_ok=True)
+NS = {"Path": Path, "os": os, "__file__": MAIN, "DATA_DIR": _FAKE_DATA}
 exec(compile(ast.Module(body=consts + defs, type_ignores=[]), MAIN, "exec"), NS)
 resolve = NS["_bb_resolve_gate_path"]
 
@@ -69,6 +74,26 @@ ok("it resolves INSIDE the backend directory",
    got is not None and Path(got).parent.resolve() == Path(HERE).resolve(), got)
 ok("surrounding quotes are tolerated", resolve('"%s"' % real) == got)
 ok("whitespace is tolerated", resolve("  %s  " % real) == got)
+
+
+print("\n=== 1b. A gate test in sage_data resolves (the MSIX case) ===")
+# On a Store install the app lives under WindowsApps and the user cannot write
+# there, so a backend-only rule would make this a portable-only feature.
+_sd = _FAKE_DATA / "gate_tests" / "test_from_sage_data.py"
+_sd.write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+_got = resolve("test_from_sage_data.py")
+ok("a test in sage_data/gate_tests resolves", _got is not None, _got)
+ok("and it resolves to sage_data, not the app dir",
+   _got is not None and str(_FAKE_DATA) in str(_got), _got)
+ok("sage_data is searched FIRST",
+   str(NS["_bb_gate_roots"]()[0]).endswith("gate_tests"), NS["_bb_gate_roots"]())
+ok("the app dir is still searched too",
+   any(str(r) == HERE for r in NS["_bb_gate_roots"]()), NS["_bb_gate_roots"]())
+# the containment rules must still hold for the new root
+for probe in ("../gate_tests/test_x.py", "gate_tests/test_x.py",
+              str(_sd), "..\\test_from_sage_data.py"):
+    ok("still refused via the new root: %r" % probe, resolve(probe) is None,
+       resolve(probe))
 
 
 print("\n=== 2. Absolute paths -- THE capability being removed ===")

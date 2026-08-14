@@ -762,7 +762,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.14.2", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.15.0", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -6151,16 +6151,33 @@ def _bb_final_buf(transcript, who):
 # keep working for its real use -- naming one of the project's own test files.
 # What it must not do is accept a PATH.
 _BB_GATE_SUBDIRS = ("", "gates")
+_BB_GATE_DATA_SUBDIR = "gate_tests"
 
 
 def _bb_gate_roots():
-    """Directories a gate test may live in: the backend dir and its gates/."""
+    """Directories a gate test may live in, most useful first.
+
+    sage_data/gate_tests/ comes FIRST and deliberately. On a Store (MSIX)
+    install the application lives under WindowsApps, which the user cannot
+    write to -- so a backend-only rule would quietly make gate tests a
+    portable-only feature and leave Store users with a button that never works.
+    sage_data is writable in every build, which is the whole reason the app
+    keeps its data there.
+
+    The backend directory stays allowed because it is convenient in a portable
+    or dev install and it is where the project's own test_*.py already are.
+    """
+    roots = []
+    try:
+        roots.append(Path(DATA_DIR) / _BB_GATE_DATA_SUBDIR)
+    except Exception:
+        pass          # DATA_DIR unresolvable: fall through to the app dir
     import os as _os
     _f = globals().get("__file__")
-    if not _f:
-        return []
-    _base = Path(_os.path.dirname(_os.path.abspath(_f)))
-    return [(_base / s) if s else _base for s in _BB_GATE_SUBDIRS]
+    if _f:
+        _base = Path(_os.path.dirname(_os.path.abspath(_f)))
+        roots += [(_base / s) if s else _base for s in _BB_GATE_SUBDIRS]
+    return roots
 
 
 def _bb_resolve_gate_path(p):
@@ -6386,7 +6403,12 @@ async def _run_build_battle(spec, options, watchdog, rounds=1, gate_test=None):
     if gate_test:
         _gpath = _bb_resolve_gate_path(gate_test)
         if not _gpath:
-            yield "\n\n### Gate Test\n\n> _Gate test not found: " + str(gate_test) + " -- skipping the execution gate._\n"
+            _where = "\n".join("  - " + str(r) for r in _bb_gate_roots())
+            yield ("\n\n### Gate Test\n\n> _Gate test not found: `"
+                   + str(gate_test) + "`. Give a FILE NAME, not a path -- it "
+                   "must look like `test_something.py` and live in one of:_\n"
+                   + _where + "\n\n> _Skipping the execution gate; the battle "
+                   "is judged on the code alone._\n")
         else:
             try:
                 _test_src = open(_gpath, encoding="utf-8").read()
