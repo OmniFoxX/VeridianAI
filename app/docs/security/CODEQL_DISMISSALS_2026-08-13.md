@@ -231,3 +231,40 @@ on the next scan:
   traceback -- absolute source paths, line numbers, frame context -- to a
   token-authenticated MCP caller. Now logged with a ref; the caller keeps the
   tool name and exception type.
+
+---
+
+# Postscript: why the repo tree moved to `app/`
+
+Every alert in this file was dismissed twice. Not because the reasoning changed
+-- because the folder name did.
+
+CodeQL keys an alert on its **file path**. The repo published the tree inside a
+version-named folder (`VeridianAI_v2.12/`, then `VeridianAI_v2.15/`), and the
+folder is renamed on every version bump. To CodeQL that makes every file a new
+file, so every dismissal is dropped and every previously-judged alert re-opens
+under a fresh number with its reasoning gone.
+
+The proof is in this repo's own history: alerts `#128`/`#129`, the two Criticals
+worked on 2026-08-13, are byte-for-byte the same finding as `#5`/`#6` from the
+v2.12 scan -- same rule, same file, same lines. `#123` is `#90`. `#126`/`#127`
+are `#1`/`#2`.
+
+So the tree now lives at a **stable path**, `app/`, and the version lives where
+it already was -- `electron/package.json`. The local working folders can keep
+being renamed every bump; the published path no longer moves with them.
+
+`app/` rather than the repo root because the root already holds seventeen legal
+and meta files (LICENSE, the EULA, Privacy_Policy, Terms_of_Service, the issue
+templates) that are about the project rather than part of it.
+
+**The move itself re-raised everything one final time.** That was the price, and
+it was paid deliberately at a moment when the open count was zero -- which made
+the re-raise a free correctness check: any alert appearing at the new path that
+was NOT already in this file would have been genuinely new.
+
+**One honest caveat.** The move does not make dismissals immortal. It makes them
+survive a *version bump*. A dismissal is still dropped if the code around it
+moves enough to change the flagged line, which is normal and correct -- an alert
+whose surroundings changed deserves a fresh look. What is gone is losing them
+for a reason that has nothing to do with the code.
