@@ -2702,12 +2702,31 @@ async def api_burn(payload: dict, request: Request):
     if _key_burned:
         removed.append("encryption key (contents are now unreadable)")
 
+    def _burn_err(target, exc):
+        """What survived a burn, without the absolute path.
+
+        v2.15 (CodeQL py/stack-trace-exposure #155). These appends read
+        f"{path}: {exception}" -- an absolute path plus a raw OSError, and on
+        Windows the OSError string repeats the path a second time. The caller
+        does need to know WHAT could not be deleted (that is the entire point of
+        a burn report), but the basename plus the exception TYPE carries that:
+        "chat.dat: PermissionError" says which file and what kind of problem.
+        The full path and message go to the server log, keyed by namespace."""
+        _name = os.path.basename(str(target)) or str(target)
+        try:
+            import logging as _logging
+            _logging.getLogger("veridian").warning(
+                "[burn ns=%s] %s: %r", ns or "owner", target, exc)
+        except Exception:
+            pass
+        return "%s: %s" % (_name, type(exc).__name__)
+
     def _rm_file(p):
         try:
             if p and os.path.exists(p):
                 os.remove(p); removed.append(os.path.basename(p))
         except Exception as e:
-            errors.append(f"{p}: {e}")
+            errors.append(_burn_err(p, e))
 
     def _rm_tree_contents(d):
         """Delete everything INSIDE d but keep d itself (so the app keeps
@@ -2723,10 +2742,10 @@ async def api_burn(payload: dict, request: Request):
                     else:
                         os.remove(fp)  # nosemgrep -- see above; fp is inside a caller-validated directory
                 except Exception as e:
-                    errors.append(f"{fp}: {e}")
+                    errors.append(_burn_err(fp, e))
             removed.append(os.path.basename(d) + "/*")
         except Exception as e:
-            errors.append(f"{d}: {e}")
+            errors.append(_burn_err(d, e))
 
     try:
         if ns:

@@ -86,10 +86,29 @@ ok("the scrubber does not mutate its input",
    probe["nvidia"]["error"].startswith("WinError"), probe["nvidia"])
 
 
-print("\n=== #155  burn -- the outer handler ===")
+print("\n=== #155  burn -- outer handler AND the per-file appends ===")
 ok("burn's catch-all uses _safe_detail, not str(e)",
    "errors.append(_safe_detail(e" in MAIN)
 ok("no bare errors.append(str(e)) remains", "errors.append(str(e))" not in MAIN)
+
+# The per-file appends read f"{path}: {exception}" -- an absolute path plus a raw
+# OSError, and on Windows the OSError repeats the path a second time. The burn
+# REPORT still has to say what survived, so the fix is basename + exception type,
+# not silence.
+ok("no append interpolates a path and an exception directly",
+   "errors.append(f\"" not in MAIN, [l for l in MAIN.split("\n") if "errors.append(f\"" in l])
+be = fn_source(MAIN_T, MAIN, "_burn_err")
+ok("_burn_err exists", bool(be))
+ok("it reports the BASENAME, not the full path", "os.path.basename" in be)
+ok("it reports the exception TYPE, so 'what survived' is still answerable",
+   "type(exc).__name__" in be)
+ok("it never interpolates the exception message into the reply",
+   "{exc}" not in be and "str(exc)" not in be, be)
+ok("the full path and message go to the server log",
+   "getLogger" in be and "%r" in be)
+ok("the log line records which namespace was burned", "ns or" in be)
+ok("all three per-file sites use it",
+   MAIN.count("errors.append(_burn_err(") == 3, MAIN.count("errors.append(_burn_err("))
 
 
 print("\n=== #156  build_integrity.verify ===")

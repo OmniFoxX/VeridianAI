@@ -828,9 +828,27 @@ def call_tool(name: str, arguments: Dict[str, Any] | None = None,
     try:
         return fn(arguments, ns) if name in _NS_TOOLS else fn(arguments)
     except Exception as e:
-        tb = traceback.format_exc(limit=3)
+        # v2.15 (CodeQL py/stack-trace-exposure #157/#158). This returned a FULL
+        # TRACEBACK -- absolute source paths, line numbers, local frame context --
+        # to a TOKEN-authenticated MCP caller. It is the widest of the four
+        # stack-trace surfaces, and the one the alert was actually pointing at:
+        # the first pass sanitised handle_jsonrpc's own `except` one level up,
+        # which was not where the text came from.
+        #
+        # The traceback goes to the server log with a correlation ref. The caller
+        # keeps the tool name and the exception TYPE -- enough for a model to
+        # decide whether to retry, rephrase or give up, which is what an agent
+        # actually needs from an error -- and nothing about this machine.
+        import logging as _logging, uuid as _uuid
+        _ref = _uuid.uuid4().hex[:8]
+        try:
+            _logging.getLogger("veridian").warning(
+                "[mcp-tool %s] %s raised\n%s", _ref, name,
+                traceback.format_exc(limit=5))
+        except Exception:
+            pass
         return _result_text(
-            f"[tool '{name}' raised] {type(e).__name__}: {e}\n{tb}",
+            f"[tool '{name}' raised] {type(e).__name__} (ref {_ref})",
             is_error=True,
         )
 

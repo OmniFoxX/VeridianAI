@@ -108,3 +108,126 @@ with the rename, and the next reader is not left deciding whether a file called
 
 **#128, #129 -- `py/full-ssrf`, `relay_client.py` 22 and 32.** Fixed this
 morning; see `CODEQL_TRIAGE_2026-08-13.md`.
+
+---
+
+# Round 2 -- after the `ed2aeb4` re-scan
+
+The push closed the two Critical SSRFs, the build-battle read-and-execute chain,
+the two `frontend/SAFE/` alerts, `#152`, `#153` and `#156`. **37 -> 22.** These
+19 are the remainder that are genuinely guarded but that CodeQL cannot see
+through. Same rule as round 1: the guard and its line are named, or it is not
+dismissed.
+
+## `#131`-`#136` -- `keywrap.py` 201, 203, 207 x2, 209, 219
+
+**Guard:** `ns_guard.safe_ns`, enforced in `sage_engine.user_data_dir` and in
+`profile_keys._user_dir`.
+
+The alerts did not close, and that is expected: `safe_ns` matches a regex and
+returns the ORIGINAL string, which CodeQL does not model as a barrier. But the
+reasoning is materially stronger than it would have been yesterday. Before
+v2.15 the rule lived in a comment claiming callers had applied `main.py`'s
+`_safe_ns`, and `profile_keys._user_dir` had an `except` branch that bypassed
+every caller. Now the rule is enforced at the point the path is built, that
+fallback is gone, and `test_ns_guard` has a regression test proving it fails
+closed.
+
+`\A[A-Za-z0-9_-]{1,64}\Z` -- and note `\A...\Z`, not `^...$`: Python's `$` also
+matches before a trailing newline, so the original pattern accepted `"alice\n"`,
+a different directory from `"alice"`.
+
+## `#137` -- `profile_keys.py:176`
+
+Same guard, and this is the function that was actually broken. It validates
+first now, so both the sage_engine branch and the fallback build from a checked
+value.
+
+## `#130` -- `atrest.py:315`
+
+`read_file_auto`'s path is server-built at every one of its three callers: the
+downloads route (basename + `_safe_ns`), a walk over export roots derived from
+an enforced namespace, and a module constant. No caller passes a client-supplied
+path.
+
+**Hardening note, not this alert:** `data_export._files_under` walks with
+`rglob` + `is_file()`, and `is_file()` FOLLOWS symlinks. A symlink planted
+inside a profile directory would be followed into whatever it points at and
+packed into that profile's export. Planting one needs OS access rather than the
+app, so it is not reachable through this flow -- but it is the same shape as the
+export-containment leak already fixed once.
+
+## `#139` -- `main.py:3283`
+
+Three layers above the line: `_safe_ns` on the target, `_is_owner` (only the
+owner may import into another profile), and membership of `users.list_users()`,
+which is an allowlist.
+
+## `#140`, `#141`, `#142` -- the downloads read and delete routes
+
+`_safe_ns` on the namespace and `Path(filename).name` for the file. As of v2.15
+all five downloads routes apply the namespace guard; before it, only the save
+route did, and the delete route ended in `path.unlink()`.
+
+## `#154`, `#159` -- stack-trace false positives
+
+`#154`: the ComfyUI status dict carries no exception text; the config read above
+it swallows failures with `except Exception: pass` and no returned field derives
+from an exception. `#159`: `sage_engine.process_upload` returns a fixed decoder
+message on failure, not exception text.
+
+## `#160`, `#161` -- the two that replaced `#153`
+
+Worth recording plainly: **fixing `#153` produced two alerts where there was
+one**, because one return statement became two. This is the round-2 pattern
+where making a guard explicit adds alerts rather than removing them.
+
+`#160` is the OWNER branch of `/api/hardware`, which deliberately keeps the full
+probe text -- that text is what identified the missing MSVC runtime and the
+Vulkan questions, so it is scoped to the owner rather than deleted. `#161` is
+`_scrub_probe_errors` itself: the line CodeQL flags is the sanitiser, which
+replaces every `error` string with a fixed placeholder, recursing through dicts
+and lists.
+
+## `#126`, `#127` -- `frontend/js/chat.js` 769, 784
+
+**Guard:** the scheme allowlist at `chat.js:757`, which rejects anything that is
+not `data:image/`, `blob:`, `http(s):` or same-origin.
+
+These were re-verified rather than re-dismissed on July's reasoning, because
+July's note ("CodeQL can't see the regex barrier") is the same shape of argument
+that failed on the relay client. The test applied: **the value that was checked
+is the value that is used.** `imgUrl` is tested at 757 and reaches `img.src` and
+`save.href` unchanged, with no re-derivation in between. That is what the relay
+path failed and this one passes.
+
+Checking it did surface a real asymmetry, fixed rather than dismissed: one of
+the two `appendImageResult` call sites allowlisted `result.mimetype` and the
+other interpolated it raw, relying on the scheme check as its only backstop.
+Both now apply the same rule.
+
+## `#123` -- `electron/main.js:604`
+
+`spawn()` with an ARRAY of arguments and **no `shell: true`**, so nothing parses
+a command line. `_spawnCmd` is a joined path (Store) or the literal `'cmd.exe'`,
+never env-derived. The only variable element of argv is re-checked against
+`VALID_MODES` at the spawn, failing closed to `'vulkan'`. The tainted value
+CodeQL tracks, `_dataDir` from `VERIDIAN_DATA_DIR`, reaches `env` only -- never
+argv.
+
+Note this alert was previously dismissed as `#90` at the `VeridianAI_v2.12`
+path. It re-raised because the folder was renamed, not because anything changed.
+
+## Left OPEN deliberately
+
+`#155`, `#157`, `#158` are not dismissed. Fixes are staged and should close them
+on the next scan:
+
+- `#155` -- burn's three per-file appends emitted `f"{path}: {exception}"`. Now
+  `_burn_err`: basename plus exception TYPE to the caller (a burn report still
+  has to say what survived), full path and message to the server log.
+- `#157`/`#158` -- the first pass sanitised `handle_jsonrpc`'s own `except`,
+  which was **not where the text came from**. `call_tool` returned a full
+  traceback -- absolute source paths, line numbers, frame context -- to a
+  token-authenticated MCP caller. Now logged with a ref; the caller keeps the
+  tool name and exception type.
