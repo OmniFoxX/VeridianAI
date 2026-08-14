@@ -46,7 +46,8 @@ def find_oracle_root() -> Optional[Path]:
         Path(__file__).parent.parent.parent,   # backend/craiid/ → root
         Path(__file__).parent.parent,           # backend/ → root
         Path(__file__).parent,                  # craiid/ → root
-        Path("E:/OracleAI_v2.3"),               # Absolute fallback
+        # v2.15: an absolute developer-specific "fallback" was here. It was
+        # never a fallback for anyone else -- Path.cwd() below is the real one.
         Path.cwd(),
     ]
     for path in candidates:

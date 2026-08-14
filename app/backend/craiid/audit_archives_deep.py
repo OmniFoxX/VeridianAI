@@ -122,11 +122,13 @@ def analyze_archives(archives_dir, top_n=600):
 def main():
     archives_dir = find_archives_root()
     if archives_dir is None:
-        archives_dir = r"E:\OracleAI_v2.2\archives"
-        if not os.path.isdir(archives_dir):
-            print(f"ERROR: Could not find archives directory. Tried default: {archives_dir}")
-            import sys
-            sys.exit(1)
+        # v2.15: a hardcoded fallback to a developer-specific drive used to sit
+        # here. It never resolved on anyone else's machine, and it made this
+        # error name a path the user had never heard of.
+        import sys
+        print("ERROR: Could not find the archives directory. Looked relative "
+              "to this file and in the working directory.")
+        sys.exit(1)
 
     print(f"Archives directory: {archives_dir}\n")
     analyze_archives(archives_dir, top_n=600)

@@ -19,10 +19,11 @@ def find_archives_root(start_path=None):
 def main():
     archives_dir = find_archives_root()
     if archives_dir is None:
-        archives_dir = r"E:\OracleAI_v2.2\archives"
-        if not os.path.isdir(archives_dir):
-            print(f"ERROR: Could not find archives directory. Tried default: {archives_dir}")
-            sys.exit(1)
+        # v2.15: see audit_archives_deep.py -- the hardcoded developer-drive
+        # fallback is gone; the message now describes what was actually tried.
+        print("ERROR: Could not find the archives directory. Looked relative "
+              "to this file and in the working directory.")
+        sys.exit(1)
     print(f"Archives directory: {archives_dir}")
     
     archive_files = [f for f in os.listdir(archives_dir) if f.endswith('.json')]

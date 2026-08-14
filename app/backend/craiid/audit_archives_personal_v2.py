@@ -478,12 +478,17 @@ def main():
     )
     parser.add_argument(
         "--plm",
-        default=r"E:\OracleAI_v2.3\backend\mlm_training_data\sage_plm.pt",
+        # v2.15: was an absolute developer-specific default, so this argument
+        # only ever worked on one machine. Relative to this file now, like
+        # every other path in the tree.
+        default=os.path.join(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__))), "mlm_training_data", "sage_plm.pt"),
         help="Path to trained PLM .pt file"
     )
     parser.add_argument(
         "--output",
-        default=r"E:\OracleAI_v2.3\backend\craiid\audit_personal_report.json",
+        default=os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             "audit_personal_report.json"),
         help="Path to save JSON report"
     )
     parser.add_argument(
@@ -510,9 +515,9 @@ def main():
     archives_dir = args.archives
     if archives_dir is None:
         archives_dir = find_archives_root()
-    if archives_dir is None:
-        archives_dir = r"E:\OracleAI_v2.3\archives"
-    if not os.path.isdir(archives_dir):
+    # v2.15: the hardcoded developer-drive fallback is gone. None here simply
+    # means "not found", which the check below already reports honestly.
+    if not archives_dir or not os.path.isdir(str(archives_dir)):
         print(f"ERROR: Could not find archives directory: {archives_dir}")
         sys.exit(1)
 

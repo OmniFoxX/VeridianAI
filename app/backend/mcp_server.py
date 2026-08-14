@@ -11,7 +11,7 @@ Continue.dev or Claude Desktop using a config such as:
       "mcpServers": {
         "veridianai-toga": {
           "command": "py",
-          "args": ["E:\\\\VeridianAI_v2.11.11\\\\backend\\\\mcp_server.py"]
+          "args": ["<absolute path to>\\\\backend\\\\mcp_server.py"]
         }
       }
     }

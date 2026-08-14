@@ -472,7 +472,9 @@ def create_default_compressor() -> VLTSCompressor:
     possible_lexicons = [
         Path(__file__).parent / "ops_lexicon.txt",
         Path(__file__).parent.parent / "downloads" / "ops_lexicon.txt",
-        Path("E:/OracleAI_v2.3/backend/craiid/ops_lexicon.txt"),
+        # v2.15: an absolute developer-specific path sat here. The two
+        # relative candidates above are the real ones; this only ever
+        # matched on one machine.
     ]
     ops_lexicon_path = next((str(p) for p in possible_lexicons if p.exists()), None)
 

@@ -1,4 +1,4 @@
-# save as E:\OracleAI_v2.11.11\ble_sniff_test.py
+# Standalone BLE scan check. Run from backend/: py ble_sniff_test.py
 import asyncio
 from bleak import BleakScanner
 

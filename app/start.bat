@@ -102,7 +102,7 @@ set LLAMA_SERVER=%~dp0!LLAMA_BACKEND!
 :: v2.2 fix (2026-05-29): MODELS_DIR is now self-locating. Previously
 :: hardcoded to Todd's E:\sage_data\models, which broke any install on
 :: another drive. %~dp0 resolves to the project directory; ..\sage_data
-:: walks up one level (sage_data lives ALONGSIDE VeridianAI_v2.14, not
+:: walks up one level (sage_data lives ALONGSIDE the app folder, not
 :: inside it -- see BEFORE_RUNNING.txt). Works on any drive, any path.
 set MODELS_DIR=%~dp0..\sage_data\models
 
@@ -405,7 +405,7 @@ echo [VeridianAI] Inference backend: !INFERENCE_BACKEND!
 :: v2.2 (2026-05-30) error message: spells out the resolved sage_data
 :: location so the user can see exactly where to put the gguf, and
 :: explains the sibling-not-inside-project layout so they do not
-:: intuitively create sage_data inside VeridianAI_v2.14 (which would
+:: intuitively create sage_data inside the app folder (which would
 :: not be found AND would break Trinity separation -- see
 :: BEFORE_RUNNING.txt step 3 for the canonical layout).
 :: v2.11.12e: missing Toga model is NO LONGER FATAL. Mirror the daemon

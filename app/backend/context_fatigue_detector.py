@@ -184,7 +184,8 @@ def main():
         "--archives-dir",
         type=Path,
         default=Path(__file__).resolve().parent.parent / "archives",
-        help="Directory containing archive JSON files (default: E:\\OracleAI_v2.2\\archives)",
+        help="Directory containing archive JSON files "
+             "(default: the archives/ folder beside this project)",
     )
     parser.add_argument(
         "--window-turns",

@@ -55,7 +55,7 @@ except ImportError as exc:
     print(f"  Detail: {exc}")
     print()
     print("  Make sure you are running this script from the VeridianAI")
-    print("  project root (e.g.  py rotate_api_key.py  from E:\\VeridianAI_v2.3+)")
+    print("  project root (e.g.  py rotate_api_key.py  from the app folder)")
     print()
     sys.exit(1)
 

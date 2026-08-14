@@ -16,7 +16,7 @@ The monitor is fully self-contained — it does NOT import sage_engine or
 browser_tool. It speaks only the IPC bridge protocol from ipc_bridge.py
 and HTTP. Run while OracleAI is up:
 
-    cd E:\\OracleAI_v2.1.5\\backend
+    cd <project>/backend
     py ipc_monitor.py
 
 Stop with Ctrl+C. Safe to start/stop independently of OracleAI.

@@ -11,13 +11,13 @@
     "genmanifest": "py ../backend/build_integrity.py genmanifest",
     "pack-win": "npm run genmanifest && electron-builder --win --dir",
     "build-win": "npm run genmanifest && electron-builder --win",
-    "build-store": "echo ERROR: the Microsoft Store package is NOT built from this tree. Use STAGING\\\\WinStoreApp\\\\VeridianAI_v2.12\\\\electron. This tree has no extraFiles, so it would produce an appx containing only the Electron shell. && exit 1",
+    "build-store": "echo ERROR: the Microsoft Store package is NOT built from this tree. Use the WinStoreApp tree under STAGING (its electron/ folder). This tree has no extraFiles, so it would produce an appx containing only the Electron shell. && exit 1",
     "build-linux": "py ../backend/build_integrity.py genmanifest && electron-builder --linux",
     "build-mac": "py ../backend/build_integrity.py genmanifest && electron-builder --mac",
     "deps": "npm ci",
     "deps-audit": "npm audit --audit-level=high",
     "deps-verify": "npm audit signatures",
-    "build-store-test": "echo ERROR: the Microsoft Store package is NOT built from this tree. Use STAGING\\\\WinStoreApp\\\\VeridianAI_v2.12\\\\electron. This tree has no extraFiles, so it would produce an appx containing only the Electron shell. && exit 1"
+    "build-store-test": "echo ERROR: the Microsoft Store package is NOT built from this tree. Use the WinStoreApp tree under STAGING (its electron/ folder). This tree has no extraFiles, so it would produce an appx containing only the Electron shell. && exit 1"
   },
   "build": {
     "appId": "software.mentisphere.veridianai",

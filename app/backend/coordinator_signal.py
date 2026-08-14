@@ -82,7 +82,7 @@ def main():
     parser.add_argument(
         "--archives-dir",
         required=True,
-        help="Path to the archive directory (e.g. E:\\OracleAI_v2.2\\archives)"
+        help="Path to the archive directory"
     )
     parser.add_argument(
         "--window-turns",

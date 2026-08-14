@@ -12,7 +12,7 @@ DOES NOT TOUCH:
     new entries written via TimeManager are already canonical.
 
 Run from anywhere:
-    cd E:\\OracleAI_v2.1.5\\backend
+    cd <project>/backend
     py migrate_v216_timestamps.py            # dry-run report
     py migrate_v216_timestamps.py --apply    # write changes
 
