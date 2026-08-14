@@ -333,9 +333,10 @@ def build(ns=None, mode: str = MODE_READABLE,
                                                           passphrase),
                             indent=2))
                         notes.append("The key is wrapped with your passphrase. "
-                                     "Without that passphrase this archive "
-                                     "cannot be opened -- by anyone, including "
-                                     "you.")
+                                     "The zip itself still opens -- it is an "
+                                     "ordinary archive -- but its contents stay "
+                                     "encrypted and cannot be decrypted without "
+                                     "that passphrase, by anyone, including you.")
                     elif key_bytes:
                         z.writestr("KEY/fernet.key", key_bytes)
                         notes.append("Includes the encryption key. Treat this "

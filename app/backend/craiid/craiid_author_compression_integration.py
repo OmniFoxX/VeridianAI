@@ -10,9 +10,8 @@ def _import_compression_core():
     """Import VLTSCompressor from the sibling craiid_compression_core_v3.py.
 
     Distribution-safe (#69): add THIS file's own directory to sys.path and
-    import by module name. The previous version used `sys` without importing it
-    (NameError if the first attempt failed) and tried a dead hardcoded
-    `E.OracleAI_v2_4...` path - both removed."""
+    import by module name -- never an absolute path, which only ever
+    resolved on the author's machine."""
     here = os.path.dirname(os.path.abspath(__file__))
     if here not in sys.path:
         sys.path.insert(0, here)

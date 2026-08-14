@@ -42,22 +42,22 @@ from typing import Callable, Deque, Dict, Optional
 # Configuration
 # ---------------------------------------------------------------------------
 
-# v2.1.8 deployment fix: PROJECT_ROOT is self-locating instead of
-# hardcoded to E:\VeridianAI_v2.1.8.+ The overseer lives in backend/, so
-# parent.parent of this file is the project root. Lets the user rename
-# the project folder, lets VeridianAI ship to other users, and matches
-# the no-user-specific-hardcoding rule we apply everywhere else.
-# Falls back to the hardcoded path only if Path resolution fails (which
-# shouldn't happen on any real install, but defends against weird
-# symlink situations).
+# PROJECT_ROOT is self-locating: the overseer lives in backend/, so
+# parent.parent of this file is the project root. That lets the folder be
+# renamed, lets VeridianAI ship to other people, and matches the
+# no-user-specific-hardcoding rule applied everywhere else.
+#
+# v2.15: the three lines that used to sit here said this "falls back to the
+# hardcoded path if Path resolution fails". It does not -- it raises (below),
+# and has since v2.2. A comment describing behaviour the code no longer has
+# is worse than no comment: you believe it instead of reading.
 try:
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
 except Exception as _e:
-    # v2.2 (2026-05-29): previously fell back to r"E:\VeridianAI_v2.1.8"
-    # which was a Todd-specific path nobody else has. Self-location
-    # has never actually failed in practice; the bare except was
-    # defensive plumbing. If it ever does fail, we want a loud error,
-    # not a silent pretend-this-is-Todd-laptop default.
+    # Deliberately RAISES rather than falling back to a default path.
+    # Self-location has never failed in practice, and a silent fallback
+    # here would quietly run the whole overseer against the wrong project
+    # root. Do not re-add one: a loud failure is the correct behaviour.
     raise RuntimeError(
         f"Cannot locate VeridianAI project root from overseer_daemon.py: {_e}"
     )

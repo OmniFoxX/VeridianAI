@@ -1,7 +1,6 @@
 """check_model.py -- dev utility: sanity-check the sage_plm.pt checkpoint.
 
-v2.12.2: was hardcoded to E:\\OracleAI_v2.3 paths (Todd-specific leftovers).
-Self-locates now, same pattern as dependency_checker.py: this file lives in
+Self-locates, same pattern as dependency_checker.py: this file lives in
 backend/, so candidates are derived from __file__ + config's DATA_DIR.
 Optionally pass an explicit path:  python check_model.py <path-to.pt>
 """

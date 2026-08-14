@@ -28,9 +28,8 @@ def check_module(mod):
         return False
 
 def main():
-    # v2.2 (2026-05-29): was hardcoded to Path(r"E:\OracleAI_v2.1.6\backend"),
-    # a Todd-specific leftover from v2.1.6. Self-locate now -- this file
-    # lives in backend/, so __file__'s parent IS backend_dir.
+    # This file lives in backend/, so __file__'s parent IS backend_dir --
+    # do not add another .parent.
     backend_dir = Path(__file__).resolve().parent
     py_files = list(backend_dir.rglob("*.py"))
     installed = set()

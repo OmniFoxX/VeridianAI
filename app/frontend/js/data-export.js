@@ -111,6 +111,23 @@
       if (window.setStatusError) window.setStatusError("Select at least one item to export.");
       return;
     }
+    // v2.15: a passphrase only applies to a PORTABLE export, and until now a
+    // readable export silently discarded it -- handing back DECRYPTED plain
+    // files to somebody who had just typed a passphrase and believed they were
+    // protecting them. That is the wrong direction to fail in. Warn, and still
+    // proceed: sometimes plain text is exactly what you want.
+    var _useP = document.getElementById("export-usepass");
+    var _passEl = document.getElementById("export-pass");
+    var _passTyped = !!(_useP && _useP.checked && _passEl && _passEl.value);
+    if (mode !== "portable" && _passTyped) {
+      confirmText += "\n\n" +
+        "YOUR PASSPHRASE WILL NOT BE USED.\n" +
+        "A passphrase locks the encryption KEY carried inside a PORTABLE " +
+        "export. A readable export contains no key -- the files are decrypted " +
+        "into plain text, so there is nothing for a passphrase to lock.\n\n" +
+        "Choose Portable Export instead if you want the contents to stay " +
+        "encrypted.";
+    }
     var ok = await oracleConfirm(confirmText, {
       title: mode === "portable" ? "Portable export" : "Readable export",
       okLabel: "Export",
@@ -142,8 +159,10 @@
       if (note) {
         note.textContent = d.filename + " (" + human(d.bytes) + ", " +
           d.files + " files) - " + where + "." +
-          (d.protected ? "  Protected by your passphrase: without it this " +
-                         "archive cannot be opened by anyone, including you." : "");
+          (d.protected ? "  The key inside is locked with your passphrase: " +
+                         "the zip still opens, but its contents cannot be " +
+                         "decrypted without that passphrase - by anyone, " +
+                         "including you." : "");
       }
       if (window.setStatus) window.setStatus("Export ready: " + d.filename);
     } catch (e) {
@@ -218,13 +237,16 @@
       '  <div id="export-total" class="voice-extras-note" role="status" aria-live="polite"></div>' +
       '  <label class="hw-toggle" style="display:flex;gap:8px;align-items:center;margin:8px 0">' +
       '    <input type="checkbox" id="export-usepass">' +
-      '    <span class="hw-toggle-label">Protect a portable export with a passphrase</span>' +
+      '    <span class="hw-toggle-label">Lock the key with a passphrase ' +
+      '(portable export only)</span>' +
       '  </label>' +
       '  <div id="export-pass-wrap" style="display:none;margin:0 0 8px 0">' +
       '    <input type="password" id="export-pass" autocomplete="new-password"' +
       '      placeholder="Passphrase" style="width:100%;padding:6px">' +
-      '    <div class="voice-extras-note">Without this passphrase the archive ' +
-      '      cannot be opened -- by anyone, including you. There is no reset.</div>' +
+      '    <div class="voice-extras-note">This locks the encryption key stored ' +
+      '      inside the export. The zip still opens, but its contents cannot be ' +
+      '      decrypted without this passphrase -- by anyone, including you. ' +
+      '      There is no reset.</div>' +
       "  </div>" +
       '  <div class="voice-extras" style="margin-top:10px">' +
       '    <button type="button" class="voice-extras-btn" id="export-readable-btn"' +
