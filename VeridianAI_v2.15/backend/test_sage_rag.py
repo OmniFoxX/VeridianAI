@@ -8,6 +8,20 @@ import tempfile
 import os
 import sage_rag
 
+# A test must never die on its own output. Windows consoles default to cp1252,
+# which cannot encode the glyphs this file prints -- printing one raised
+# UnicodeEncodeError and killed the run before a single assertion was reported,
+# so the file read as FAILING when nothing was wrong with the code under test.
+# errors="replace" degrades an unprintable glyph to "?" on a legacy console and
+# changes nothing on a UTF-8 one. (v2.15)
+import sys as _sys
+for _s in (_sys.stdout, _sys.stderr):
+    try:
+        _s.reconfigure(errors="replace")
+    except Exception:
+        pass
+
+
 
 # ── 1. cosine_similarity: identical vectors = 1.0 ──────────────────────
 def test_cosine_identical():

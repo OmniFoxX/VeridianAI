@@ -137,15 +137,47 @@ def _within(base: Path, p: Path) -> bool:
 
 
 def _files_under(p: Path) -> List[Path]:
+    """Every real file under `p`, for export.
+
+    v2.15 containment: SYMLINKS ARE SKIPPED, and every survivor is confirmed to
+    resolve inside `p`.
+
+    `is_file()` follows links. Without this, a symlink planted inside a
+    profile's directory would be followed into whatever it points at -- another
+    profile's store, the recovery key, anywhere the backend can read -- and
+    packed into that profile's export. That is the same shape as the
+    export-containment leak this module already exists to prevent, arriving by a
+    different route. Planting one needs filesystem access rather than the app,
+    which is why it is hardening rather than an open hole; it is cheap to close
+    and expensive to notice later.
+
+    A symlink is skipped rather than resolved-and-included: there is no case
+    where a link is legitimate export content, and following one would put a
+    file in the archive under a path that is not where it actually lives.
+    """
     if not p.exists():
+        return []
+    if p.is_symlink():
         return []
     if p.is_file():
         return [p] if p.name not in NEVER_EXPORT else []
+    try:
+        root = p.resolve()
+    except OSError:
+        return []
     out = []
+    # rglob does not descend into symlinked DIRECTORIES on Python 3.13+
+    # (recurse_symlinks defaults to False); the per-entry checks below cover
+    # older interpreters and the file case either way.
     for f in p.rglob("*"):
         try:
+            if f.is_symlink():
+                continue
             if not f.is_file() or f.name in NEVER_EXPORT:
                 continue
+            rp = f.resolve()
+            if rp != root and root not in rp.parents:
+                continue          # resolved outside the profile's own directory
             # Never pack an export inside an export. The downloads folder is
             # where exports land, so without this each one swallows the last
             # -- and a portable one carries a key with it.
