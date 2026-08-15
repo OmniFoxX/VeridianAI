@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-ComfyUI setup wizard for OracleAI.
+ComfyUI setup wizard for VeridianAI.
 ===================================
 
 Handles the full ComfyUI portable installation lifecycle for a fresh user system:
@@ -24,7 +24,7 @@ Handles the full ComfyUI portable installation lifecycle for a fresh user system
   5. VERIFY   - Confirm main.py is present and the launcher resolves to
                 Headless: True.
 
-  6. CONFIGURE - Write COMFYUI_HOME into OracleAI's config so the launcher
+  6. CONFIGURE - Write COMFYUI_HOME into VeridianAI's config so the launcher
                  and client pick it up automatically from this point forward.
 
 DESIGN:
@@ -35,7 +35,7 @@ DESIGN:
   * Silent-capable. Pass silent=True for unattended installs. All prompts
     are skipped and sensible defaults are used.
   * Progress-callback-friendly. Pass a progress_cb(message, percent) to
-    wire setup output into OracleAI's UI rather than stdout.
+    wire setup output into VeridianAI's UI rather than stdout.
 """
 from __future__ import annotations
 
@@ -58,7 +58,7 @@ from typing import Callable, Optional
 # --------------------------------------------------------------------------- #
 GITHUB_API   = "https://api.github.com/repos/comfyanonymous/ComfyUI/releases/latest"
 GITHUB_ASSET = "ComfyUI_windows_portable_nvidia_cu128_or_cpu.7z"  # fallback name fragment
-DEFAULT_INSTALL_PARENT = os.path.join(os.path.expanduser("~"), "OracleAI", "backend")
+DEFAULT_INSTALL_PARENT = os.path.join(os.path.expanduser("~"), "VeridianAI", "backend")
 CONFIG_FILENAME = "oracleai_config.json"
 
 
@@ -85,7 +85,7 @@ def _get_latest_release(progress_cb: Callable = _noop) -> dict:
         req = urllib.request.Request(
             GITHUB_API,
             headers={"Accept": "application/vnd.github+json",
-                     "User-Agent": "OracleAI-Setup/1.0"},
+                     "User-Agent": "VeridianAI-Setup/1.0"},
         )
         with safe_urlopen(req, timeout=20) as resp:
             data = json.loads(resp.read().decode("utf-8"))
@@ -136,7 +136,7 @@ def _download(url: str, dest_path: str, size_bytes: int,
     progress_cb(f"Downloading {os.path.basename(dest_path)}...", 5)
     try:
         req = urllib.request.Request(
-            url, headers={"User-Agent": "OracleAI-Setup/1.0"}
+            url, headers={"User-Agent": "VeridianAI-Setup/1.0"}
         )
         with safe_urlopen(req, timeout=60) as resp, \
              open(dest_path, "wb") as f:
@@ -360,13 +360,13 @@ def _verify(comfy_home: str, progress_cb: Callable = _noop) -> dict:
 #  config write
 # --------------------------------------------------------------------------- #
 def _write_config(app_dir: str, python_root: str, progress_cb: Callable = _noop) -> dict:
-    """Write comfyui_home and python_root into OracleAI's config file and
+    """Write comfyui_home and python_root into VeridianAI's config file and
     os.environ so the launcher picks them up immediately without a restart.
 
     app_dir     = inner ComfyUI folder (where main.py lives)
     python_root = outer portable folder (where python_embeded/ lives)
     """
-    progress_cb("Writing ComfyUI paths to OracleAI config...", 96)
+    progress_cb("Writing ComfyUI paths to VeridianAI config...", 96)
     try:
         # Set both in the current process environment immediately.
         os.environ["COMFYUI_HOME"]        = app_dir
@@ -421,7 +421,7 @@ def detect_existing(progress_cb: Callable = _noop) -> Optional[str]:
         progress_cb(f"Found existing ComfyUI at {home}", 1)
         return home
 
-    # 2. OracleAI config file.
+    # 2. VeridianAI config file.
     try:
         script_dir  = Path(__file__).resolve().parent
         config_path = script_dir / CONFIG_FILENAME
@@ -437,7 +437,7 @@ def detect_existing(progress_cb: Callable = _noop) -> Optional[str]:
     except Exception:
         pass
 
-    # 3. Default install location (prior OracleAI setup).
+    # 3. Default install location (prior VeridianAI setup).
     default = os.path.join(DEFAULT_INSTALL_PARENT, "ComfyUI")
     if os.path.isdir(default) and os.path.exists(os.path.join(default, "main.py")):
         progress_cb(f"Found existing ComfyUI at {default}", 1)
@@ -456,7 +456,7 @@ def detect_gpu() -> dict:
     """Best-effort GPU summary for setup + UI (cached): {vendor, accel, name,
     vram_mb}. vendor: nvidia|amd|intel|cpu; accel target: cuda|directml|cpu.
 
-    Reuses OracleAI's hw_utils.detect_hardware(). NVIDIA -> CUDA (the portable's
+    Reuses VeridianAI's hw_utils.detect_hardware(). NVIDIA -> CUDA (the portable's
     native mode). AMD/Intel -> DirectML target (the launcher uses it only if
     torch_directml is present, else CPU). No discrete GPU -> CPU. Never raises.
     """
@@ -578,7 +578,7 @@ def run_setup(install_parent: str = None, silent: bool = False,
 
     Args:
         install_parent: Where to install ComfyUI. Defaults to
-                        ~/OracleAI/backend/ComfyUI. User can override
+                        ~/VeridianAI/backend/ComfyUI. User can override
                         via the UI before calling this.
         silent:         Skip all interactive prompts. Use defaults.
         progress_cb:    progress_cb(message, percent) for UI integration.
@@ -719,7 +719,7 @@ if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(
-        description="OracleAI ComfyUI setup wizard",
+        description="VeridianAI ComfyUI setup wizard",
     )
     parser.add_argument(
         "--install-dir",

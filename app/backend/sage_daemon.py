@@ -4,7 +4,7 @@
 sage_daemon.py — VeridianAI background mechanics daemon
 ------------------------------------------------------
 A separate long-running Python process that handles memory-log mechanics
-(reading, verifying, summarizing) on behalf of Sage, so those operations
+(reading, verifying, summarizing) on behalf of Toga, so those operations
 do NOT consume tokens in her agentic context.
 
 v2.1.3 (April 2026) — Phase A: token-efficient mechanics
@@ -166,7 +166,7 @@ except ImportError as _e:
                    f"— task emit disabled")
 
 # --- Memory logger integration -----
-# We import Sage's existing MemoryLogger so the daemon reads the exact same
+# We import Toga's existing MemoryLogger so the daemon reads the exact same
 # log file the main backend writes to, and reuses its verification logic.
 sys.path.insert(0, str(Path(__file__).parent))
 try:
@@ -186,7 +186,7 @@ except Exception as e:
     _BOOT_ENTRY_COUNT = 0
     logger.error(f"Failed to initialize MemoryLogger: {e}")
 
-# Wall-clock boot time of this Sage daemon instance (fatigue boot-grace).
+# Wall-clock boot time of this Toga daemon instance (fatigue boot-grace).
 _DAEMON_BOOT_TS = time.time()
     
     
@@ -1290,7 +1290,7 @@ def _build_author_digest(metrics: Dict[str, Any]) -> Optional[Dict[str, Any]]:
 
 def _job_fatigue_check() -> str:
     """CRAIID Phase 2: detect context fatigue from the LIVE instance and emit a
-    coordinator + signed handoff task when the current Sage has genuinely
+    coordinator + signed handoff task when the current Toga has genuinely
     filled up.
 
     Repointed 2026-06-09: fatigue is measured from what THIS instance has
@@ -1770,7 +1770,7 @@ def run_server() -> None:
 
         server_sock.listen(5)
         server_sock.settimeout(1.0)  # so we can check _shutdown_event
-        logger.info(f"Sage daemon listening on {HOST}:{PORT}")
+        logger.info(f"Toga daemon listening on {HOST}:{PORT}")
         logger.info(f"Log file: {DAEMON_LOG_FILE}")
         logger.info("Ready to accept requests.")
 
@@ -1790,7 +1790,7 @@ def run_server() -> None:
             )
             t.start()
 
-        logger.info("Sage daemon shut down cleanly.")
+        logger.info("Toga daemon shut down cleanly.")
 
 
 # --- Signal handling for clean Ctrl+C / SIGTERM ---------

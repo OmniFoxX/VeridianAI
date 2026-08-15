@@ -2,12 +2,12 @@
 mcp_handlers.py -- shared MCP (Model Context Protocol) tool dispatch
 ====================================================================
 
-v2.3+ (2026-06-03): exposes Sage's tool tags to external MCP clients
+v2.3+ (2026-06-03): exposes Toga's tool tags to external MCP clients
 (Continue.dev, Claude Desktop, etc.) via a single shared dispatch
 module used by both the HTTP route (main.py /mcp/v1/jsonrpc) and the
 stdio entry (mcp_server.py).
 
-Every Sage tool that's available via her tool-tag system is exposed
+Every Toga tool that's available via her tool-tag system is exposed
 here: search, search_general, search_memory, weather, browse,
 web_search, code, save_file, verify_file, recall, remember,
 remember_fail. Calls flow through the SAME underlying functions her
@@ -19,7 +19,7 @@ DISTRIBUTION-SAFE DESIGN
 ------------------------
 - No hardcoded paths -- imports rely on backend.config / sage_engine.
 - No persona prompt injection at this layer -- callers (HTTP or stdio)
-  decide whether to wrap responses in Sage's voice. MCP tool calls
+  decide whether to wrap responses in Toga's voice. MCP tool calls
   return raw tool results; conversation framing is the chat-completion
   endpoint's concern, not MCP's.
 - Source-tagged provenance -- every procedural memory write made via
@@ -55,7 +55,7 @@ import traceback
 from typing import Any, Callable, Dict, List
 
 # ---------------------------------------------------------------------------
-# Lazy imports of the Sage substrate. Done at call time (not module load) so
+# Lazy imports of the Toga substrate. Done at call time (not module load) so
 # importing mcp_handlers from a stdio subprocess does not eagerly pull in the
 # entire main.py initialisation chain. Each tool function imports what it
 # needs the first time it runs.
@@ -136,7 +136,7 @@ try:
     from branding import MCP_SERVER_NAME
 except Exception:
     MCP_SERVER_NAME = "veridianai-toga"
-MCP_SERVER_VERSION = "2.15.0"
+MCP_SERVER_VERSION = "2.15.1"
 MCP_PROTOCOL_VERSION = "2025-03-26"  # MCP spec version this implementation targets
 
 

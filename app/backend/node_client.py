@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-node_client.py - client side of the Sage network (e.g. the laptop).
+node_client.py - client side of the Toga network (e.g. the laptop).
 Wraps each call in an identity envelope {v, user, session, kind, body}, encrypts
 it with the shared home token, POSTs to a remote node, decrypts the reply, and
 VERIFIES the reply's session matches the request (rejects any cross-delivered or

@@ -1,4 +1,4 @@
-"""OracleAI / Aether -- manual IP access control (denylist + lockdown allowlist).
+"""VeridianAI / Aether -- manual IP access control (denylist + lockdown allowlist).
 
 A persistent, user-managed complement to wan_guard.AbuseGuard. AbuseGuard is
 AUTOMATIC, in-memory and TEMPORARY (rate-limit + failed-auth backoff that resets

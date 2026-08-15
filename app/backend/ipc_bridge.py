@@ -1,5 +1,5 @@
 """
-IPC bridge utilities for OracleAI.
+IPC bridge utilities for VeridianAI.
 Provides a simple TCP-based localhost communication mechanism.
 Used by browser_tool.py to send navigation commands to browser_tool.py.
 """

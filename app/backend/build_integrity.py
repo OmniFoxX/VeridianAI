@@ -32,7 +32,7 @@ import uuid
 from pathlib import Path
 
 CANONICAL_REPO = "https://github.com/OmniFoxX"
-PRODUCT = "VeridianAI"          # v2.12.17: was "OracleAI" (pre-rename leftover)
+PRODUCT = "VeridianAI"          # v2.12.17: was "VeridianAI" (pre-rename leftover)
 
 # Once you run `keygen`, paste the printed fingerprint here to LOCK provenance:
 # verify() will then mark a build "official" only if its shipped public key
@@ -71,7 +71,16 @@ EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build",
                 # files the shipped tree cannot contain and the Build badge reads
                 # "modified" no matter how many times you regenerate. genmanifest
                 # and make_release.ps1 must agree on what "the product" is.
-                "Geminisms", "LeoBraves", "SageCrafts", "SAFE",
+                #
+                # v2.15.1: BOTH SPELLINGS, on purpose. The 2026-08-14 rename sweep
+                # (Sage -> Toga, OracleAI -> VeridianAI) rewrote these strings in
+                # some files and not others, so this list and make_release.ps1's
+                # stopped agreeing -- which is the precise failure the paragraph
+                # above warns about. A directory is only ever called one of these
+                # things, so naming both costs nothing and cannot be wrong,
+                # whichever way the folders on disk actually got renamed.
+                "Geminisms", "LeoBraves", "SAFE",
+                "SageCrafts", "TogaCrafts", "SageTech", "TogaTech",
                 # v2.13: electron/ is NOT hashed. Its .js files are packed into
                 # resources/app.asar at build time and are not present loose in
                 # a packaged install -- so verify() found them "missing" and

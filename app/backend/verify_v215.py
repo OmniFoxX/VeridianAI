@@ -1,5 +1,5 @@
 """
-End-to-end verification harness for OracleAI v2.1.5 additions:
+End-to-end verification harness for VeridianAI v2.1.5 additions:
 
   1. [TASK_DONE] autolog — simulated agentic-turn flow records the
      action sequence as a chain-witnessed successful procedure.
@@ -295,7 +295,7 @@ def main():
         or "subtask keywords" in p
     ), "prompt missing batched-dispatch / PRIORITISE reference (any form)"
     # Critical inverse: NO parseable [PRIORITISE: literal allowed —
-    # that would be parser-bait Sage could echo as a live command.
+    # that would be parser-bait Toga could echo as a live command.
     assert "[PRIORITISE:" not in p, (
         "prompt contains parseable [PRIORITISE: square-bracket literal "
         "— this is parser-bait. Use ⟨PRIORITISE: angle-bracket form."

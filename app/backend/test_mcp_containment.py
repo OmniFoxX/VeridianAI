@@ -36,7 +36,7 @@ TREE = ast.parse(SRC)
 seen = []          # (tool, target, ns)
 
 
-class _Sage:
+class _Toga:
     def search_all_archives(self, q, ns=None):
         seen.append(("search_memory", "archives", ns)); return []
 
@@ -67,7 +67,7 @@ def _load():
         if isinstance(n, ast.Assign) and any(
                 getattr(t, "id", None) == "_NS_TOOLS" for t in n.targets):
             exec(compile(ast.Module([n], []), "<t>", "exec"), env)
-    env["_sage"] = lambda: _Sage()
+    env["_sage"] = lambda: _Toga()
     env["_procedural_memory"] = lambda ns=None: _PM(ns)
     env["_DISPATCH"] = {
         "search_memory": env["_tool_search_memory"],

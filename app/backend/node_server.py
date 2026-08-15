@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-node_server.py - desktop-side "node surface" helpers for the Sage network.
+node_server.py - desktop-side "node surface" helpers for the Toga network.
 Gated OFF by default; token-authenticated + Fernet-encrypted via node_trust.
 Every message is an identity envelope {v, user, session, kind, body} - the
 (user, session) fields are the multi-user seam (today user defaults to "owner";
@@ -45,7 +45,7 @@ def _warn_once():
         "    public interface). Do NOT port-forward this to the internet.\n"
         "  * Protect the .home_token file - anyone who can read it can use your\n"
         "    nodes. Share it only with machines you own.\n"
-        "  * Internet exposure ('SageNet') is a separate, deliberate, future step\n"
+        "  * Internet exposure ('TogaNet') is a separate, deliberate, future step\n"
         "    with its own warnings. This is NOT that.\n"
         + bar + "\n"
     )

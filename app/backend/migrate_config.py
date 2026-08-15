@@ -228,7 +228,7 @@ def migrate(dry_run: bool = False) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="OracleAI config.json v1->v2 migrator")
+    parser = argparse.ArgumentParser(description="VeridianAI config.json v1->v2 migrator")
     parser.add_argument("--dry-run", action="store_true",
                         help="Show what would change, don't write any files.")
     args = parser.parse_args()

@@ -41,4 +41,4 @@ Violations surface through the overseer notification system
 Every audit entry mirrors into Toga's existing hash-chain log with role="imperium"
 Four config knobs in config.json: imperium_enabled, imperium_enforce, window, threshold
 
-A MentiSphere Software Solution - Todd and AI Collaborative Work.
+A MentiSphere Software Solution

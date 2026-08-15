@@ -212,7 +212,7 @@ if __name__ == "__main__":
     key = Fernet.generate_key()
 
     # Simulate node fingerprints — no real names, ever
-    node_a = NodeCapability.make_node_id("veridianai-todd-workstation")
+    node_a = NodeCapability.make_node_id("veridianai-argo-networknode")
     node_b = NodeCapability.make_node_id("veridianai-phone-relay")
     node_c = NodeCapability.make_node_id("veridianai-pi-gateway")
 

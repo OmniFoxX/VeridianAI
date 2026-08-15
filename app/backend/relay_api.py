@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- relay broker HTTP surface. Rendezvous for peers that can't
+VeridianAI / Aether -- relay broker HTTP surface. Rendezvous for peers that can't
 reach each other directly (CGNAT-to-CGNAT, or the reverse direction). Brokers
 opaque request/response between a CLIENT and a registered SOURCE. OFF by default
 behind relay_server_enabled; rate-limited (internet-exposed). The relay is

@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- WAN abuse guard (rate limit + failed-auth backoff).
+VeridianAI / Aether -- WAN abuse guard (rate limit + failed-auth backoff).
 
 Table-stakes hardening for ANY internet-exposed surface (node compute, skill
 serve): cheap, in-memory, per-key throttling that runs BEFORE expensive work, so

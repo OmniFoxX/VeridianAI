@@ -1,4 +1,4 @@
-# OracleAI - Python dependencies
+# VeridianAI - Python dependencies
 #
 # The curated, version-ranged dependency manifest lives in:
 #     backend/requirements.txt
@@ -9,10 +9,9 @@
 # machine-specific CUDA builds such as torch==2.12.1+cu132 / torchvision+cu132,
 # which do NOT exist on PyPI and broke fresh installs on other machines.
 #
-# Optional extras (NOT required to run OracleAI core):
+# Optional extras (NOT required to run VeridianAI core):
 #   - Whisper voice STT:  pip install openai-whisper sounddevice   (pulls CPU torch)
 #   - NVIDIA GPU torch:   install from https://pytorch.org for your CUDA version
 #   - Browser automation: pip install playwright  &&  python -m playwright install chromium
-#   - Discord / BitChat:  pip install discord.py bleak
 
 -r backend/requirements.txt

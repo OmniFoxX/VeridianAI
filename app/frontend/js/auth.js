@@ -28,12 +28,20 @@
       ";border:1px solid " + V("--border", "#2a3a5a") + ";font-size:14px;box-sizing:border-box";
   }
 
-  function showAuthOverlay(needsSetup) {
+  // Options for the overlay currently on screen. The sign-in / first-run gate
+  // passes nothing and behaves exactly as it always has; the Settings toggle
+  // passes a different subtitle, a Cancel button, and something to do after the
+  // account exists. One form, one validator, one error surface -- a second
+  // hand-rolled copy of this in Settings is how the two drift apart.
+  var _authOpts = {};
+
+  function showAuthOverlay(needsSetup, opts) {
     hideAuthOverlay();
-    var subtitle = needsSetup
+    _authOpts = opts || {};
+    var subtitle = _authOpts.subtitle || (needsSetup
       ? "First run -- create the owner account."
-      : "Sign in to continue.";
-    var action = needsSetup ? "Create account" : "Sign in";
+      : "Sign in to continue.");
+    var action = _authOpts.actionLabel || (needsSetup ? "Create account" : "Sign in");
     var ov = document.createElement("div");
     ov.id = "auth-overlay";
     ov.setAttribute("role", "dialog");
@@ -72,10 +80,26 @@
       // keeps the sign-in button readable in both themes.)
       'border-radius:8px;cursor:pointer;font-size:15px;font-weight:600;background:' +
       '#f0a500;color:#1a1206">' + action + '</button>' +
+      (_authOpts.cancelLabel
+        ? '<button id="auth-cancel" style="width:100%;padding:11px;margin-top:8px;' +
+          'border-radius:8px;cursor:pointer;font-size:14px;font-weight:600;' +
+          'background:transparent;color:' + V("--text-muted", "#7890b8") +
+          ';border:1px solid ' + V("--border", "#2a3a5a") + '">' +
+          _authOpts.cancelLabel + '</button>'
+        : "") +
       '</div>';
     document.body.appendChild(ov);
     var submit = function () { submitAuth(needsSetup); };
     document.getElementById("auth-submit").onclick = submit;
+    var cancelBtn = document.getElementById("auth-cancel");
+    if (cancelBtn) {
+      cancelBtn.onclick = function () {
+        var cb = _authOpts.onCancel;
+        hideAuthOverlay();
+        _authOpts = {};
+        if (cb) cb();
+      };
+    }
     var onEnter = function (e) { if (e.key === "Enter") submit(); };
     ov.querySelectorAll("input").forEach(function (el) { el.addEventListener("keydown", onEnter); });
     var uname = document.getElementById("auth-username");
@@ -119,7 +143,21 @@
       // MFA-enrolled account: password ok, second factor required. The server
       // returned a short-lived challenge token instead of a session.
       if (r.ok && j.mfa_required) { showMfaStep(j); return; }
-      if (r.ok) { hideAuthOverlay(); location.reload(); return; }
+      if (r.ok) {
+        // The caller may have more to do before the page turns over -- the
+        // Settings toggle still has to switch multi-profile ON, and it must
+        // happen only now that the Owner account actually exists. Reloading
+        // first would lose that step.
+        if (_authOpts.afterCreate) {
+          var after = _authOpts.afterCreate;
+          var res = await after();
+          if (res && res.ok === false) { setError(res.detail || "Could not finish setup."); return; }
+          return;
+        }
+        hideAuthOverlay();
+        location.reload();
+        return;
+      }
       setError(j.detail || j.error || (needsSetup ? "Could not create account." : "Invalid credentials."));
     } catch (e) {
       setError("Could not reach the server.");
@@ -1243,6 +1281,94 @@
     } catch (e) { uaSetError("Could not reach the server."); }
   }
 
+  /* --- Turning Multi-Profile ON, from Settings ----------------------------
+   *
+   * v2.15.1. Multi-profile used to be an ordinary settings toggle, and the
+   * first account created anywhere became the Owner -- so on a shared machine
+   * whoever flipped it first owned the install. v2.15 closed that by refusing
+   * the toggle until an Owner exists.
+   *
+   * Which made the toggle unusable, because nothing offered to create one. The
+   * refusal said "Create the owner account first" and there was no first. The
+   * only path left was the first-run dialog, and that is one-shot: choose
+   * Single Profile once and Multi-Profile was unreachable for the life of the
+   * install. A guard that cannot be satisfied is not a guard, it is a wall.
+   *
+   * So the toggle creates the account itself, in this order:
+   *
+   *   1. Owner account   (POST /api/auth/setup -- which returns a session, so
+   *                       the person who just created it is signed in as them)
+   *   2. THEN the mode   (POST /api/config multiuser_enabled:true)
+   *
+   * That ordering is the part worth keeping from v2.15: there is never a
+   * moment where multi-profile is on with no owner, which is the state that
+   * hands the install to whoever creates the next account. If step 1 is
+   * cancelled or fails, step 2 never runs and nothing has changed.
+   *
+   * No sign-out. Step 1 issues the session cookie, so the reload lands back in
+   * the app as the Owner. Multi-profile is on from here; the sign-in prompt
+   * appears on the NEXT launch, because the cookie is a session cookie and does
+   * not survive closing the app.
+   */
+  async function enableMultiProfileMode() {
+    try {
+      var r = await fetch("/api/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ multiuser_enabled: true }),
+      });
+      if (r.ok) {
+        hideAuthOverlay();
+        _authOpts = {};
+        location.reload();
+        return { ok: true };
+      }
+      var j = {}; try { j = await r.json(); } catch (e) {}
+      return { ok: false, detail: j.detail || j.error || ("HTTP " + r.status) };
+    } catch (e) {
+      return { ok: false, detail: "Could not reach the local service." };
+    }
+  }
+
+  /* Called by the Settings toggle. Resolves once the flow has been STARTED,
+   * not once it has finished -- the account form is modal and finishes on its
+   * own, via afterCreate. opts.onCancel / opts.onError let the caller put the
+   * switch back, because a toggle that stays on over a setting that did not
+   * change is the failure this replaced.
+   */
+  async function createOwnerAccount(opts) {
+    opts = opts || {};
+
+    // An Owner may already exist -- most likely because a previous attempt
+    // created the account and then failed, or was interrupted, before the mode
+    // was switched on. Re-asking for a username would just hit "owner account
+    // already exists"; the only thing left to do is finish the job.
+    var ownerExists = false;
+    try {
+      var r = await fetch("/api/first-run", { credentials: "same-origin" });
+      if (r.ok) {
+        var j = await r.json();
+        ownerExists = !!j.any_users;
+      }
+    } catch (e) { /* treat as "no owner yet" and let the form decide */ }
+
+    if (ownerExists) {
+      var res = await enableMultiProfileMode();
+      if (res.ok === false && opts.onError) opts.onError(res.detail);
+      return res;
+    }
+
+    showAuthOverlay(true, {
+      subtitle: "Create the Owner account for Multi-Profile.",
+      actionLabel: "Create Owner account",
+      cancelLabel: "Cancel",
+      onCancel: opts.onCancel || null,
+      afterCreate: enableMultiProfileMode,
+    });
+    return { ok: true, started: true };
+  }
+
   window.OracleAuth = {
     checkAuth: checkAuth,
     logout: logout,
@@ -1250,6 +1376,7 @@
     showChangePassword: showChangePassword,
     showUserAdmin: showUserAdmin,
     showSecurity: showSecurity,
+    createOwnerAccount: createOwnerAccount,
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", checkAuth);

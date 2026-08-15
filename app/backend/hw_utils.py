@@ -1,5 +1,5 @@
 """
-OracleAI Hardware Utility v2.1.10
+VeridianAI Hardware Utility v2.1.10
 Cross-platform detection for NVIDIA (CUDA), AMD (ROCm), Intel (Arc/XPU), and CPU.
 
 v2.1.2 FIX: Intel GPU VRAM now reads from the Windows driver registry

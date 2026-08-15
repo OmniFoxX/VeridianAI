@@ -31,11 +31,6 @@ considered in-scope for security reports:
   (e.g. VS Code, Continue.dev). /metrics and /health are intended for
   localhost-only access (127.0.0.1/::1); any exposure beyond loopback is a
   valid report.
-- **BitChat BLE gateway** (`bitchat_ble_gateway.py`, localhost:8080) — Bridges
-  BLE peer messages into Toga. Malformed or malicious BLE payloads causing crashes,
-  memory issues, or fragmentation exploits are in scope. BitChat peer identity
-  verification—flaws allowing spoofed fingerprints (16-block SHA-256) or bypass
-  of manual verification step—are also in-scope.
 - **ComfyUI integration** — Runs with security mitigations in place; gaps in
   those mitigations are in scope.
 - **Fernet encryption / hash-chain log** -any flaw that weakens integrity or
@@ -55,7 +50,7 @@ Instead:
 
 1. Use GitHub's **private vulnerability reporting** feature on this repo
    (Security tab → "Report a vulnerability"), **or**
-2. Email: "Todd" @ "silverfox4816@gmail.com" Re: "VeridianAI Security Inquiry"
+2. Email: "todd@mentispheresoftware.com" Re: "VeridianAI Security Inquiry"
 
 Include:
 
@@ -93,5 +88,5 @@ process:
 - Aether Network requires explicit opt-in with visible warnings.
 - Localhost-only binding intended for `/metrics`, `/health`, and the BitChat
   BLE gateway.
-- WCAG 2.2 Level A/AA accessibility compliance (not a security control, but
+- WCAG 2.2 Level A/AA accessibility compliance-aligned (not a security control, but
   we're proud of it and it's not going anywhere).

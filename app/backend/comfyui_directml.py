@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-DirectML image engine provisioner for OracleAI (AMD / Intel GPUs, Windows).
+DirectML image engine provisioner for VeridianAI (AMD / Intel GPUs, Windows).
 ===========================================================================
 
 ComfyUI's official Windows portable ships Python 3.13, but Microsoft's
@@ -97,7 +97,7 @@ def _download(url: str, dest: str, progress_cb: Callable, lo: int, hi: int,
               label: str) -> bool:
     """Stream `url` to `dest`, mapping progress into the [lo, hi] band."""
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "OracleAI-Setup/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "VeridianAI-Setup/1.0"})
         with safe_urlopen(req, timeout=60) as resp, open(dest, "wb") as f:
             total = int(resp.headers.get("Content-Length") or 0)
             done = 0

@@ -851,5 +851,5 @@ def lint(expr: str, variables: dict = None):
 
 
 # ----------------------------------------------------------------------
-# End of file – ready for OracleAI backend import.
+# End of file – ready for VeridianAI backend import.
 # ----------------------------------------------------------------------

@@ -1,5 +1,5 @@
 """
-procedural_memory.py -- Procedural knowledge base for OracleAI
+procedural_memory.py -- Procedural knowledge base for VeridianAI
 ----------------------------------------------------------------
 Stores operational knowledge (working commands, file paths, known bugs,
 verified recipes) separately from episodic/surprise memory so the

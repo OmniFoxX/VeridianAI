@@ -1,5 +1,5 @@
 """
-OracleAI Model Manager v2.1.6+ Phase 1C — three-tier routing (Updated with TimeManager)
+VeridianAI Model Manager v2.1.6+ Phase 1C — three-tier routing (Updated with TimeManager)
 ====================================================================================
 Replaces the v2.1 GGUF-via-llama-cpp-python path with HTTP routing
 to a long-running `llama-server.exe` per tier. Each tier is a
@@ -8,7 +8,7 @@ brings them up before the FastAPI backend starts.
 
 Active tiers:
   - Oracle  : Ollama on 11434      (/api/chat, heavy reasoning)
-  - Sage    : llama-server on 11435 (/v1/chat/completions, fast chat)
+  - Toga    : llama-server on 11435 (/v1/chat/completions, fast chat)
   - Daemon  : llama-server on 11436 (/v1/chat/completions, small)
 
 There is NO in-process inference any more. The `from llama_cpp import
@@ -32,7 +32,7 @@ Each model dict returned by list_models() carries (Option C, max flex):
         "id":      "openhands-lm-7b-v0.1",
         "name":    "openhands-lm-7b-v0.1",
         "backend": "llama_sage",   # or "ollama_oracle", "llama_daemon"
-        "tier":    "Sage",         # or "Oracle", "Daemon"
+        "tier":    "Toga",         # or "Oracle", "Daemon"
         "url":     "http://127.0.0.1:11435",
         "size":    0,
         "loaded":  True,
@@ -76,7 +76,7 @@ BACKEND_NPU           = "npu_lemonade"   # v2.11.12: Ryzen AI NPU tier
 #   protocol = "openai" -> /v1/chat/completions (OpenAI-compatible SSE)
 TIERS: Tuple[Tuple[str, str, str, str], ...] = (
     (BACKEND_OLLAMA_ORACLE, "Oracle", OLLAMA_ORACLE_URL, "ollama"),
-    (BACKEND_LLAMA_SAGE,    "Sage",   LLAMA_SAGE_URL,    "openai"),
+    (BACKEND_LLAMA_SAGE,    "Toga",   LLAMA_SAGE_URL,    "openai"),
     (BACKEND_LLAMA_DAEMON,  "Daemon", LLAMA_DAEMON_URL,  "openai"),
 )
 
@@ -94,7 +94,7 @@ def _tier_stop_strings(tier_label: str) -> List[str]:
     out: List[str] = []
     try:
         from gguf_probe import stop_strings
-        path = {"Sage": MODEL_SAGE, "Daemon": MODEL_DAEMON}.get(tier_label)
+        path = {"Toga": MODEL_SAGE, "Daemon": MODEL_DAEMON}.get(tier_label)
         if path:
             out = stop_strings(path)
             if out:
@@ -1155,7 +1155,7 @@ class ModelManager:
         # v2.12.4: strict chat templates (Qwen3.5-era) hard-require exactly
         # ONE system message, at position 0. llama.cpp otherwise aborts with
         # "Unable to generate parser for this template" (HTTP 400) before
-        # generating anything. Sage turns can legitimately carry extra
+        # generating anything. Toga turns can legitimately carry extra
         # system-role entries (session boundary markers, injected context),
         # so merge every system message into a single leading one for
         # OpenAI-protocol tiers. Order is preserved; non-system messages are

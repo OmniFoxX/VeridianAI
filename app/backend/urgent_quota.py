@@ -1,7 +1,7 @@
 """
 urgent_quota.py — v2.11.13 per-peer Urgent budget for shared compute.
 
-Design (Todd, 2026-07-03): remote peers on the Sage/Aether network may flag a
+Design (Todd, 2026-07-03): remote peers on the Toga/Aether network may flag a
 request URGENT to jump ahead of other REMOTE work (never ahead of local work,
 and never preempting a running job). To keep anyone from Bogarting the urgent
 lane, each peer gets a small rolling budget — the budget IS the ceiling:

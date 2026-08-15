@@ -2,7 +2,7 @@ DOCUMENT 2 OF 4: TERMS OF SERVICE
 VERIDIANAI — MENTISPHERE SOFTWARE, ETC.
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI TERMS OF SERVICE
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 1.0
+Published by: MentiSphere Software Contact: todd@mentispheresoftware.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 2
 
 ARTICLE I — AGREEMENT AND ACCEPTANCE
 1.1 Binding Agreement
@@ -76,7 +76,7 @@ Commercial, Enterprise, Governmental, Institutional, and any other
 deployment, integration, or redistribution requires a paid license
 agreement.
 
-Contact: Todd Darimont, silverfox4816@gmail.com
+Contact: Todd Darimont, todd@mentispheresoftware.com
 RE: VeridianAI Licensing Inquiry
 
 RESTRICTIONS:
@@ -272,4 +272,4 @@ Publisher shall not be liable for any failure or delay in performance resulting 
 Publisher may update these Terms from time to time. Material changes will be announced in accordance with the process described in the Privacy Policy (Section 15). Continued use after the effective date of updates constitutes acceptance. If you do not agree to updated terms, your sole remedy is to cease use of VeridianAI.
 
 12.7 Contact
-For any question regarding these Terms, contact Publisher at: silverfox4816@gmail.com
+For any question regarding these Terms, contact Publisher at: todd@mentispheresoftware.com

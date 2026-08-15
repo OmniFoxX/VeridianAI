@@ -211,7 +211,7 @@ def print_banner():
     print("""
   +-------------------------------------------+
   |{0}|
-  |       Local AI Inference + Sage           |
+  |       Local AI Inference + Toga           |
   +-------------------------------------------+
 """.format(line.center(43)))
 

@@ -54,7 +54,8 @@ That briefing is **signed, tamper-evident, and integrity-checked** end to end â€
 forged or corrupted handoff can't silently poison the next instance's memory. And
 it all runs **locally**, which is the entire point: this is what makes a private,
 on-your-own-hardware assistant viable for the long, deep, multi-hour work that
-until now only a cloud model could sustain.
+until now only a cloud model could sustain. Now with a side-channel ledger for
+important details and particulars. Especially helpful for super long contexts.
 
 ---
 

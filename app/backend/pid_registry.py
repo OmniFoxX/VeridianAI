@@ -2,19 +2,19 @@
 pid_registry.py — v2.11.12 zombie-process fix (shared PID ledger).
 
 THE PROBLEM: tier_launcher.py spawns the five tier processes (Ollama,
-Llama-Sage, Llama-Daemon, Sage-Daemon, Overseer) and then EXITS. On
+Llama-Toga, Llama-Daemon, Toga-Daemon, Overseer) and then EXITS. On
 Windows, when the parent dies the children are re-parented, so Electron's
 `taskkill /T` on the start.bat tree can never see them. Result: orphan
 python.exe / llama-server.exe / ollama.exe processes that survive quit,
 hold ports 11434-11436, and make the next launch fail 3-5 times until
 the user gives up and reboots.
 
-THE FIX: every process OracleAI spawns is recorded here, in a JSON ledger
+THE FIX: every process VeridianAI spawns is recorded here, in a JSON ledger
 at <project root>/.oracle_pids.json, together with its psutil create_time.
 Shutdown (shutdown_cleanup.py) walks the ledger and kills each entry —
 but ONLY after verifying the PID still belongs to the process we started
 (create_time match), so a recycled PID belonging to something else is
-never touched. Policy per Todd (2026-07-02): only kill what OracleAI
+never touched. Policy per Todd (2026-07-02): only kill what VeridianAI
 started — a user-launched Ollama must survive our shutdown.
 
 Writers: tier_launcher.py, comfyui_launcher.py, and any future Popen site.
@@ -36,7 +36,7 @@ from state_paths import STATE_DIR, CONFIG_FILE, PID_REGISTRY, CHAT_MEMORY_FILE, 
 
 # Ledger lives at the project root, next to start.bat, so Electron and
 # start.bat can both find it without knowing about sage_data's layout.
-ROOT = Path(os.environ.get("OAI_ROOT") or Path(__file__).resolve().parent.parent)
+ROOT = Path(os.environ.get("VAI_ROOT") or Path(__file__).resolve().parent.parent)
 REGISTRY_FILE = PID_REGISTRY   # v2.13: STATE_DIR (install dir is read-only under MSIX)
 
 

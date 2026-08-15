@@ -5,7 +5,7 @@ _ws_bridge.py -- fake-WebSocket adapter for the OpenAI-compatible endpoint
 v2.2 Session 2 (2026-05-31): lets POST /v1/chat/completions invoke the
 existing WebSocket chat handler (main.ws_chat) unchanged, so external
 clients (Continue.dev, Claude Desktop, any OpenAI-compatible caller)
-get the COMPLETE Sage pipeline -- persona, agentic loop, tool dispatch,
+get the COMPLETE Toga pipeline -- persona, agentic loop, tool dispatch,
 procedural-memory writes, hash-chain witnessing, AIQNudge -- without
 the handler being aware it's not talking to a real WebSocket.
 
@@ -51,7 +51,7 @@ TOOL CALLS
 through the streaming callback. Per Session-1 design call: tool work
 runs server-side, transparent to Continue. The OpenAI streaming
 protocol has no native slot for these events; exposing them would
-force clients to parse OracleAI-specific event shapes.
+force clients to parse VeridianAI-specific event shapes.
 """
 from __future__ import annotations
 

@@ -1,7 +1,7 @@
 VERIDIANAI — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI DISCORD BOT — SUPPLEMENTAL TERMS OF SERVICE
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 1.0
+Published by: MentiSphere Software Contact: Todd@MentiSphereSoftware.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 2
 
 SECTION 1 — PURPOSE, SCOPE, AND RELATIONSHIP TO MAIN TERMS
 1.1 Supplement to Main Terms of Service
@@ -88,4 +88,4 @@ All AI safety provisions, output disclaimers, and indemnification obligations se
 SECTION 7 — GOVERNING LAW, VENUE, AND CONTACT
 These Bot Terms are governed by the laws of Washington State, USA. Any dispute arising from these Bot Terms shall be resolved in King County, Washington State courts, subject to the same dispute resolution provisions described in Main Terms Article X.
 
-Contact: silverfox4816@gmail.com Subject Line Recommended for Bot-Specific Inquiries: "Discord Bot Inquiry — VeridianAI"
+Contact: Todd@MentiSphereSoftware.com Subject Line Recommended for Bot-Specific Inquiries: "Discord Bot Inquiry — VeridianAI"

@@ -1,4 +1,4 @@
-"""OracleAI / Aether -- relay broker CORE (pure, thread-steady, deterministic). 
+"""VeridianAI / Aether -- relay broker CORE (pure, thread-steady, deterministic). 
 A mailbox/queue rendezvous: a CLIENT submits a request addressed to a target peer; the SOURCE peer (dialed outbound to the relay) pulls its pending requests, serves them locally, and posts responses; the CLIENT collects the response by id. The relay holds only what it forwards -- skill content is signed end-to-end, so the broker stays untrusted. TTLs bound memory; nothing here touches the network. 
 """
 from collections import defaultdict, deque

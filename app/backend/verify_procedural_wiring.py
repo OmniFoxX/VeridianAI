@@ -1,5 +1,5 @@
 """
-End-to-end verification harness for OracleAI v2.1.4 procedural-memory wiring.
+End-to-end verification harness for VeridianAI v2.1.4 procedural-memory wiring.
 
 Covers the write + read paths that verify_v214.py didn't touch:
 
@@ -305,11 +305,11 @@ def main():
         ), f"Prompt missing any reference to {tag_name}"
     # Critical inverse assertion: NO parseable square-bracket form may
     # appear in the prompt (that would be parser-bait waiting to be
-    # echoed by Sage).
+    # echoed by Toga).
     for tag in ("[REMEMBER:", "[REMEMBER_FAIL:", "[RECALL:"):
         assert tag not in p, (
             f"Prompt contains parseable {tag} — this is parser-bait "
-            f"that Sage could echo back into her output. Use ⟨{tag[1:]}"
+            f"that Toga could echo back into her output. Use ⟨{tag[1:]}"
             f" angle-bracket form instead."
         )
     assert "PROCEDURAL MEMORY" in p, \

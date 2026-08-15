@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-ComfyUI text-to-image client for OracleAI (inbound image GENERATION).
+ComfyUI text-to-image client for VeridianAI (inbound image GENERATION).
 ====================================================================
 
 Ollama/llama.cpp generate text + read images, but cannot CREATE images, so
 generation runs on a separate Stable-Diffusion backend. This module drives a
 local ComfyUI server over its HTTP API: build a txt2img workflow graph, POST it
 to /prompt, poll /history until it finishes, fetch the PNG via /view, and save it
-into OracleAI's downloads folder.
+into VeridianAI's downloads folder.
 
 DESIGN:
   * Synchronous core (urllib) so it is trivial to unit-test with a mocked
@@ -149,14 +149,14 @@ def generate_image(prompt: str, *, negative: Optional[str] = None,
         if seed is None:
             seed = random.randint(0, 2**32 - 1)
         ddir = Path(downloads_dir) if downloads_dir else \
-            Path(_opt(None, "ORACLEAI_DOWNLOADS", str(Path(__file__).resolve().parent.parent / "downloads")))
+            Path(_opt(None, "VERIDIANAI_DOWNLOADS", str(Path(__file__).resolve().parent.parent / "downloads")))
 
         ckpt, ckpt_err = _resolve_checkpoint(base, checkpoint, min(timeout, 15))
         if not ckpt:
             return {"success": False, "error": ckpt_err}
 
         workflow = _build_workflow(prompt, negative, width, height, steps, cfg,
-                                   sampler, scheduler, seed, ckpt, "OracleAI")
+                                   sampler, scheduler, seed, ckpt, "VeridianAI")
         client_id = str(_uuid())
 
         # 1) submit

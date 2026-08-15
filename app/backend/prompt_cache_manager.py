@@ -1,5 +1,5 @@
 # prompt_cache_manager.py
-# OracleAI Prompt Cache Manager
+# VeridianAI Prompt Cache Manager
 # Analyzes, segments, scores, and optimizes prompts for maximum KV cache efficiency.
 
 import hashlib

@@ -1,8 +1,8 @@
-"""OracleAI voice input service (server-side STT) — voice_service.py
+"""VeridianAI voice input service (server-side STT) — voice_service.py
 
 Adapted from omni_voice_engine_v4 for IN-APP use. It does SPEECH-TO-TEXT only and
 hands the text to the NORMAL chat pipeline (the UI drops it into the composer and
-sends it through /ws/chat), so voice goes through the REAL Sage — same models,
+sends it through /ws/chat), so voice goes through the REAL Toga — same models,
 memory, transcript, streaming — instead of a separate parallel brain.
 
 PRIVACY (by design — nothing is collected):
@@ -338,7 +338,7 @@ def _strip_wake(text: str, wake: str) -> str:
 class VoiceService:
     def __init__(self, cfg: Optional[dict] = None):
         self.cfg = dict(cfg or {})
-        self.wake_word          = (self.cfg.get("wake_word") or "Sage").strip()
+        self.wake_word          = (self.cfg.get("wake_word") or "Toga").strip()
         self.record_seconds     = float(self.cfg.get("record_seconds", 12))
         # Fallback only when VAD path is unavailable (legacy fixed window).
         self.wake_chunk_seconds = float(self.cfg.get("wake_chunk_seconds", 4))

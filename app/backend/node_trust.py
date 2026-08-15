@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-node_trust.py - trust core for the OracleAI node network ("Sage network").
+node_trust.py - trust core for the VeridianAI node network ("Toga network").
 ==========================================================================
 
 A single per-user HOME TOKEN is the root secret. It NEVER crosses the network.
@@ -15,7 +15,7 @@ Fernet-encrypted, which gives, in one primitive:
                       stale/replayed messages.
 
 No token is ever transmitted, and no TLS certificate is needed on the LAN. For
-the future internet step ("SageNet"), TLS would be layered ON TOP - but this
+the future internet step ("TogaNet"), TLS would be layered ON TOP - but this
 Fernet layer still protects payloads even over a plaintext or hostile transport,
 so the trust model is correct from day one.
 

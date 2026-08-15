@@ -1,9 +1,9 @@
 """
 branding.py — single source of truth for every user-facing name.
 
-v2.12.0 (2026-07-06): OracleAI -> VeridianAI, Sage -> Toga, and the
+v2.12.0 (2026-07-06): VeridianAI -> VeridianAI, Toga -> Toga, and the
 publisher is MentiSphere Software. Renamed for trademark safety before
-launch (Oracle Corp. markets "Oracle AI"; Sage Group is a major software
+launch (Oracle Corp. markets "Oracle AI"; Toga Group is a major software
 mark). New names USPTO-checked by Todd 2026-07-06: 0 live hits.
 
 RULES OF THE ROAD:
@@ -27,15 +27,15 @@ WAKE_WORD_DEFAULT = "Toga"                     # voice + socials wake word
 MCP_SERVER_NAME = "veridianai-toga"            # shown in MCP client configs
 
 # Display names for the inference tiers. INTERNAL tier labels/keys stay
-# "Oracle"/"Sage"/"Daemon"/"NPU" (routing, logs, config) — these are what
+# "Oracle"/"Toga"/"Daemon"/"NPU" (routing, logs, config) — these are what
 # the UI renders instead. Functional, so they never need a rebrand.
 TIER_DISPLAY = {
     "Oracle": "Reasoning",
-    "Sage":   "Agent",
+    "Toga":   "Agent",
     "Daemon": "Utility",
     "NPU":    "NPU",
 }
 
 # Previous names, kept for grep-ability and migration notes:
-_LEGACY = {"product": "OracleAI", "assistant": "Sage",
+_LEGACY = {"product": "VeridianAI", "assistant": "Toga",
            "publisher": "Electrum Consiliarius"}

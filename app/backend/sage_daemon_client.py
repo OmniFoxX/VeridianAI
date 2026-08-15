@@ -3,7 +3,7 @@ sage_daemon_client.py — TCP client for sage_daemon.py
 -----------------------------------------------------
 Length-prefixed JSON protocol over localhost TCP. Used by sage_engine.py
 to offload memory-log mechanics (read, verify, summarize) to the daemon
-so those operations don't consume tokens in Sage's agentic context.
+so those operations don't consume tokens in Toga's agentic context.
 
 v2.1.3: port changed 9999 → 9998 (9999 is used by ipc_bridge for the
 privacy browser mirror). Also fixed a variable shadowing bug where the
@@ -13,7 +13,7 @@ v2.1.5: MLM training data logger added to send_request(). Every
 successful daemon call appends one CSV row to:
     backend/mlm_training_data/daemon_calls.csv
 Format: f1,f2,f3,f4,f5,label  (feature_dim=5, no header, no quotes)
-Used to train the Sage Daemon MLM pre-router once sufficient data
+Used to train the Toga Daemon MLM pre-router once sufficient data
 has accumulated. Logging failures are non-fatal — a log error never
 breaks a daemon call.
 """
@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-class SageDaemonClient:
+class TogaDaemonClient:
     def __init__(
         self,
         host: str = "127.0.0.1",

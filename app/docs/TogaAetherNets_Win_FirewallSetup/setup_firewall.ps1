@@ -1,53 +1,64 @@
 <#
-  setup_firewall.ps1  --  VeridianAI -- Toga/Aether inbound firewall rule for the API port
+  setup_firewall.ps1  --  VeridianAI unified Windows Firewall setup
 
-  Configures the WINDOWS DEFENDER FIREWALL side only. This is INDEPENDENT of the
-  port-forward on your ISP modem/router: for internet peers to reach you, BOTH
-  must allow the traffic --
-      Internet  --(router port-forward  WAN:PORT -> this PC's LAN IP:PORT)-->  PC
-                --(this Windows rule: allow inbound TCP PORT)-->  OracleAI
-  This script only does the second arrow. Set the router forward in its own admin
-  page (forward TCP PORT to this PC's LAN IPv4, which you can see with `ipconfig`).
+  ONE script for BOTH of VeridianAI's networks:
 
-  WHY YOUR CURRENT RULE IS PROBABLY WRONG (the usual three causes):
-    1. Profile mismatch -- the rule is bound to "Private" but Windows has the
-       active network classified as "Public" (or vice-versa), so it never applies.
-       This script uses -Profile Any to sidestep that entirely.
-    2. A leftover/duplicate rule, or a BLOCK rule that wins (block beats allow).
-       This script lists what exists and removes its own old rule before adding.
-    3. Wrong direction/protocol (an Outbound or UDP rule). This creates the
-       correct Inbound + TCP rule.
+    * Aether  (internet relay) -- inbound  TCP  8000   (the API port)
+    * Argo-Net (LAN mesh)      -- inbound  UDP  47490  (multicast discovery,
+                                  public/DM messages, and signed revocations)
 
+  Pick which with -Include (Aether | ArgoNet | Both). Default is Both.
+
+  ----------------------------------------------------------------------------
+  WHEN DO YOU NEED THIS?
+    * Argo-Net: if two machines on the SAME LAN don't see each other as peers,
+      or public messages don't cross, Windows Firewall is almost certainly
+      dropping the inbound UDP multicast. Run this (Both or ArgoNet) on EACH
+      machine. (DMs and discovery ride the same UDP, so this fixes those too.)
+    * Aether: only if you expose the API port to internet peers. That ALSO needs
+      a port-forward on your router (this script only does the Windows side).
+
+  Argo-Net is LAN-only, so its rule is scoped to PRIVATE/DOMAIN profiles and, in
+  Scoped mode, to your local subnets -- it never opens the mesh port to the
+  internet.
+
+  ----------------------------------------------------------------------------
   RUN ELEVATED: right-click PowerShell -> "Run as administrator", then:
 
-      # See what already exists for the port (no changes are made):
+      # See what already exists (no changes):
       .\setup_firewall.ps1 -Mode Show
 
-      # Public Aether (recommended): allow the port; gating is done app-side by
-      # the 404-cloak + denylist + lockdown allowlist + auto-ban + peer signing.
-      .\setup_firewall.ps1 -Mode Open
+      # Recommended for the LAN mesh -- allow discovery + messages on the LAN:
+      .\setup_firewall.ps1 -Mode Open -Include ArgoNet
 
-      # Defense-in-depth: only these remote addresses may reach the port at all.
-      # New peers must be added here too, so prefer -Mode Open + the in-app
-      # lockdown allowlist unless you want OS-level scoping.
-      .\setup_firewall.ps1 -Mode Scoped -TrustedRemotes @("198.51.100.7","203.0.113.0/24","192.168.0.0/16")
+      # Both networks at once:
+      .\setup_firewall.ps1 -Mode Open -Include Both
 
-      # Remove the OracleAI rule entirely:
-      .\setup_firewall.ps1 -Mode Remove
+      # Defense-in-depth: only these remote addresses may reach the ports.
+      .\setup_firewall.ps1 -Mode Scoped -Include Both `
+          -TrustedRemotes @("192.168.0.0/16","198.51.100.7")
 
-  NOTE: -TrustedRemotes values here are EXAMPLES (RFC 5737 documentation ranges).
-  Replace them with your real peers' public IPs / CIDRs and your LAN range.
+      # Remove VeridianAI's rules:
+      .\setup_firewall.ps1 -Mode Remove -Include Both
+
+  NOTE: -TrustedRemotes values are EXAMPLES (RFC 5737 ranges + a private CIDR).
+  Replace with your real LAN range / peers.
 #>
 [CmdletBinding()]
 param(
-    [int]      $Port           = 8000,
     [ValidateSet("Show", "Open", "Scoped", "Remove")]
     [string]   $Mode           = "Show",
-    [string[]] $TrustedRemotes = @(),
-    [string]   $RuleName       = "VeridianAI Aether (inbound)"
+    [ValidateSet("Aether", "ArgoNet", "Both")]
+    [string]   $Include        = "Both",
+    [int]      $AetherPort     = 8000,
+    [int]      $ArgonetPort    = 47490,
+    [string[]] $TrustedRemotes = @()
 )
 
 $ErrorActionPreference = "Stop"
+
+$AetherRule  = "VeridianAI Aether (inbound)"
+$ArgonetRule = "VeridianAI Argo-Net mesh (inbound)"
 
 function Assert-Admin {
     $id  = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -58,55 +69,85 @@ function Assert-Admin {
     }
 }
 
-function Remove-OldRule {
-    $old = Get-NetFirewallRule -DisplayName $RuleName -ErrorAction SilentlyContinue
+function Remove-Rule([string]$Name) {
+    $old = Get-NetFirewallRule -DisplayName $Name -ErrorAction SilentlyContinue
     if ($old) {
         $old | Remove-NetFirewallRule
-        Write-Host "Removed existing rule named '$RuleName'." -ForegroundColor DarkYellow
+        Write-Host "Removed existing rule '$Name'." -ForegroundColor DarkYellow
     }
 }
 
-# --- Always show what currently targets this port (read-only, no admin needed) -
-Write-Host "== Existing INBOUND rules touching TCP $Port ==" -ForegroundColor Cyan
-$hits = Get-NetFirewallPortFilter -Protocol TCP -ErrorAction SilentlyContinue |
-    Where-Object { "$($_.LocalPort)" -eq "$Port" } |
-    ForEach-Object { $_ | Get-NetFirewallRule -ErrorAction SilentlyContinue } |
-    Where-Object { $_.Direction -eq "Inbound" }
-if ($hits) {
-    $hits | Sort-Object DisplayName -Unique |
-        Format-Table DisplayName, Enabled, Action, Profile -AutoSize
-} else {
-    Write-Host "  (no exact single-port inbound rules found for $Port)"
+function Show-Port([string]$Protocol, [int]$Port) {
+    Write-Host "== Existing INBOUND rules touching $Protocol $Port ==" -ForegroundColor Cyan
+    $hits = Get-NetFirewallPortFilter -Protocol $Protocol -ErrorAction SilentlyContinue |
+        Where-Object { "$($_.LocalPort)" -eq "$Port" } |
+        ForEach-Object { $_ | Get-NetFirewallRule -ErrorAction SilentlyContinue } |
+        Where-Object { $_.Direction -eq "Inbound" }
+    if ($hits) {
+        $hits | Sort-Object DisplayName -Unique |
+            Format-Table DisplayName, Enabled, Action, Profile -AutoSize
+    } else {
+        Write-Host "  (none found)"
+    }
 }
+
+$doAether  = ($Include -eq "Aether")  -or ($Include -eq "Both")
+$doArgonet = ($Include -eq "ArgoNet") -or ($Include -eq "Both")
+
+# --- Always show what currently exists (read-only, no admin needed) ----------
+if ($doAether)  { Show-Port "TCP" $AetherPort }
+if ($doArgonet) { Show-Port "UDP" $ArgonetPort }
 
 switch ($Mode) {
     "Show" {
         Write-Host "`nShow-only. Re-run with -Mode Open (or Scoped) to apply." -ForegroundColor Yellow
     }
+
     "Remove" {
         Assert-Admin
-        Remove-OldRule
-        Write-Host "Done. Port $Port is no longer allowed by the '$RuleName' rule." -ForegroundColor Green
+        if ($doAether)  { Remove-Rule $AetherRule }
+        if ($doArgonet) { Remove-Rule $ArgonetRule }
+        Write-Host "Done. Selected VeridianAI rules removed." -ForegroundColor Green
     }
+
     "Open" {
         Assert-Admin
-        Remove-OldRule
-        New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Action Allow `
-            -Protocol TCP -LocalPort $Port -Profile Any | Out-Null
-        Write-Host "OK: OPEN inbound allow for TCP $Port on all profiles." -ForegroundColor Green
-        Write-Host "Security is enforced app-side (404-cloak + denylist + lockdown + auto-ban + peer signing)."
+        if ($doAether) {
+            Remove-Rule $AetherRule
+            New-NetFirewallRule -DisplayName $AetherRule -Direction Inbound -Action Allow `
+                -Protocol TCP -LocalPort $AetherPort -Profile Any | Out-Null
+            Write-Host "OK: Aether  -> inbound TCP $AetherPort (all profiles)." -ForegroundColor Green
+        }
+        if ($doArgonet) {
+            Remove-Rule $ArgonetRule
+            # LAN mesh: Private/Domain only (never expose the mesh to the internet).
+            New-NetFirewallRule -DisplayName $ArgonetRule -Direction Inbound -Action Allow `
+                -Protocol UDP -LocalPort $ArgonetPort -Profile Private,Domain | Out-Null
+            Write-Host "OK: Argo-Net -> inbound UDP $ArgonetPort (Private/Domain)." -ForegroundColor Green
+            Write-Host "    (Discovery, public + DM messages, and revocations all use this port.)"
+        }
     }
+
     "Scoped" {
         Assert-Admin
         if (-not $TrustedRemotes -or $TrustedRemotes.Count -eq 0) {
-            Write-Error "Scoped mode requires -TrustedRemotes, e.g. @('198.51.100.7','192.168.0.0/16')."
+            Write-Error "Scoped mode requires -TrustedRemotes, e.g. @('192.168.0.0/16')."
             exit 1
         }
-        Remove-OldRule
-        New-NetFirewallRule -DisplayName $RuleName -Direction Inbound -Action Allow `
-            -Protocol TCP -LocalPort $Port -Profile Any -RemoteAddress $TrustedRemotes | Out-Null
-        Write-Host "OK: SCOPED inbound allow for TCP $Port from:" -ForegroundColor Green
+        if ($doAether) {
+            Remove-Rule $AetherRule
+            New-NetFirewallRule -DisplayName $AetherRule -Direction Inbound -Action Allow `
+                -Protocol TCP -LocalPort $AetherPort -Profile Any -RemoteAddress $TrustedRemotes | Out-Null
+            Write-Host "OK: Aether  -> SCOPED inbound TCP $AetherPort from your list." -ForegroundColor Green
+        }
+        if ($doArgonet) {
+            Remove-Rule $ArgonetRule
+            New-NetFirewallRule -DisplayName $ArgonetRule -Direction Inbound -Action Allow `
+                -Protocol UDP -LocalPort $ArgonetPort -Profile Private,Domain -RemoteAddress $TrustedRemotes | Out-Null
+            Write-Host "OK: Argo-Net -> SCOPED inbound UDP $ArgonetPort from your list." -ForegroundColor Green
+        }
         $TrustedRemotes | ForEach-Object { Write-Host "    $_" }
-        Write-Host "Reminder: add new peers here too, or use -Mode Open + the in-app lockdown allowlist."
     }
 }
+
+Write-Host "`nReminder: run this on EVERY machine that should join the mesh." -ForegroundColor Cyan

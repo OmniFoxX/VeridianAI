@@ -50,7 +50,7 @@ from config import (
 # INTEGRATION_argonet_2026-07-24.md) but this registration was missed, so
 # GET /api/tiers kept advertising a forever-down "bitchat" tier to every
 # client (UI tier panel, CLI dashboard). Argo-Net needs NO tier entry: it
-# is a Socials adapter (SageMessagingAdapter) with no gateway process or
+# is a Socials adapter (TogaMessagingAdapter) with no gateway process or
 # port — its radio starts on the user's Connect click. The gateway
 # functions below (ensure_bitchat_gateway / stop_bitchat_gateway) are
 # KEPT, matching the integration doc's disposition: BitChat files stay
@@ -468,7 +468,7 @@ def _peripheral_role_supported() -> "bool | None":
 def spawn_bitchat_gateway() -> subprocess.Popen:
     """Spawn the BitChat gateway. Console visibility follows Developer Mode.
 
-    Prefers the WinRT peripheral gateway (Sage advertises as a real BLE peer
+    Prefers the WinRT peripheral gateway (Toga advertises as a real BLE peer
     that the phones handshake with). Falls back to the legacy central-role
     BLE gateway when the WinRT script is missing OR when the adapter simply
     cannot advertise (peripheral role unsupported) -- a central-only adapter
@@ -485,7 +485,7 @@ def spawn_bitchat_gateway() -> subprocess.Popen:
         gateway = legacy
     elif legacy.exists() and _peripheral_role_supported() is False:
         print("[tier] bitchat: adapter has NO peripheral role -> using "
-              "central-role fallback gateway (Sage scans for phones instead "
+              "central-role fallback gateway (Toga scans for phones instead "
               "of advertising). Fix the peripheral-capable adapter's driver "
               "to restore the preferred WinRT gateway.")
         gateway = legacy

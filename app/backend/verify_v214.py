@@ -1,5 +1,5 @@
 """
-End-to-end verification harness for OracleAI v2.1.4 changes:
+End-to-end verification harness for VeridianAI v2.1.4 changes:
   1. Both-sides logging (role='user' and role='assistant') in the chain
   2. Fernet content-field encryption (write/read round-trip)
   3. Procedural memory chain-witnessed provenance for successful procedures

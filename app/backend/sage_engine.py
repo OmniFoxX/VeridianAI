@@ -26,7 +26,7 @@ from typing import Any, Dict, List, Optional, Tuple
 # storage or wire boundary; both produce the same epoch float.
 from time_manager import TimeManager
 
-# OracleAI's O-prefixed TaskPrioritiser (coexists with SageBot's originals)
+# VeridianAI's O-prefixed TaskPrioritiser (coexists with TogaBot's originals)
 from task_prioritiser import OAgentP as _OracleP, OAgentD as _OracleD
 import atrest  # at-rest encryption for chat archives
 # --- Tavily Rate Limiting -----------------------------------------------------
@@ -342,7 +342,7 @@ def user_data_dir(ns):
     main.py's _safe_ns. That was true of the routes and false of at least one
     other caller (profile_keys._user_dir had an unvalidated fallback), which is
     what CodeQL's py/path-injection alerts were pointing at. A check in another
-    file is not a guarantee here. See docs/security/CODEQL_TRIAGE_PLAN_2026-08-13.md.
+    file is not a guarantee here. See docs/security/history/CODEQL_TRIAGE_PLAN_2026-08-13.md.
     """
     if not ns:
         return None
@@ -841,7 +841,7 @@ def search_all_archives(query: str, ns=None) -> list:
 
 
 # ===============================================================================
-#  FILE UPLOAD / TEXT EXTRACTION (ported from SageBot)
+#  FILE UPLOAD / TEXT EXTRACTION (ported from TogaBot)
 # ===============================================================================
 
 def extract_text_from_file(filepath: str, filename: str, mimetype: str = "") -> Tuple[Optional[str], Optional[str]]:
@@ -944,7 +944,7 @@ def _transcode_heic_to_jpeg(filepath: str):
                 pass  # older pillow-heif: the HEIF opener already covers most
         except Exception:
             return None, ("HEIC/HEIF images need the 'pillow-heif' package. "
-                          "Install it in the OracleAI runtime: "
+                          "Install it in the VeridianAI runtime: "
                           "pip install pillow-heif")
         from PIL import Image
         import io
@@ -1008,7 +1008,7 @@ def process_upload(filepath: str, filename: str) -> dict:
 
 
 # ===============================================================================
-#  QUERY PRE-PROCESSING (ported from SageBot)
+#  QUERY PRE-PROCESSING (ported from TogaBot)
 # ===============================================================================
 
 # v2.12.1: the user's custom assistant name(s), registered from the chat
@@ -1033,7 +1033,7 @@ def extract_location(text: str) -> Optional[str]:
     skip_words = {
         "I", "We", "The", "My", "Your", "This", "That",
         "What", "How", "When", "Where", "Why", "Who",
-        "Sage", "Toga", "Monday", "Tuesday", "Wednesday", "Thursday",
+        "Toga", "Toga", "Monday", "Tuesday", "Wednesday", "Thursday",
         "Friday", "Saturday", "Sunday",
     } | _CUSTOM_ASSISTANT_NAMES
     patterns = [
@@ -1227,7 +1227,7 @@ def web_search(query: str, num_results: int = 5, search_type: str = "news") -> s
         results = r.json().get("results", [])[:num_results]
         if not results: return "No results found."
         # Per-result snippet cap removed: full Tavily content returned for each
-        # result so Sage gets the complete excerpt, not a 200-char preview.
+        # result so Toga gets the complete excerpt, not a 200-char preview.
         return "\n\n".join(
             f"- [{x.get('title', '?')}]({x.get('url', '')})\n  {x.get('content', '')}"
             for x in results
@@ -1338,7 +1338,7 @@ def execute_python(code: str, timeout: int =56000) -> str:
          but `open("found_file.txt")` failed with FileNotFoundError.
 
       3. Output cap raised from 4000 → 30000 chars with an explicit
-         truncation marker telling Sage how many bytes are missing and
+         truncation marker telling Toga how many bytes are missing and
          how to read the next chunk. 4KB was insufficient for any real
          file read; her own sage_engine.py is 48KB.
 
@@ -1434,7 +1434,7 @@ def verify_written_file(path: str) -> str:
     """
     Verify a written file without executing it.
     Uses ast.parse() for .py files, direct read for all others.
-    Returns a structured result string for Sage to report.
+    Returns a structured result string for Toga to report.
 
     Replaces execute_python() for post-write verification to avoid
     temp file execution issues with Nemotron-generated verification
@@ -1537,9 +1537,9 @@ def verify_written_file(path: str) -> str:
 # ===============================================================================
 # Offloads memory-log mechanics (read, verify, summarize) to a long-running
 # background process (sage_daemon.py) so those operations do NOT consume
-# tokens in Sage's agentic context. Graceful-fallback by design: if the
+# tokens in Toga's agentic context. Graceful-fallback by design: if the
 # daemon is unreachable, these helpers return empty results and log a
-# warning. Sage keeps running.
+# warning. Toga keeps running.
 #
 # Toggle with FEATURES_ENABLED["daemon"] or via the plugin manager.
 
@@ -1550,11 +1550,11 @@ _DAEMON_REPROBE_INTERVAL = 30.0  # seconds between liveness re-checks
 
 def _get_daemon_client():
     """Lazy singleton. Imports and instantiates on first use."""
-    from sage_daemon_client import SageDaemonClient
+    from sage_daemon_client import TogaDaemonClient
     global _daemon_client
     if _daemon_client is None:
         try:
-            _daemon_client = SageDaemonClient(
+            _daemon_client = TogaDaemonClient(
                 host="127.0.0.1",
                 port=9998,      # 9999 is ipc_bridge / privacy browser
                 timeout=15.0,
@@ -1753,7 +1753,7 @@ import contextvars as _contextvars
 
 # Per-turn active user namespace for browser ops. Set by set_browser_ns() at the
 # top of each inference turn (where the ws session's ns is known) and read by
-# _get_browser() so each user's Sage drives her OWN persistent browser profile.
+# _get_browser() so each user's Toga drives her OWN persistent browser profile.
 _active_browser_ns = _contextvars.ContextVar("active_browser_ns", default=None)
 
 
@@ -1842,7 +1842,7 @@ def _get_browser():
         return None
     try:
         # Drive the PER-USER browser: read the active namespace (set at turn
-        # start) so each account's Sage gets her own persistent profile. Cookie
+        # start) so each account's Toga gets her own persistent profile. Cookie
         # persistence is opt-in (default off). browser_tool's own default
         # (visible) headless wins — Todd's watch-mode workflow stays default.
         try:
@@ -2068,7 +2068,7 @@ def _is_in_markdown_code_context(text: str, pos: int) -> bool:
     should be treated as a literal example, not an active tool call.
 
     v2.2 (2026-05-30): added to fix the symptom Todd surfaced where
-    Sage's instructional prose (correctly wrapping tag examples in
+    Toga's instructional prose (correctly wrapping tag examples in
     single backticks or fenced blocks) was being consumed by the parser
     -- her examples got stripped from chat, leaving empty backticks
     where the tag text used to be. Markdown code-span semantics are
@@ -2295,7 +2295,7 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
             # v2.2 (2026-05-30): pedagogical-context guard. If the tag's
             # opening `[` sits inside a markdown code span (single
             # backticks) or fenced code block (triple backticks), this
-            # occurrence is an EXAMPLE Sage is showing the user, NOT a
+            # occurrence is an EXAMPLE Toga is showing the user, NOT a
             # tool invocation. Advance the scanner past the tag but do
             # NOT consume its range (so the example stays visible in
             # chat) and do NOT dispatch any action.
@@ -2344,10 +2344,10 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
                         # with no pipe-separated body. Previously this fell
                         # through silently: the tag span got stripped from chat
                         # output, no save fired, no failure signal reached the
-                        # agentic loop, and Sage would fabricate verification
+                        # agentic loop, and Toga would fabricate verification
                         # success on a save that never happened. Now we surface
                         # this as a visible save_file_error action so main.py
-                        # can push a tool_result Sage actually sees and can
+                        # can push a tool_result Toga actually sees and can
                         # self-correct on within the same turn.
                         print(
                             f"[PARSER] SAVE_FILE missing `|` separator: "
@@ -2418,7 +2418,7 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
         # verify_written_file(path) which checks os.path.exists() and
         # AST-parses .py files. Was previously documented in the prompt
         # but UNWIRED (parser ignored, dispatcher had no handler), causing
-        # Sage to hallucinate verification success on missing files.
+        # Toga to hallucinate verification success on missing files.
         (r"\[VERIFY_FILE:\s*(.*?)\]",    "verify_file"),
         # Image generation (ComfyUI). Payload is the image prompt (the visual
         # description). Dispatched in main.py's agentic loop -> comfyui_client.

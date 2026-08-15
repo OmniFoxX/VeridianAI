@@ -33,7 +33,7 @@ replace the program folder.
 
 So if you extract to:
 
-    C:\Users\you\Apps\VeridianAI-2.15.0-portable\
+    C:\Users\you\Apps\VeridianAI-2.15.1-portable\
 
 then your data lives at:
 
@@ -65,7 +65,7 @@ You should not simply trust that. Verify the download instead:
   1. Open PowerShell in the folder containing the ZIP.
   2. Run:
 
-         Get-FileHash .\VeridianAI-2.15.0-portable-win-x64.zip -Algorithm SHA256
+         Get-FileHash .\VeridianAI-2.15.1-portable-win-x64.zip -Algorithm SHA256
 
   3. Compare the result against the SHA-256 published on the download page at
      https://veridianai.mentispheresoftware.com

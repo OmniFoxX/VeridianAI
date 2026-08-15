@@ -130,9 +130,9 @@ def err(msg: str) -> None:
 
 # ---------------------------------------------------------------------------
 # Display names (v2.12 branding, 2026-07-26). The backend's internal tier
-# names (oracle/sage/daemon, labels "Oracle"/"Sage") are load-bearing: they
+# names (oracle/sage/daemon, labels "Oracle"/"Toga") are load-bearing: they
 # appear in routing tables, /api/tiers/{name} paths, and qualified model ids
-# like "somemodel [Sage]". We therefore remap ONLY the display layer here —
+# like "somemodel [Toga]". We therefore remap ONLY the display layer here —
 # "Agent" rather than a persona name because the persona (Toga) is
 # user-customizable. Functional names/ids pass through unchanged.
 # ---------------------------------------------------------------------------

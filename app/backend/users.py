@@ -1,4 +1,4 @@
-"""Per-user account store for OracleAI multi-user mode (identity layer).
+"""Per-user account store for VeridianAI multi-user mode (identity layer).
 
 Accounts live in sage_data/.users.json (OUTSIDE the project, 0600). Each entry is
 {username, salt, hash, algo, created, is_owner, ns}. Passwords are NEVER stored --

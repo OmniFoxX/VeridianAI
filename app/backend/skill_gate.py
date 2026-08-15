@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- capability GATE + ingestion policy (Layer 3).
+VeridianAI / Aether -- capability GATE + ingestion policy (Layer 3).
 
 Decides what a shared skill is ALLOWED to do on THIS machine. PURE policy: it
 classifies a skill's declared capabilities, checks that any hooks it references

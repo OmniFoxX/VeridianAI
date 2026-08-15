@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-ComfyUI process launcher for OracleAI (OWNED lifecycle, OFF by default).
+ComfyUI process launcher for VeridianAI (OWNED lifecycle, OFF by default).
 ========================================================================
 
-OracleAI can drive ComfyUI for image GENERATION (see comfyui_client.py), but it
-cannot CREATE images unless a ComfyUI server is up. This module lets OracleAI
+VeridianAI can drive ComfyUI for image GENERATION (see comfyui_client.py), but it
+cannot CREATE images unless a ComfyUI server is up. This module lets VeridianAI
 spawn ComfyUI itself and OWN the process, so:
 
   * generation works without the user launching ComfyUI by hand, and
-  * closing OracleAI reaps ComfyUI (kills the whole tree) -- which destroys its
+  * closing VeridianAI reaps ComfyUI (kills the whole tree) -- which destroys its
     in-memory job-queue box. That queue-wipe-on-close is a deliberate PRIVACY
     win: nothing lingers in the ComfyUI web UI after a session.
 
@@ -385,7 +385,7 @@ def wait_until_ready(base: str = None, timeout: float = 30.0,
 
     Optional but useful when you need a synchronous guarantee that ComfyUI is
     ready before submitting the first job (e.g. in a CLI flow or a test). In
-    normal OracleAI operation the generation client health-checks before each
+    normal VeridianAI operation the generation client health-checks before each
     render, so this is not strictly required -- but it makes start() composable:
 
         if launcher.start(config)["launched"]:
@@ -415,7 +415,7 @@ def _enabled(config) -> bool:
 #  public API: start / stop / status
 # --------------------------------------------------------------------------- #
 def start(config=None, force=False) -> dict:
-    """Launch ComfyUI as an OracleAI-owned headless process, if enabled and not
+    """Launch ComfyUI as an VeridianAI-owned headless process, if enabled and not
     already up. Non-blocking (no warm-wait here); ComfyUI warms in parallel with
     the rest of boot. Call wait_until_ready() after if you need a sync guarantee.
     Never raises."""

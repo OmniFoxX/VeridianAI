@@ -233,7 +233,7 @@ if __name__ == "__main__":
 
     # Build a node with BLE + LAN
     node = ArgoNode(
-        identity_string="veridianai-todd-workstation",
+        identity_string="veridianai-argo-networknode",
         transports=[Transport.BLE, Transport.LAN],
         relay=True,
         aether_consent=False        # Aether off — gate should hold

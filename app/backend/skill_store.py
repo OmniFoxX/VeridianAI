@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- skill STORE + CATALOG (Layer 2).
+VeridianAI / Aether -- skill STORE + CATALOG (Layer 2).
 
 Content-addressed storage for signed skills + a SQLite catalog. Bodies are
 hash-named files (the name proves the bytes -> free dedupe + tamper-evidence);

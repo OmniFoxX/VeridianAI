@@ -99,7 +99,7 @@ class NetworkSection:
     ports: NetworkPorts = field(default_factory=NetworkPorts)
     ollama_url: str = "http://localhost:11434"
     host: str = "127.0.0.1"
-    # Sage network (node-to-node). OFF by default; LAN-only when enabled.
+    # Toga network (node-to-node). OFF by default; LAN-only when enabled.
     node_server_enabled: bool = False
     node_name: str = ""
     remote_node_url: str = ""
@@ -191,10 +191,10 @@ class InferenceSection:
     embed_enabled: bool = True
     npu_enabled: bool = False
     # v2.12.3: context size passed to Lemonade Server at spawn (--ctx-size).
-    # Lemonade v10.x auto-updated and defaults to 4096, which Toga's Sage
+    # Lemonade v10.x auto-updated and defaults to 4096, which Toga's Toga
     # system prompt overflows — the RyzenAI hybrid backend then wedges on
     # the oversized prefill instead of erroring (silent infinite "thinking").
-    # 16384 matches the Sage llama tier's ctx. Pinned explicitly so a future
+    # 16384 matches the Toga llama tier's ctx. Pinned explicitly so a future
     # Lemonade update changing its default can never break the tier again.
     npu_ctx: int = 16384
     n_gpu_layers: int = -1
@@ -242,7 +242,7 @@ class AiqNudgeSection:
 
 
 @dataclass
-class SageSection:
+class TogaSection:
     # v2.13.17 -- SHIPPED DEFAULTS.
     #
     # The rule, stated once so it is not re-derived wrongly later:
@@ -326,7 +326,7 @@ class OracleConfig:
     timeouts: TimeoutsSection = field(default_factory=TimeoutsSection)
     prompts: PromptsSection = field(default_factory=PromptsSection)
     aiq_nudge: AiqNudgeSection = field(default_factory=AiqNudgeSection)
-    sage: SageSection = field(default_factory=SageSection)
+    sage: TogaSection = field(default_factory=TogaSection)
     handoff_security: HandoffSecuritySection = field(default_factory=HandoffSecuritySection)
 
     # --- Persistence ---------------------------------------------------

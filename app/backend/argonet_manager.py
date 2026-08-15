@@ -44,7 +44,7 @@ class ArgoNetManager:
 
     Usage:
         manager = ArgoNetManager(
-            identity_string="veridianai-todd-workstation",
+            identity_string="veridianai-argo-networknode",
             fernet_key=your_existing_key
         )
         await manager.start()
@@ -153,8 +153,7 @@ class ArgoNetManager:
     def _probe_ble(self) -> bool:
         """
         Quick BLE availability probe.
-        Checks if bleak and WinRT are importable — same stack as
-        bitchat_ble_gateway.py, proven on Todd's Realtek adapter.
+        Checks if bleak and WinRT are importable.
         """
         try:
             import bleak
@@ -447,7 +446,7 @@ if __name__ == "__main__":
 
     # Build the manager — LAN only for sanity check, no live BLE/Aether needed
     manager = ArgoNetManager(
-        identity_string="veridianai-todd-workstation",
+        identity_string="veridianai-argo-networknode",
         fernet_key=key,
         enable_ble=True,        # BLE probed — will succeed if bleak installed
         enable_lan=True,        # LAN always available

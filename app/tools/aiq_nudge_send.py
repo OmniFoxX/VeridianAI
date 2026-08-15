@@ -1,10 +1,10 @@
 """
-aiq_nudge_send.py — compose and sign an AIQNudge for OracleAI
+aiq_nudge_send.py — compose and sign an AIQNudge for VeridianAI
 =============================================================
 
-Use this when you want to guide Sage mid-run without aborting. The
+Use this when you want to guide Toga mid-run without aborting. The
 script reads your guidance text, signs it with the AIQNudge HMAC key,
-and writes it atomically into the watch directory where Sage will
+and writes it atomically into the watch directory where Toga will
 pick it up on her next agentic-step iteration.
 
 USAGE
@@ -20,10 +20,10 @@ USAGE
 
 PRECONDITIONS
 
-    - OracleAI must be set up (the .aiq_nudge_key is auto-created the
+    - VeridianAI must be set up (the .aiq_nudge_key is auto-created the
       first time AIQNudge() runs — either via this script or via the
       agentic loop on boot).
-    - aiq_nudge_enabled must be `true` in config.json for Sage to
+    - aiq_nudge_enabled must be `true` in config.json for Toga to
       actually pick up the nudge. Otherwise the file sits ignored.
 
 EXIT CODES
@@ -42,7 +42,7 @@ from pathlib import Path
 def main(argv):
     # ── Argument parsing (deliberately minimal — no argparse to keep ──
     #    the dependency footprint zero for a tool that ships alongside
-    #    OracleAI for personal use).
+    #    VeridianAI for personal use).
     if len(argv) < 2:
         _usage()
         return 1

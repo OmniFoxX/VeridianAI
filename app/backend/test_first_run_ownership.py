@@ -307,11 +307,63 @@ print("\n=== 9. The settings toggle reports a refusal ===")
 # =============================================================================
 ok("updateSetting returns the outcome", "return { ok: true" in SETTINGS)
 ok("...and reports a refusal", "return { ok: false" in SETTINGS)
-ok("setMultiProfile checks it", "r.ok === false" in SETTINGS)
-ok("...puts the switch back", 'setChecked("toggle-multiprofile", !enabled)' in SETTINGS)
-ok("...and shows the server's reason", "r.detail" in SETTINGS)
 ok("a refused save does not leave a wrong value cached",
    "delete window._appConfig[key]" in SETTINGS)
+ok("turning it OFF still checks the answer and puts the switch back",
+   "r.ok === false" in SETTINGS and
+   'setChecked("toggle-multiprofile", true)' in SETTINGS)
+ok("...and shows the server's reason", "r.detail" in SETTINGS)
+
+
+# =============================================================================
+print("\n=== 10. The toggle can actually be satisfied ===")
+# =============================================================================
+# v2.15.1. v2.15 made POST /api/config refuse multi-profile until an Owner
+# exists, and shipped nothing that could create one from Settings. The only
+# path was the first-run dialog, which is one-shot -- so on any install where
+# that dialog had already been answered, Multi-Profile could not be turned on
+# at all. A guard nothing can satisfy is not a guard, it is a wall, and this
+# section exists so it cannot be rebuilt.
+AUTH = read(os.path.join(_FRONT, "js", "auth.js"))
+
+ok("the toggle has something to call", "createOwnerAccount" in AUTH)
+ok("...and Settings calls it",
+   "OracleAuth.createOwnerAccount" in SETTINGS)
+ok("...and checks it exists first, rather than throwing",
+   'typeof window.OracleAuth.createOwnerAccount !== "function"' in SETTINGS)
+
+_COA = AUTH[AUTH.index("async function createOwnerAccount"):]
+_COA = _COA[:_COA.index("window.OracleAuth = {")]
+ok("it opens the EXISTING owner form, not a second copy of one",
+   "showAuthOverlay(true" in _COA)
+ok("...saying what the account is for",
+   "Owner account for Multi-Profile" in _COA)
+ok("...with a way out", "cancelLabel" in _COA)
+
+# The ordering rule from v2.15, preserved: account first, mode second. If this
+# ever inverts there is a window where multi-profile is on and unowned, which is
+# the exact state that hands the install to the next person to make an account.
+ok("the mode is switched on only AFTER the account exists",
+   "afterCreate: enableMultiProfileMode" in _COA)
+_EMP = AUTH[AUTH.index("async function enableMultiProfileMode"):]
+_EMP = _EMP[:_EMP.index("/* Called by the Settings toggle")]
+ok("...and that step writes the mode and nothing else",
+   'JSON.stringify({ multiuser_enabled: true })' in _EMP)
+ok("...and reports a refusal instead of reloading over it",
+   "return { ok: false" in _EMP and "location.reload()" in _EMP)
+
+ok("an already-created Owner is not asked for twice",
+   '"/api/first-run"' in _COA and "any_users" in _COA)
+ok("...it just finishes the job", "enableMultiProfileMode()" in _COA)
+
+# Todd's requirement, verbatim: do not force a sign-out. /api/auth/setup issues
+# the session, so the reload lands back in the app as the Owner.
+ok("nothing logs the person out", "logout()" not in _COA and "logout()" not in _EMP)
+ok("the no-sign-out reasoning is written down where it can be checked",
+   "No sign-out" in AUTH)
+
+ok("the backend gate is UNCHANGED -- still refuses mode-before-owner",
+   "any_users()" in UPD and "owner account first" in UPD)
 
 
 _failed = [n for n, c in _results if not c]

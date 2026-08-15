@@ -1,12 +1,12 @@
 """migrate_at_rest.py -- one-time: encrypt EXISTING plaintext archives and images
 using THIS install's own .atrest_key (resolved via config at runtime), so they
-decrypt correctly when OracleAI runs.
+decrypt correctly when VeridianAI runs.
 
 Why a script (and not done remotely): the at-rest key must be the SAME one the
 running app resolves from config.DATA_DIR. Running this on the machine where
-OracleAI lives guarantees that; a remote/mounted view of sage_data can diverge.
+VeridianAI lives guarantees that; a remote/mounted view of sage_data can diverge.
 
-HOW TO RUN  (with OracleAI stopped), from the project's backend folder:
+HOW TO RUN  (with VeridianAI stopped), from the project's backend folder:
     python migrate_at_rest.py
 
 Safety: each file is encrypted, then decrypted and compared byte-for-byte BEFORE
@@ -15,7 +15,7 @@ _plaintext_quarantine subfolder first (never hard-deleted). Idempotent --
 already-encrypted files are skipped. New archives/images the app saves are already
 encrypted automatically; this only sweeps the pre-existing plaintext ones.
 
-After it finishes: start OracleAI, confirm your archives load and images display,
+After it finishes: start VeridianAI, confirm your archives load and images display,
 then delete the _plaintext_quarantine folders to complete the at-rest protection.
 """
 import os
@@ -48,7 +48,7 @@ def main():
     print(f"[migrate_at_rest] done -- {total_migrated} encrypted, {total_failed} failed.")
     if total_failed:
         print("[migrate_at_rest] FAILURES above were NOT replaced (originals intact).")
-    print("[migrate_at_rest] Start OracleAI, confirm archives load + images display,")
+    print("[migrate_at_rest] Start VeridianAI, confirm archives load + images display,")
     print("                  then delete the _plaintext_quarantine folder(s).")
 
 

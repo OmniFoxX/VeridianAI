@@ -1,0 +1,48 @@
+DISMISSALS 2026-08-13T15:27:20.6428446-07:00
+#147 -> SKIPPED: 291 chars, limit 280
+#148 -> SKIPPED: 291 chars, limit 280
+#149 -> dismissed (240 chars)
+#150 -> dismissed (240 chars)
+#138 -> SKIPPED: 308 chars, limit 280
+#143 -> dismissed (254 chars)
+#144 -> dismissed (243 chars)
+#151 -> SKIPPED: 283 chars, limit 280
+DONE
+DISMISSALS ROUND 2 2026-08-13T15:27:54.2444393-07:00
+#147 -> dismissed (266 chars)
+#148 -> dismissed (266 chars)
+#138 -> dismissed (262 chars)
+#151 -> dismissed (267 chars)
+DONE
+DISMISSALS ROUND 3 2026-08-13T21:15:18.4623026-07:00
+#130 -> dismissed (256 chars)
+#131 -> SKIPPED: 296 chars
+#132 -> SKIPPED: 296 chars
+#133 -> SKIPPED: 296 chars
+#134 -> SKIPPED: 296 chars
+#135 -> SKIPPED: 296 chars
+#136 -> SKIPPED: 296 chars
+#137 -> dismissed (252 chars)
+#139 -> dismissed (229 chars)
+#140 -> dismissed (212 chars)
+#141 -> dismissed (212 chars)
+#142 -> dismissed (212 chars)
+#154 -> dismissed (226 chars)
+#159 -> dismissed (193 chars)
+#160 -> dismissed (250 chars)
+#161 -> dismissed (243 chars)
+#126 -> dismissed (268 chars)
+#127 -> dismissed (222 chars)
+#123 -> SKIPPED: 295 chars
+DONE
+DISMISSALS ROUND 4 2026-08-13T21:15:52.7374388-07:00
+#131 -> dismissed (259 chars)
+#132 -> dismissed (259 chars)
+#133 -> dismissed (259 chars)
+#134 -> dismissed (259 chars)
+#135 -> dismissed (259 chars)
+#136 -> dismissed (259 chars)
+#123 -> STILL TOO LONG: 288 chars
+DONE
+length = 276
+#123 -> dismissed

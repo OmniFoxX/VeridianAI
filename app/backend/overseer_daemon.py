@@ -4,7 +4,7 @@ VeridianAI Overseer Daemon v1.0.0
 Systems supervision for VeridianAI v2.1.8+
 
 Responsibilities:
-- Heartbeat monitoring for Sage (9998), IPC bridge (9999, 9997)
+- Heartbeat monitoring for Toga (9998), IPC bridge (9999, 9997)
 - Auto-restart unresponsive daemons
 - Loop detection (same error 3x = interrupt + log)
 - Shared resource write arbitration (hash chain, chat_memory.json)
@@ -164,7 +164,7 @@ SHARED_RESOURCES = [
 # v2.11.15: Ollama joined the registry. The Oracle tier was launched ONCE at
 # boot with no recovery — when Ollama's new desktop app (0.31+) auto-updated
 # and restarted itself mid-session, the tier silently died and every Ollama
-# model vanished from the model picker until a full OracleAI restart. The
+# model vanished from the model picker until a full VeridianAI restart. The
 # overseer's port heartbeat + restart machinery is exactly the right home:
 # dead for >threshold -> respawned with the same env tier_launcher uses.
 def _resolve_ollama_exe() -> str:
@@ -223,7 +223,7 @@ DAEMON_REGISTRY: Dict[str, dict] = {
     "sage": {
         "port":        9998,
         "start_cmd":   [sys.executable, str(PROJECT_ROOT / "backend" / "sage_daemon.py")],
-        "description": "Sage out-of-band mechanics daemon (chain digest, anomaly, KB)",
+        "description": "Toga out-of-band mechanics daemon (chain digest, anomaly, KB)",
     },
     "ipc_primary": {
         "port":        9999,
@@ -282,7 +282,7 @@ class ErrorEvent:
 
 class ResourceLockManager:
     """
-    Arbitrates write access to shared files across Oracle, Sage,
+    Arbitrates write access to shared files across Oracle, Toga,
     and the external mechanics daemon.
     Prevents concurrent write collisions on hash chain and memory files.
     """
@@ -609,7 +609,7 @@ class OverseerDaemon:
             moment anyone added a print() for debugging.
           * Post-cap notifications are gated by self._escalated so the
             user gets one ALERT per failure cycle, not one every 10s
-            forever until they kill OracleAI manually.
+            forever until they kill VeridianAI manually.
         """
         count = self._restart_counts.get(daemon_name, 0)
 
@@ -705,7 +705,7 @@ class OverseerDaemon:
                         # FIX (#69, 2026-06-08): strict_respawn is fail-CLOSED
                         # by design — a swapped entry script aborts the respawn
                         # entirely, trading availability for security. Make that
-                        # consequence explicit so an operator seeing Sage down
+                        # consequence explicit so an operator seeing Toga down
                         # knows WHY and what to do (re-baseline or restore the
                         # script), rather than chasing a silent non-respawn.
                         log.error(
@@ -905,7 +905,7 @@ class OverseerDaemon:
           }
 
         Overseer does NOT dispatch to a model — it validates, logs, and
-        clears. Actual inference handoff is Sage's responsibility via the
+        clears. Actual inference handoff is Toga's responsibility via the
         normal task queue.
         """
         # #69: real task-file consumer (was a dead no-op; the parser
@@ -1006,22 +1006,22 @@ class OverseerDaemon:
 
         When context_fatigue_detector.py confirms fatigue, supervisor.py
         writes handoff_requested.flag to the backend directory. Overseer
-        picks it up here, performs a graceful Sage shutdown, then lets the
+        picks it up here, performs a graceful Toga shutdown, then lets the
         normal _handle_unresponsive() respawn path bring up a fresh instance.
 
         Flow:
             supervisor.py writes flag
             → overseer detects flag here
-            → overseer signals Sage to shut down gracefully
-            → Sage exits cleanly (ports 9998 released)
-            → HeartbeatMonitor detects Sage down
+            → overseer signals Toga to shut down gracefully
+            → Toga exits cleanly (ports 9998 released)
+            → HeartbeatMonitor detects Toga down
             → _handle_unresponsive("sage") spawns fresh sage_daemon.py
             → Fresh instance reads handoff_state.json on startup
         """
         # Handoff hardening (#69 / F1): the trigger is no longer a bare,
         # unsigned flag whose mere existence is trusted. Consume a SIGNED
         # trigger via HandoffGuard and verify its HMAC before acting, so a
-        # lower-priv local process cannot force a Sage rotation. A forged
+        # lower-priv local process cannot force a Toga rotation. A forged
         # trigger is quarantined + audited. If the guard is unavailable we
         # fall back to the legacy unsigned flag (degraded, logged loudly).
         if _OVERSEER_GUARD_AVAILABLE and _overseer_guard is not None:
@@ -1070,9 +1070,9 @@ class OverseerDaemon:
                 log.error(f"[Overseer] Could not remove handoff flag: {e}")
                 return
 
-        # Gracefully terminate the current Sage instance.
+        # Gracefully terminate the current Toga instance.
         # _handle_unresponsive() already has the full reap + respawn logic,
-        # so we just need to bring Sage down. HeartbeatMonitor will detect
+        # so we just need to bring Toga down. HeartbeatMonitor will detect
         # the port going dark and call _handle_unresponsive("sage") naturally.
         # But we also call it directly here to avoid waiting a full
         # HEARTBEAT_TIMEOUT (30s) before the respawn kicks in.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-config.py -- OracleAI centralized path & port configuration
+config.py -- VeridianAI centralized path & port configuration
 ------------------------------------------------------------
 All paths are relative to project root -- works on any machine,
 any drive, any OS. sage_data is intentionally placed OUTSIDE the
@@ -9,7 +9,7 @@ project folder to prevent daemon/watchdog conflicts.
 
 Directory structure created on first run:
     <project_root>/
-        OracleAI/           ← project lives here
+        VeridianAI/           ← project lives here
             backend/
                 config.py   ← this file
                 main.py
@@ -30,8 +30,8 @@ import os
 USE_OLLAMA_FOR_ORACLE = os.environ.get("USE_OLLAMA_FOR_ORACLE", "true").lower() == "true"
 
 # --- Root Paths ---------------------------
-BACKEND_DIR  = Path(__file__).resolve().parent        # .../OracleAI/backend/
-PROJECT_DIR  = BACKEND_DIR.parent                     # .../OracleAI/
+BACKEND_DIR  = Path(__file__).resolve().parent        # .../VeridianAI/backend/
+PROJECT_DIR  = BACKEND_DIR.parent                     # .../VeridianAI/
 # v2.13 (2026-08-07): DATA_DIR is now OVERRIDABLE, defaulting to the historical
 # sibling-of-project location so the portable build behaves exactly as before.
 #
@@ -164,7 +164,7 @@ PORT_APP           = _resolve_port("ORACLE_APP_PORT",    getattr(_ports, "app", 
 PORT_IPC_BROWSER   = _resolve_port("ORACLE_IPC_PORT",    getattr(_ports, "ipc_browser",   None) if _ports else None, 9999)   # privacy browser IPC
 PORT_DAEMON        = _resolve_port("ORACLE_DAEMON_PORT", getattr(_ports, "sage_daemon",   None) if _ports else None, 9998)   # sage_daemon
 PORT_OLLAMA_ORACLE = _resolve_port("OLLAMA_ORACLE_PORT", getattr(_ports, "ollama_oracle", None) if _ports else None, 11434)  # Oracle Ollama
-PORT_LLAMA_SAGE    = _resolve_port("LLAMA_SAGE_PORT",    getattr(_ports, "llama_sage",    None) if _ports else None, 11435)  # Sage llama-server
+PORT_LLAMA_SAGE    = _resolve_port("LLAMA_SAGE_PORT",    getattr(_ports, "llama_sage",    None) if _ports else None, 11435)  # Toga llama-server
 PORT_LLAMA_DAEMON  = _resolve_port("LLAMA_DAEMON_PORT",  getattr(_ports, "llama_daemon",  None) if _ports else None, 11436)  # Daemon llama-server
 PORT_LLAMA_EMBED   = _resolve_port("LLAMA_EMBED_PORT",   getattr(_ports, "llama_embed",   None) if _ports else None, 11437)  # nomic-embed llama-server (reserved)
 PORT_NPU_LLM       = _resolve_port("NPU_LLM_PORT",       getattr(_ports, "npu_llm",       None) if _ports else None, 11438)  # v2.11.12: Ryzen AI NPU tier (Lemonade)
@@ -183,13 +183,13 @@ LLAMA_DAEMON_URL  = f"http://127.0.0.1:{PORT_LLAMA_DAEMON}"
 LLAMA_EMBED_URL   = f"http://127.0.0.1:{PORT_LLAMA_EMBED}"
 NPU_LLM_URL       = f"http://127.0.0.1:{PORT_NPU_LLM}"
 
-# --- llama-server executable (ships with OracleAI backend) ---------------
+# --- llama-server executable (ships with VeridianAI backend) ---------------
 LLAMA_SERVER_EXE   = BACKEND_DIR / "llama-server.exe"
 
 # --- Per-tier context sizes (Phase 1D) ------------------------
 # Each llama-server tier has a maximum context size (the model's trained window)
 # and a default context size (our chosen sensible default). The UI exposes a
-# single global `n_ctx` which scales Sage up/down, clamped to SAGE_CTX_MAX.
+# single global `n_ctx` which scales Toga up/down, clamped to SAGE_CTX_MAX.
 # Daemon is INTENTIONALLY fixed at its default regardless of the global slider,
 # because daemon work is mechanical and small -- wasting RAM there gives no
 # benefit to the user.
@@ -214,7 +214,7 @@ EMBED_CTX_DEFAULT  = int(os.environ.get("EMBED_CTX_SIZE",  2048))
 
 
 def compute_sage_ctx(global_n_ctx=None):
-    """Return Sage tier ctx_size. Scales with global_n_ctx, capped at SAGE_CTX_MAX.
+    """Return Toga tier ctx_size. Scales with global_n_ctx, capped at SAGE_CTX_MAX.
     If global_n_ctx is None or falsy, returns SAGE_CTX_DEFAULT."""
     if not global_n_ctx:
         return SAGE_CTX_DEFAULT

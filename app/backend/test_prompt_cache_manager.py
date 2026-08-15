@@ -35,10 +35,10 @@ def sha256(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 
 
-SYSTEM = "You are Sage, OracleAI's primary AI assistant. " * 50
+SYSTEM = "You are Toga, VeridianAI's primary AI assistant. " * 50
 ADDENDUM = "Focus on accessibility topics today."
 TOOLS = '{"tools": [{"name": "evaluate_expression"}, {"name": "lint_expression"}]}' * 10
-HISTORY = "User: hello\nSage: Hi there!\n" * 20
+HISTORY = "User: hello\nToga: Hi there!\n" * 20
 USER = "What is the cache efficiency of this prompt?"
 
 SEGMENTS = {
@@ -168,7 +168,7 @@ def test_analyze_custom_stable_keys():
 # ── detect_cache_busters tests ─────────────────────────────────────────
 
 def test_no_busters_clean_content():
-    busters = detect_cache_busters("You are Sage, a helpful assistant.")
+    busters = detect_cache_busters("You are Toga, a helpful assistant.")
     assert busters == []
 
 

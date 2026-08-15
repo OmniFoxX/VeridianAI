@@ -2,7 +2,7 @@ DOCUMENT 3 OF 4: SOFTWARE LICENSE AGREEMENT (EULA)
 VERIDIAN — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
 VERIDIAN END-USER LICENSE AGREEMENT (EULA)
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 2.0
+Published by: MentiSphere Software Contact: Todd@MentiSphereSoftware.com Governing Law: Washington State, USA — King County exclusive venue Effective Date: July 2026 Version: 2.0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 PLAIN-ENGLISH SUMMARY — READ THIS FIRST
@@ -20,7 +20,7 @@ What we keep:
 The VeridianAI software itself. The code we wrote is ours. You can use it; you just can't copy it, sell it, or claim you made it.
 What you need for business use:
 
-If you're using VeridianAI for commercial purposes (running it for clients, integrating it into a product you sell, or deploying it in a business context), you need to buy a commercial license from us. Contact silverfox4816@gmail.com.
+If you're using VeridianAI for commercial purposes (running it for clients, integrating it into a product you sell, or deploying it in a business context), you need to buy a commercial license from us. Contact Todd@MentiSphereSoftware.com.
 The honest disclaimer:
 
 The software is provided as-is. AI is imperfect. We're not responsible if the AI says something wrong, if your GPU runs hot, or if you rely on AI output for something important and it doesn't work out. Use your judgment.
@@ -88,7 +88,7 @@ Commercial, Enterprise, Governmental, Institutional, and any other
 deployment, integration, or redistribution requires a paid license
 agreement.
 
--Contact: Todd Darimont, silverfox4816@gmail.com
+-Contact: Todd Darimont, Todd@MentiSphereSoftware.com
 -RE: VeridianAI Licensing Inquiry
 
 -RESTRICTIONS:
@@ -239,4 +239,4 @@ If any provision of this Agreement is held invalid or unenforceable, the remaini
 Failure by Publisher to enforce any provision of this Agreement shall not constitute a waiver.
 
 10.5 Contact
-MentiSphere Software silverfox4816@gmail.com
+MentiSphere Software LLC, d.b.a. VeridianAI, Re: Todd Darimont - Todd@MentiSphereSoftware.com

@@ -35,7 +35,7 @@ when an individual is officially representing the project in public spaces.
 
 ## Enforcement
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
-reported to "Admin" @ "silverfox4816@gmail.com" re: "Code of Conduct Inquiry".
+reported to "todd@mentispheresoftware.com" re: "Code of Conduct Inquiry".
 All complaints will be reviewed and investigated promptly and fairly.
 
 ## Attribution

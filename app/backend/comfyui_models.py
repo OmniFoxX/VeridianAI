@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 r"""
-ComfyUI model catalog + downloader for OracleAI.
+ComfyUI model catalog + downloader for VeridianAI.
 ================================================
 A small, curated set of text-to-image checkpoints a first-time user can pick
 from, plus a defensive downloader that streams the chosen model into ComfyUI's
@@ -126,7 +126,7 @@ def key_for_checkpoint(checkpoint: str) -> str:
 #  persistent active-model selection
 # --------------------------------------------------------------------------- #
 # Stored in oracleai_config.json (the same raw store comfyui_setup writes) so it
-# SURVIVES RESTARTS. OracleAI's main config (config.json) silently drops unknown
+# SURVIVES RESTARTS. VeridianAI's main config (config.json) silently drops unknown
 # keys via OracleConfig.from_flat_dict, so the choice cannot live there.
 _SELECTION_CONFIG = "oracleai_config.json"
 
@@ -218,7 +218,7 @@ def download_model(key: str, comfy_home: str,
         try:
             head = urllib.request.Request(
                 url, method="HEAD",
-                headers={"User-Agent": "OracleAI-Setup/1.0"})
+                headers={"User-Agent": "VeridianAI-Setup/1.0"})
             with safe_urlopen(head, timeout=30) as r:
                 expected = int(r.headers.get("Content-Length") or 0)
         except Exception:
@@ -235,7 +235,7 @@ def download_model(key: str, comfy_home: str,
         progress_cb(f"Downloading {entry['label']} ({entry['size_label']})...", 1)
         tmp = dest + ".part"
         req = urllib.request.Request(
-            url, headers={"User-Agent": "OracleAI-Setup/1.0"})
+            url, headers={"User-Agent": "VeridianAI-Setup/1.0"})
         with safe_urlopen(req, timeout=60) as resp, open(tmp, "wb") as f:
             total = int(resp.headers.get("Content-Length") or expected or 0)
             done = 0

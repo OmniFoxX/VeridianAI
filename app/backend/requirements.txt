@@ -6,8 +6,7 @@ requests>=2.31.0
 # v2.11.15: Socials channels work out of the box. These were "optional
 # extras", which shipped a Socials panel where 3 of 4 channels could never
 # connect on a fresh install (Mastodon/Bluesky need aiohttp, Discord needs
-# discord.py). Both are small, pure-Python-wheel installs. BitChat's BLE
-# stack (bleak/bless) stays optional — it's experimental and hardware-bound.
+# discord.py). Both are small, pure-Python-wheel installs.
 aiohttp>=3.9.0
 discord.py>=2.3.0
 # File processing (optional but recommended)
@@ -20,10 +19,9 @@ openpyxl>=3.1.0
 # Process lifecycle management (Phase 1D: tier restart endpoints)
 psutil>=5.9.0
 # Fernet encryption support -- imported by memory_logger_surprise.py and
-# sage_daemon.py in preparation for the Phase 3 encryption work. Imports are
-# currently inactive (no encrypt/decrypt calls) but the `from cryptography.fernet
-# import Fernet` statement still runs at module-load time, so the package must
-# be present for the backend to boot.
+# sage_daemon.py in preparation for the Phase 3 encryption work. The`from
+# cryptography.fernet import Fernet` statement runs at module-load
+# time, so the package must be present for the backend to boot.
 cryptography>=3.0
 # Inbound vision: HEIC/HEIF/AVIF decode + transcode to JPEG for the model
 # servers (Ollama/llama.cpp accept JPEG/PNG, not HEIC). pillow-heif bundles

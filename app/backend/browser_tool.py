@@ -199,7 +199,7 @@ class BrowserTool:
         ignore_https_errors: bool = False,
     ):
         # Per-user profile, OUT of the project tree (sage_data). Each user's
-        # Sage gets her own browser profile, so bookmarks/history/cookies never
+        # Toga gets her own browser profile, so bookmarks/history/cookies never
         # bleed across accounts. profile_dir overrides; else resolved from ns.
         self.ns = ns
         self.profile_dir = Path(profile_dir) if profile_dir else _resolve_profile_dir(ns)
@@ -735,7 +735,7 @@ class BrowserTool:
     # ------------------------------------------------------------------ #
     async def _notify_ipc(self, event: str, data: dict) -> None:
         """Send a browser event to the IPC bridge so an external monitor
-        (ipc_monitor.py on port 9999) can display Sage's activity in
+        (ipc_monitor.py on port 9999) can display Toga's activity in
         real time. Silent-fail by design — IPC must NEVER break a
         browse, click, or search just because the monitor isn't running.
 
@@ -1057,7 +1057,7 @@ class BrowserTool:
         [DEPRECATED] Legacy function for Guerrilla Mail.
         Use signup_auto_detect for Tuta/AtomicMail.
         """
-        # If Sage tries to call this, she should get a warning or it should fallback
+        # If Toga tries to call this, she should get a warning or it should fallback
         # For now, let's log a warning and suggest the new method
         print("[WARNING] signup_with_temp_email is deprecated. Use signup_auto_detect for Tuta/AtomicMail.")
         # Fallback to auto-detect with a temp email if she insists?
@@ -1079,7 +1079,7 @@ class BrowserTool:
 # definitions to AFTER all methods restores the class as a single
 # contiguous block. End of structural fix.
 # Per-user instances: each namespace (user) gets its own BrowserTool +
-# persistent profile, so one account's Sage never sees another's bookmarks,
+# persistent profile, so one account's Toga never sees another's bookmarks,
 # history, or cookies. Keyed by ns ("" == owner/default).
 _browser_instances: Dict[str, "BrowserTool"] = {}
 

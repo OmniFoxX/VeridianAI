@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- trusted author KEY STORE (Layer 5).
+VeridianAI / Aether -- trusted author KEY STORE (Layer 5).
 
 The receiver's explicit allow-list of author public keys. A skill's signature
 proves AUTHENTICITY; this store is what makes an author TRUSTED (authorized for
@@ -120,6 +120,6 @@ def remove_key(pubkey, key_dir=None):
 
 
 def self_identity(key_dir=None):
-    """This Sage's own public key + fingerprint, to hand to peers out-of-band."""
+    """This Toga's own public key + fingerprint, to hand to peers out-of-band."""
     pub = skill_trust.public_key_b64(key_dir=key_dir)
     return {"pubkey": pub, "fingerprint": skill_trust.fingerprint(pub)}

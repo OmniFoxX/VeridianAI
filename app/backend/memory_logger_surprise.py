@@ -255,9 +255,9 @@ class MemoryLogger:
             # error shapes get discovered.
             _ERROR_PREFIXES = (
                 "[Oracle Ollama error",
-                "[Sage Ollama error",
+                "[Toga Ollama error",
                 "[Daemon Ollama error",
-                "[Sage llama-server error",
+                "[Toga llama-server error",
                 "[Daemon llama-server error",
                 "[Oracle llama-server error",
                 "[Error: Cannot connect",
@@ -557,7 +557,7 @@ if __name__ == "__main__":
         print(f"   PASS: Top surprise score = {top[0]['surprise_score']}\n")
 
         print("=== ALL TESTS PASSED ===")
-        print("Memory logger is ready for use in OracleAI.")
+        print("Memory logger is ready for use in VeridianAI.")
         print(f"\nNote: this test ran in a throwaway directory ({test_dir})")
         print("and did NOT touch your real memory log.")
 

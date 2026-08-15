@@ -15,7 +15,7 @@ FAIR arbiter for when concurrent demand exceeds one box's GPU -- observed
 around ~8 concurrent users per install before latency climbs. Three tiers
 compete:
     hyperlocal    -- this machine's own signed-in users (highest base)
-    local_network -- peer nodes on the LAN (Sage Network)
+    local_network -- peer nodes on the LAN (Toga Network)
     remote        -- relay-brokered requests (lowest base)
 
 The naive fix, strict tier precedence, STARVES remote under sustained load

@@ -24,9 +24,9 @@ start.bat parses with:
     )
 
 The INFERENCE_BACKEND value (v2.2 addition) lets start.bat skip the
-Sage llama-server tier when the user's config says Sage chat is served
+Toga llama-server tier when the user's config says Toga chat is served
 by Ollama. Saves ~7 GB RAM on a typical install where backend="ollama"
-and the llama-server Sage tier would otherwise sit idle.
+and the llama-server Toga tier would otherwise sit idle.
 
 If the helper fails (Python missing, config_store import failure, malformed
 config.json, etc.), the for /f loop body simply does not execute and
@@ -60,8 +60,8 @@ def main():
     # at the dataclass level, so missing v1 fields fall through cleanly).
     p = cfg.network.ports
 
-    # v2.2: emit inference.backend so start.bat can skip the Sage llama-
-    # server tier when Sage chat is served by Ollama. Defaults to "ollama"
+    # v2.2: emit inference.backend so start.bat can skip the Toga llama-
+    # server tier when Toga chat is served by Ollama. Defaults to "ollama"
     # (the dataclass default in config_store.py) so a fresh install with
     # no config.json yet picks the lighter startup path.
     backend = (cfg.inference.backend or "ollama").strip().lower() or "ollama"

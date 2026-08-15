@@ -7,9 +7,9 @@ The dongle ACCEPTS the peripheral command (status went to Aborted, not
 discoverable combinations with a FRESH provider each time and logs the
 advertisement_status_changed event to reveal why any attempt aborts.
 
-RUN (BitChat OFF in OracleAI so the dongle is free):
+RUN (BitChat OFF in VeridianAI so the dongle is free):
     python winrt_advertise_test.py
-Watch for 'STARTED' + whether a phone shows Sage / [WRITE] lines. Ctrl+C to stop.
+Watch for 'STARTED' + whether a phone shows Toga / [WRITE] lines. Ctrl+C to stop.
 """
 import asyncio
 import logging
@@ -93,7 +93,7 @@ def on_subscribers_changed(sender, args):
     except Exception:
         n = "?"
     log.info("[SUBSCRIBED] central subscribed/unsubscribed -> %s client(s) "
-             "(a phone connected to Sage!)", n)
+             "(a phone connected to Toga!)", n)
 
 
 def on_adv_status_changed(sender, args):
@@ -165,7 +165,7 @@ async def main():
         log.error("No parameter combo reached 'Started'. See [ADV EVENT] lines above.")
         return
     log.info("Open BitChat on both phones; watch nearby/people + this console.")
-    log.info("[SUBSCRIBED]/[WRITE] => a phone found + connected to Sage. Ctrl+C to stop.")
+    log.info("[SUBSCRIBED]/[WRITE] => a phone found + connected to Toga. Ctrl+C to stop.")
     try:
         while True:
             await asyncio.sleep(5)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-auth.py -- OracleAI bearer-token auth for external-surface endpoints
+auth.py -- VeridianAI bearer-token auth for external-surface endpoints
 =====================================================================
 
 v2.3.1 (2026-06-06): closes plain-text token storage gap.
@@ -15,7 +15,7 @@ v2.3.0 (2026-05-31): closes the security gap created by the new
 external-surface endpoints (`/v1/chat/completions`, `/v1/models`,
 `/mcp/v1/jsonrpc`). Without this module, any process on the user's
 machine -- including a browser visiting a malicious site that POSTs
-to `localhost:8000` -- could invoke Sage's full toolkit. With it,
+to `localhost:8000` -- could invoke Toga's full toolkit. With it,
 every request to the new endpoints must carry a valid bearer token.
 
 THREAT MODEL ADDRESSED
@@ -144,7 +144,7 @@ TOKEN_BYTES = 32  # 256 bits -- well past brute-force range
 # check and rely on the bearer token alone. Browser-origin requests
 # MUST match one of these.
 #
-# To extend (e.g., a different IDE accessing OracleAI via web view):
+# To extend (e.g., a different IDE accessing VeridianAI via web view):
 # users can edit the keystore manually -- see _allowed_origins().
 ALLOWED_ORIGINS_DEFAULT = (
     "null",                       # file://, custom electron protocols

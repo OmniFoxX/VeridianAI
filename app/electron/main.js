@@ -7,7 +7,7 @@
  * 2026-08-13 that line was used as the test for whether a tree held current
  * code -- reading the first 80 bytes of each main.js found on the drive and
  * comparing. Every copy answered "2.9.10", including the fully current
- * 52,800-byte file, because the comment was stale in all of them. The
+ * ~52,800-byte file, because the comment was stale in all of them. The
  * conclusion drawn was that no tree had the current code and the files
  * needed rewriting from scratch. They did not; only the comment was old.
  *
@@ -119,15 +119,13 @@ blog(`execPath=${process.execPath}`);
 // v2.2 #74 — backend mode picker.
 //
 // IPEX-LLM trades a small bit of LLM speed for substantially better whole-PC
-// responsiveness vs Vulkan; Todd uses both depending on what else his
-// machine is doing. Picker UX is "saved preference file" per his choice:
+// responsiveness vs Vulkan, Picker UX is "saved preference file":
 // electron/.backend_mode is a one-line text file containing either
 // "vulkan" or "ipex". Read on launch; the Backend Mode submenu writes
 // it and offers to relaunch Electron so the change takes effect.
 //
 // Default 'vulkan' so installs without the file get the previous
-// behavior. The file is ignored at the OS level (no .gitignore needed
-// since Todd doesn't use git per project rules); it's user-machine
+// behavior. The file is ignored at the OS level; it's user-machine
 // state, not project state.
 const BACKEND_MODE_FILE = path.join(__dirname, '.backend_mode');
 // Resolve project root (one level up from electron/) so we can find
@@ -244,7 +242,7 @@ const HEALTH_URL     = `${BACKEND_URL}/api/health`;
 console.log(`[Electron] backend URL: ${BACKEND_URL}`);
 
 // v2.1.11 health-probe tuning. Originals: POLL=500ms / per-probe-timeout=1500ms.
-// That combo broke on Todd's Arc B580 + new Vulkan driver:
+// That combo broke on the Arc B580 + new Vulkan driver:
 //   1. /api/health internally does a SYNCHRONOUS requests.get() to Ollama's
 //      /api/tags inside check_ollama_health(). The sync call blocks FastAPI's
 //      event loop. With the new Arc driver, that round-trip can land near

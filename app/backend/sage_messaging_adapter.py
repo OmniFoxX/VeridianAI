@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""OracleAI Messaging Adapter Framework — sage_messaging_adapter.py
+"""VeridianAI Messaging Adapter Framework — sage_messaging_adapter.py
 
 Adapted for in-app use from the Build Battle #1 design. The original was sound
-but assumed a `Sage().step()` API that does not exist here — Sage generation runs
-through model_manager. So the base no longer imports/calls Sage; instead the
+but assumed a `Toga().step()` API that does not exist here — Toga generation runs
+through model_manager. So the base no longer imports/calls Toga; instead the
 router INJECTS an async reply-callable (main.py wires it to model_manager), and
 the base only ever awaits that. Self-contained: standard library only at import
 time; per-channel client libs (discord.py, aiohttp) are imported lazily so the
 app boots even with none of them installed.
 
 Layout:
-    inbound message ──► SageChannelRouter (registry + poll loops + recent buffer)
+    inbound message ──► TogaChannelRouter (registry + poll loops + recent buffer)
                             │ injects reply_fn, owns auto_reply flag
         ┌───────────────┬───┴───────────────┐
    BitChatBridge   DiscordAdapter     (BlueSky / Mastodon / … later)
-        └── all implement SageMessagingAdapter ──┘
+        └── all implement TogaMessagingAdapter ──┘
 """
 from __future__ import annotations
 
@@ -63,7 +63,7 @@ class ChannelMessage:
 # ---------------------------------------------------------------------------
 # Base adapter — every channel implements this contract
 # ---------------------------------------------------------------------------
-class SageMessagingAdapter(ABC):
+class TogaMessagingAdapter(ABC):
     PROFILE: ChannelProfile = ChannelProfile(name="base")
     EXPERIMENTAL: bool = False
 
@@ -155,7 +155,7 @@ class SageMessagingAdapter(ABC):
         return chunks
 
     async def sage_respond(self, message: ChannelMessage) -> bool:
-        """Generate a Sage reply (via the injected callable) and send it back."""
+        """Generate a Toga reply (via the injected callable) and send it back."""
         if not self._reply_fn:
             logger.warning("[%s] no reply_fn injected — cannot auto-respond.", self.PROFILE.name)
             return False
@@ -177,7 +177,7 @@ class SageMessagingAdapter(ABC):
 # ---------------------------------------------------------------------------
 # Router — registry, per-adapter poll loops, recent buffer, auto-reply flag
 # ---------------------------------------------------------------------------
-class SageChannelRouter:
+class TogaChannelRouter:
     # Reserved store key for router-level settings (not a real channel).
     _ROUTER_KEY = "__router__"
 
@@ -213,7 +213,7 @@ class SageChannelRouter:
             except Exception:
                 pass
 
-    def register(self, adapter: SageMessagingAdapter) -> None:
+    def register(self, adapter: TogaMessagingAdapter) -> None:
         adapter._inject_reply(self._reply_fn)
         # v2.12.3: wire outbound echo so Toga's own replies show in the feed.
         _plat = adapter.PROFILE.name
@@ -432,15 +432,15 @@ class SageChannelRouter:
             timestamp=now, platform=platform,
             raw={"echo": True, "peer_id": "system", "notice": True}))
 
-    async def _poll(self, adapter: SageMessagingAdapter) -> None:
+    async def _poll(self, adapter: TogaMessagingAdapter) -> None:
         """Buffer every inbound message; only auto-respond when opted in AND the
         wake word is present. Never dies on a transient error."""
         while True:
             try:
                 for m in await adapter.receive(timeout=3.0):
                     self._recent.append(m)
-                    # Never auto-reply to our OWN messages (echoes of what Sage
-                    # posted) or system notices — that feedback loop is Sage
+                    # Never auto-reply to our OWN messages (echoes of what Toga
+                    # posted) or system notices — that feedback loop is Toga
                     # "talking to herself". BitChat echoes carry echo=True /
                     # peer_id='self', and the sender name equals our own nickname.
                     _raw = getattr(m, "raw", None) or {}
@@ -486,7 +486,7 @@ class SageChannelRouter:
 # ---------------------------------------------------------------------------
 # Discord adapter (real — pip install discord.py + a bot token)
 # ---------------------------------------------------------------------------
-class DiscordAdapter(SageMessagingAdapter):
+class DiscordAdapter(TogaMessagingAdapter):
     PROFILE = ChannelProfile(
         name="discord", max_chars=2000, strip_markdown=False,
         split_long=True, sage_prefix="🔮 **Toga:** ",
@@ -665,7 +665,7 @@ def _strip_html(s: str) -> str:
 # ---------------------------------------------------------------------------
 # Mastodon adapter (real — REST API + an access token)
 # ---------------------------------------------------------------------------
-class MastodonAdapter(SageMessagingAdapter):
+class MastodonAdapter(TogaMessagingAdapter):
     PROFILE = ChannelProfile(name="mastodon", max_chars=500, strip_markdown=True,
                              split_long=True, sage_prefix="🔮 Toga: ")
 
@@ -787,7 +787,7 @@ class MastodonAdapter(SageMessagingAdapter):
 # ---------------------------------------------------------------------------
 # BlueSky adapter (real — AT Protocol + an app password)
 # ---------------------------------------------------------------------------
-class BlueSkyAdapter(SageMessagingAdapter):
+class BlueSkyAdapter(TogaMessagingAdapter):
     PROFILE = ChannelProfile(name="bluesky", max_chars=300, strip_markdown=True,
                              split_long=True, sage_prefix="🔮 Toga: ")
 

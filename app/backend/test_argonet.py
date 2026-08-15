@@ -283,9 +283,9 @@ ok(_idB.fingerprint != _fpA,
    "a fresh identity has a DIFFERENT fingerprint (rotation works)")
 
 # ---------------------------------------------------------------------------
-print("== bridge contract: SageMessagingAdapter surface, injected fake manager ==")
+print("== bridge contract: TogaMessagingAdapter surface, injected fake manager ==")
 from argonet_bridge import ArgoNetBridge
-from sage_messaging_adapter import SageMessagingAdapter, ChannelMessage
+from sage_messaging_adapter import TogaMessagingAdapter, ChannelMessage
 
 
 class _FakeIdent:
@@ -331,7 +331,7 @@ class FakeManager:
 
 
 br = ArgoNetBridge({})
-ok(isinstance(br, SageMessagingAdapter), "ArgoNetBridge IS a SageMessagingAdapter")
+ok(isinstance(br, TogaMessagingAdapter), "ArgoNetBridge IS a TogaMessagingAdapter")
 ok(br.available() is True, "available() True (LAN needs no special hardware)")
 ok(br.EXPERIMENTAL is False, "not flagged experimental")
 ok(br.PROFILE.name == "argonet", "channel profile name is 'argonet'")

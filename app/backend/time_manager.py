@@ -1,5 +1,5 @@
 """
-backend/time_manager.py — single source of truth for time across OracleAI.
+backend/time_manager.py — single source of truth for time across VeridianAI.
 ==========================================================================
 
 v2.1.6 unification. Every layer that emits a timestamp goes through this

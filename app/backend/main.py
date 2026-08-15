@@ -1,6 +1,6 @@
 """
 VeridianAI v2.12 Backend — FastAPI Server v2
-Handles inference, hardware, plugins, Sage engine, archives, and WebSocket chat.
+Handles inference, hardware, plugins, Toga engine, archives, and WebSocket chat.
 """
 
 import sys
@@ -231,10 +231,10 @@ async def _taskp_run_or_direct(
 # ---------------------------------------------------------------------------
 # v2.1.8 #56 — Stall detection for long autonomous runs.
 #
-# Today's pain (2026-05-15): Sage processed REF.md for 90 min successfully
+# Today's pain (2026-05-15): Toga processed REF.md for 90 min successfully
 # AFTER Todd bumped ollama_read_timeout_sec from 1800 to 10800. But during
 # the diagnosis, two 500s fired at exactly 30 min (the old read timeout)
-# and the overseer auto-restarted the server. Sage's run was orphaned —
+# and the overseer auto-restarted the server. Toga's run was orphaned —
 # the user had to send a fresh prompt to recover.
 #
 # What this is
@@ -274,7 +274,7 @@ async def _taskp_run_or_direct(
 class _StallWatchdog:
     """Tracks last-token + pending-tool timestamps. Set abort + WS signal
     on stall. One instance per WS chat handler invocation; lives for
-    the duration of one Sage run.
+    the duration of one Toga run.
     """
 
     def __init__(self, token_timeout_sec: float, tool_timeout_sec: float,
@@ -375,7 +375,7 @@ class _StallWatchdog:
 
 async def _node_stream_tokens(messages, options):
     """Async-generator: stream DECRYPTED tokens from the remote node's
-    /api/node/infer-stream (Sage Network streaming offload). Each remote line is
+    /api/node/infer-stream (Toga Network streaming offload). Each remote line is
     one Fernet message. Yields nothing on any failure (caller falls back)."""
     import uuid
     import httpx
@@ -418,7 +418,7 @@ async def _watched_generate(messages, model_id, options, watchdog):
     watchdog's last-token timestamp. Lets us add stall detection at all
     5 existing token-yield sites with a one-line replacement at each
     (use _watched_generate instead of model_manager.generate)."""
-    # Sage Network offload: when enabled + a remote node is set, STREAM the
+    # Toga Network offload: when enabled + a remote node is set, STREAM the
     # inference from the remote (the desktop's model) token-by-token. Falls back
     # to a single-block offload if streaming is unavailable, then to LOCAL if the
     # node is unreachable. model_id=None -> the desktop picks (a vision model for
@@ -497,7 +497,7 @@ _current_watchdog: contextvars.ContextVar = contextvars.ContextVar(
 )
 
 # v2.9: per-turn flag -> set to the remote node URL when an inference for THIS
-# turn actually ran on a Sage Network node, so the UI shows a "ran on [node]"
+# turn actually ran on a Toga Network node, so the UI shows a "ran on [node]"
 # badge only when offload truly happened (not merely when the toggle is on).
 _current_offload: contextvars.ContextVar = contextvars.ContextVar(
     "_current_offload_node", default=None,
@@ -607,7 +607,7 @@ DEFAULT_CONFIG = {
     # tag-confident 3B model that handles the full prompt fine.
     "force_prompt_tier": None,
     # v2.1.10 #44 AIQNudge — HMAC-signed mid-run side-channel for guiding
-    # Sage on long runs without aborting. Off by default for distribution
+    # Toga on long runs without aborting. Off by default for distribution
     # safety; user opts in when they need it. When True, the agentic
     # loop scans sage_data/nudges/ between steps for nudge_*.txt files,
     # verifies their HMAC against backend/.aiq_nudge_key, and injects
@@ -618,7 +618,7 @@ DEFAULT_CONFIG = {
     # #68 Phase E Step 6: system_prompt moved out of DEFAULT_CONFIG. It now
     # lives in a real file (prompts/system.txt by default) and is read by
     # GET /api/prompts/system and the inference path. Distribution-safe:
-    # a fresh install gets an empty prompt file and Sage uses its built-in
+    # a fresh install gets an empty prompt file and Toga uses its built-in
     # SAGE_SYSTEM_PROMPT, no Todd-specific text baked into the codebase.
     "sage_mode": True, "agentic_mode": True,
     "web_search_enabled": True, "code_exec_enabled": True,
@@ -762,7 +762,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.15.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.15.1", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -819,9 +819,9 @@ async def _start_relay_source():
 
 @app.on_event("startup")
 async def _start_comfyui():
-    """Optionally spawn ComfyUI as an OracleAI-OWNED process (OFF by default), so
+    """Optionally spawn ComfyUI as an VeridianAI-OWNED process (OFF by default), so
     prompt-driven image generation works without launching ComfyUI by hand, and so
-    closing OracleAI reaps it -- destroying the ComfyUI job-queue box (privacy).
+    closing VeridianAI reaps it -- destroying the ComfyUI job-queue box (privacy).
     Health-gated (won't double-launch) and non-blocking (ComfyUI warms in parallel).
 
     v2.11.12 CRITICAL FIX (2026-07-02, the "backend won't start" morning):
@@ -1113,16 +1113,16 @@ except Exception as _v_err:              # pragma: no cover
 
 
 # --- Socials: messaging channels (BitChat experimental + Discord) -------------
-# An adapter framework that feeds the NORMAL Sage via an injected reply callable.
+# An adapter framework that feeds the NORMAL Toga via an injected reply callable.
 # Opt-in auto-reply is OFF by default. Per-channel client libs (discord.py,
 # aiohttp) are lazy, so this loads even with them absent; status() reports what
 # each channel needs. Non-fatal on any error.
 try:
-    from sage_messaging_adapter import (SageChannelRouter, DiscordAdapter,
+    from sage_messaging_adapter import (TogaChannelRouter, DiscordAdapter,
                                         MastodonAdapter, BlueSkyAdapter)
 
     async def _socials_reply(_text: str) -> str:
-        """One-shot Sage reply for channel auto-reply, via the real model_manager."""
+        """One-shot Toga reply for channel auto-reply, via the real model_manager."""
         # v2.12.1: use the owner's configured assistant name in socials replies.
         _sa_name = str(config.get("assistant_name") or "Toga").strip() or "Toga"
         # v2.12.3: mesh peers are UNTRUSTED. Frame their text as data, not
@@ -1166,7 +1166,7 @@ try:
                 _out = _guard.strip_fence(_out)
             except Exception:
                 pass
-            # Strip any stray "Sage:"/"Toga:" the model prepended (the channel
+            # Strip any stray "Toga:"/"Toga:" the model prepended (the channel
             # adds its own prefix), and cap length for one BLE notification.
             if _out[:5].lower() == "sage:":
                 _out = _out[5:].strip()
@@ -1206,7 +1206,7 @@ try:
                 store = SocialsConfig(_socials_store_path(ns))
             except Exception as _e:
                 print(f"[SOCIALS] store unavailable (ns={ns}): {_e}")
-        router = SageChannelRouter(
+        router = TogaChannelRouter(
             reply_fn=_socials_reply,
             wake_word=config.get("voice_wake_word", "Toga"),
             store=store,
@@ -2619,7 +2619,7 @@ def _safe_ns(ns):
     always returned, so every route below behaves exactly as before. It used to
     be the ONLY enforcement point, with everything downstream relying on a
     comment saying it had been applied -- which had drifted twice by v2.15.
-    See docs/security/CODEQL_TRIAGE_PLAN_2026-08-13.md."""
+    See docs/security/history/CODEQL_TRIAGE_PLAN_2026-08-13.md."""
     try:
         return ns_guard.safe_ns(ns)
     except ns_guard.InvalidNamespace:
@@ -2879,10 +2879,10 @@ async def api_list_plugins():
 # Plugin toggle moved to v2 (below, with feature wiring)
 
 
-# --- Sage / Agent Config Routes ----------------------------------------------
+# --- Toga / Agent Config Routes ----------------------------------------------
 @app.get("/api/sage/config")
 async def api_sage_config(request: Request):
-    # v2.11.13: per-user view — a non-owner sees their own Sage toggles.
+    # v2.11.13: per-user view — a non-owner sees their own Toga toggles.
     eff = _effective_config(_session_ns(request))
     return {
         "sage_mode": eff.get("sage_mode", True),
@@ -2911,7 +2911,7 @@ async def api_set_sage_config(payload: dict, request: Request):
 
 # --- Developer Mode (hide/show log terminals) --------------------------------
 # Simple on/off so normal users get a clean desktop; devs can reveal all the
-# console windows (Ollama / Sage / Daemon / Overseer / model servers / etc.).
+# console windows (Ollama / Toga / Daemon / Overseer / model servers / etc.).
 # State persists in sage_data/ui_prefs.json and is honored by daemon/model
 # respawns too. Live toggle via ShowWindow; no restart needed.
 @app.get("/api/devmode")
@@ -4039,7 +4039,7 @@ async def openai_list_models():
     chain (auto-route between primary + secondary per config.json --
     the request's `model` field is ignored). Once Session 2 lands the
     agentic-loop bridge, this same model id will route through the
-    full Sage pipeline including tool dispatch.
+    full Toga pipeline including tool dispatch.
     """
     return {
         "object": "list",
@@ -4078,7 +4078,7 @@ def _oai_chunk(cid: str, model_id: str, delta: dict,
     dependencies=[Depends(_auth.require_scope("chat:write"))],
 )
 async def openai_chat_completions(payload: dict, request: Request):
-    """OpenAI-compatible chat completions, backed by the FULL Sage pipeline.
+    """OpenAI-compatible chat completions, backed by the FULL Toga pipeline.
 
     v2.2 Session 2 (2026-05-31): every request flows through the same
     ws_chat handler the chat UI uses, via the _ws_bridge fake-WebSocket
@@ -4256,13 +4256,13 @@ async def api_route_query(payload: dict):
 # --- AIQNudge send (UI side-channel) ------------------------------------------
 @app.post("/api/aiq-nudge")
 async def api_aiq_nudge(payload: dict, request: Request):
-    """Sign + deposit a mid-run nudge for Sage from the chat UI — the
+    """Sign + deposit a mid-run nudge for Toga from the chat UI — the
     button-driven equivalent of the aiq_nudge_send.py terminal helper, so the
-    user never has to open a terminal to steer Sage mid-run.
+    user never has to open a terminal to steer Toga mid-run.
 
     Localhost-only (deliberately NOT in the remote allowlist). Honors
     config['aiq_nudge_enabled']; the signed file lands in sage_data/nudges/
-    and Sage consumes it on her next agentic step. Uses the shared
+    and Toga consumes it on her next agentic step. Uses the shared
     AIQNudge.send() and the same sage_data-resolved key as the consumer, so
     UI nudges verify identically to terminal ones."""
     _owner_gate(request)  # v2.12.8 owner-only (semgrep)
@@ -4329,7 +4329,7 @@ async def api_upload(request: Request, file: UploadFile = File(...)):
 
 # --- Image generation (manual trigger; ComfyUI) ------------------------------
 async def _generate_full_routed(messages, model_id, options, on_token=None):
-    """generate_full with Sage Network offload, used by the AGENTIC loop so its
+    """generate_full with Toga Network offload, used by the AGENTIC loop so its
     per-step inference can run on the remote node too (orchestration + tools stay
     local; inference goes remote). model_id=None on offload -> the desktop picks.
     Falls back to local generate_full on any failure. No recursion: the node
@@ -4479,7 +4479,7 @@ async def api_generate_image(payload: dict, request: Request):
         ns=_img_ns, **opts)
 
 
-# --- Sage network: node surface (gated OFF by default; token + Fernet) --------
+# --- Toga network: node surface (gated OFF by default; token + Fernet) --------
 @app.post("/api/node/info")
 async def api_node_info(request: Request):
     import node_server
@@ -4610,7 +4610,7 @@ async def api_node_infer(request: Request):
     # request is DEMOTED to normal and logged — never rejected, so the
     # urgent lane cannot be Bogarted.
     _opts["_priority"] = 3
-    _opts["_tier"] = "local_network"   # v2.12.2: Sage Network LAN peer (relay-brokered inference would be "remote")
+    _opts["_tier"] = "local_network"   # v2.12.2: Toga Network LAN peer (relay-brokered inference would be "remote")
     if bool(body.get("urgent")):
         import urgent_quota
         _peer = str(env.get("user", "owner"))
@@ -4671,7 +4671,7 @@ async def api_node_infer_stream(request: Request):
     _opts = _sanitize_node_options(body.get("options") or {})
     # v2.11.13 urgency — same policy as /api/node/infer above.
     _opts["_priority"] = 3
-    _opts["_tier"] = "local_network"   # v2.12.2: Sage Network LAN peer (relay-brokered inference would be "remote")
+    _opts["_tier"] = "local_network"   # v2.12.2: Toga Network LAN peer (relay-brokered inference would be "remote")
     if bool(body.get("urgent")):
         import urgent_quota
         _peer = str(env.get("user", "owner"))
@@ -4756,7 +4756,7 @@ async def api_node_generate_image(request: Request):
         media_type="application/octet-stream")
 
 
-# --- Sage network MANAGEMENT (localhost-only via the LAN-exposure guard) -------
+# --- Toga network MANAGEMENT (localhost-only via the LAN-exposure guard) -------
 @app.get("/api/sage-network/status")
 async def api_sn_status():
     import node_trust
@@ -4837,7 +4837,7 @@ async def api_sn_pair_test(payload: dict):
     return {"ok": False, "error": result}
 
 
-# --- Downloads (Sage output files) -------------------------------------------
+# --- Downloads (Toga output files) -------------------------------------------
 @app.get("/api/downloads")
 async def api_list_downloads(request: Request):
     # v2.15: the last of the five downloads routes to resolve a namespace. All
@@ -5953,7 +5953,7 @@ async def api_toggle_plugin_v2(plugin_id: str, request: Request):
     return result
 
 
-# --- WebSocket Chat (with full Sage agentic loop) ---------------------------
+# --- WebSocket Chat (with full Toga agentic loop) ---------------------------
 # === Symposium mode: a moderated 3-model debate ==========================
 # The debate is driven by STANCE PROMPTS (each debater is assigned an opposing
 # side); temperature is only flavor. Streams as one markdown document (speaker
@@ -5994,7 +5994,7 @@ _SYMP_CLOSE_O = (
     "fails, addressing the Proponent's strongest points. Introduce no new "
     "claims. Stay strictly on the proposition. Be concise.")
 _SYMP_MODERATOR = (
-    "You are the MODERATOR (Sage) of the debate that follows. Fairly summarize "
+    "You are the MODERATOR (Toga) of the debate that follows. Fairly summarize "
     "the strongest point from each side, identify the CRUX (the core "
     "disagreement), note what each side gets right, and give a balanced "
     "synthesis. Only name a stronger side if the case is decisive; otherwise "
@@ -6002,7 +6002,7 @@ _SYMP_MODERATOR = (
 
 
 def _symposium_roles():
-    """Pick (proponent, opponent, moderator) from the configured slots. Sage
+    """Pick (proponent, opponent, moderator) from the configured slots. Toga
     (the primary/default) moderates; the secondary + tertiary debate. Works with
     sparse slots (a single model can play all three roles via the prompts)."""
     prim = config.get("default_model")
@@ -6184,7 +6184,7 @@ _BUILD_FINAL_B = (
     "No preamble — code first, then a one-paragraph summary of your approach.")
 
 _BUILD_JUDGE = (
-    "You are the JUDGE (Sage) evaluating two competing code submissions "
+    "You are the JUDGE (Toga) evaluating two competing code submissions "
     "for the same specification. Assess each on: "
     "(1) Correctness — does it meet the spec and handle edge cases? "
     "(2) Clarity — is it readable and well-commented? "
@@ -6197,7 +6197,7 @@ _BUILD_JUDGE = (
     
 def _build_battle_roles():
     """Pick (builder_a, builder_b, judge) from configured slots.
-    Sage (primary) judges; secondary and tertiary compete."""
+    Toga (primary) judges; secondary and tertiary compete."""
     prim = config.get("default_model")
     sec  = config.get("secondary_model")
     ter  = config.get("tertiary_model")
@@ -6327,7 +6327,7 @@ def _bb_gate_summary(raw):
 
 
 async def _bb_run_gate(candidate_code, test_content, module_name, test_filename, timeout=60):
-    """Run a gate test against candidate code in OracleAI's sandbox. Writes
+    """Run a gate test against candidate code in VeridianAI's sandbox. Writes
     <module>.py + the test into a temp dir, runs the test as a subprocess, and
     returns (passed, raw_output). Off-thread so the event loop is not blocked."""
     import base64 as _b64
@@ -6725,13 +6725,13 @@ async def ws_chat(websocket: WebSocket):
         await websocket.close(code=1008)   # policy violation; never fall back
         return
     # Bind this connection's namespace for the browser plugin so each user's
-    # Sage drives her own persistent profile (per-user isolation).
+    # Toga drives her own persistent profile (per-user isolation).
     try:
         sage_engine.set_browser_ns(_ws_ns)
     except Exception:
         pass
     # v2.11.13: this connection's personal settings overlay (empty for the
-    # owner / single-user). Applied to generation options and Sage-mode
+    # owner / single-user). Applied to generation options and Toga-mode
     # flags below so each user's saved preferences actually drive THEIR
     # inference, not just their settings screen.
     _ws_overlay = _load_user_overlay(_ws_ns)
@@ -6980,7 +6980,7 @@ async def ws_chat(websocket: WebSocket):
                 # whatever the UI sent (model_id may be empty,
                 # downstream handles that).
                 model_id = primary if primary else model_id
-            # v2.11.13: Sage-mode flags honor the connection's per-user
+            # v2.11.13: Toga-mode flags honor the connection's per-user
             # overlay first, then the global config (owner/single-user).
             _eff = {**config, **_ws_overlay}
             sage_mode = _eff.get("sage_mode", True)
@@ -6995,7 +6995,7 @@ async def ws_chat(websocket: WebSocket):
             # means UI edits via POST /api/prompts/system take effect
             # immediately without a restart. Empty file (or missing) is
             # fine — the sage_mode branch below substitutes SAGE_SYSTEM_PROMPT
-            # so Sage never runs with zero priming.
+            # so Toga never runs with zero priming.
             _up = sage_engine.read_user_prompt(_ws_ns)   # per-user addendum (owner -> shared)
             sys_prompt = _up if _up is not None else OracleConfig.load(CONFIG_FILE)._read_prompt_file()
             if sage_mode:
@@ -7276,9 +7276,9 @@ async def ws_chat(websocket: WebSocket):
                         # steps, BEFORE the next agent_step is announced. Any
                         # verified nudge becomes a system-role priority
                         # directive appended to the running messages list so
-                        # Sage sees it on her next generate() call. Tampered
+                        # Toga sees it on her next generate() call. Tampered
                         # or unsigned files are quarantined inside
-                        # aiq_nudge.read_pending() — nothing reaches Sage
+                        # aiq_nudge.read_pending() — nothing reaches Toga
                         # without a valid HMAC. Skipped entirely when
                         # aiq_nudge_enabled is False (default) or the module
                         # failed to initialise at boot. Wrapped in try/except
@@ -7328,7 +7328,7 @@ async def ws_chat(websocket: WebSocket):
                         })
 
                         # ── Inject accumulated tool results into msgs ─
-                        # v2.1.3 FIX: The previous post-prompt told Sage
+                        # v2.1.3 FIX: The previous post-prompt told Toga
                         # "do not emit any more tool tags, just answer
                         # directly" after EVERY tool result — which killed
                         # multi-step workflows. She'd do Step 1 (e.g.
@@ -7993,7 +7993,7 @@ async def ws_chat(websocket: WebSocket):
                                 # v2.2 (2026-05-30): malformed SAVE_FILE
                                 # surfaced by parse_agent_actions. The
                                 # parser previously fell through silently
-                                # and Sage would fabricate verification
+                                # and Toga would fabricate verification
                                 # success. Now we push a clear tool_result
                                 # so her loop sees the failure and can
                                 # self-correct in the same turn. content
@@ -8038,7 +8038,7 @@ async def ws_chat(websocket: WebSocket):
                                 # v2.1.5: [VERIFY_FILE: path] handler.
                                 # Was previously documented in the prompt
                                 # but UNWIRED (parser ignored, no dispatch
-                                # handler), so Sage would hallucinate a
+                                # handler), so Toga would hallucinate a
                                 # verification result. Now actually calls
                                 # verify_written_file() which checks
                                 # os.path.exists() first and returns
@@ -9022,7 +9022,7 @@ if __name__ == "__main__":
 #  IPC BRIDGE — VISIBLE BROWSER LAUNCHER — v2.1.2 surgical addition
 # ===============================================================================
 # Adds a /api/launch-browser HTTP endpoint that spawns browser_tool.py
-# as a separate visible process so the user can watch Sage browse in real time.
+# as a separate visible process so the user can watch Toga browse in real time.
 # The visible browser listens on localhost TCP 9999 via its built-in QTcpServer;
 # browser_tool.py sends "navigate" and "search" IPC messages to it (best-effort,
 # silent no-op when the visible browser is not running).

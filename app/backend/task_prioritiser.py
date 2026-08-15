@@ -1,6 +1,6 @@
 """
-OracleAI Task Prioritisation System (Oracle instance) v2.2
-Agent names prefixed with 'O' to coexist with SageBot's TaskP.
+VeridianAI Task Prioritisation System (Oracle instance) v2.2
+Agent names prefixed with 'O' to coexist with TogaBot's TaskP.
 
 Fixes applied vs previous version:
 - _pop_task() now respects urgency ordering via heapq

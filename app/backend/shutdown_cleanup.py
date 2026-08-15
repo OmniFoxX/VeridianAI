@@ -1,7 +1,7 @@
 """
 shutdown_cleanup.py — v2.11.12 zombie-process fix (the reaper).
 
-Kills every process OracleAI itself started, and nothing else. Called:
+Kills every process VeridianAI itself started, and nothing else. Called:
 
   1. By Electron's stopBackend() on quit (synchronously, so the app
      doesn't exit before the reaping finishes).
@@ -36,7 +36,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-ROOT = Path(os.environ.get("OAI_ROOT") or Path(__file__).resolve().parent.parent)
+ROOT = Path(os.environ.get("VAI_ROOT") or Path(__file__).resolve().parent.parent)
 QUIET = "--quiet" in sys.argv
 MY_PID = os.getpid()
 
@@ -151,7 +151,7 @@ def _pass1_registry() -> int:
 
 
 def _pass2_sweep() -> int:
-    """Kill any survivor that is unambiguously part of the OracleAI stack:
+    """Kill any survivor that is unambiguously part of the VeridianAI stack:
     a python/llama-server process running from <root>\\backend or start.py.
     Deliberately NARROW — a user's own Ollama, an MCP server run from the
     MCP/ folder, or any unrelated python.exe never matches."""
@@ -188,7 +188,7 @@ def _pass2_sweep() -> int:
             # as relative `py start.py`, multiprocessing workers (cmdline is
             # `... -c from multiprocessing...spawn_main`), and daemon
             # generations respawned with mangled argv. They all INHERIT
-            # cwd from their spawner, and every OracleAI spawn site uses
+            # cwd from their spawner, and every VeridianAI spawn site uses
             # cwd=<root> (tier_launcher, overseer) or <root>\backend
             # (start.py after chdir). Still deliberately narrow: only
             # python/llama-server processes (name filter above) sitting

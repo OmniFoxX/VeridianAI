@@ -88,25 +88,25 @@ check("new layout: same phone -> SAME stable id", new1 == new2 == "aabbccddeeff0
 
 print("C. round-trip with our own encoder (broadcast)")
 snd = "1122334455667788"
-pkt = m.create_bitchat_packet(snd, m.MessageType.ANNOUNCE, b"Sage")
+pkt = m.create_bitchat_packet(snd, m.MessageType.ANNOUNCE, b"Toga")
 check("byte0 version=1", pkt[0] == 1)
 check("byte2 ttl=7", pkt[2] == 7, pkt[2])
 check("sender at offset 14", pkt[14:22].rstrip(b"\x00").hex() == snd, pkt[14:22].hex())
 rp = m.parse_bitchat_packet(pkt)
 check("round-trip sender", rp.sender_id_str == snd)
-check("round-trip payload", rp.payload == b"Sage")
+check("round-trip payload", rp.payload == b"Toga")
 check("padded to >=256 (traffic shaping)", len(pkt) >= 256, len(pkt))
 
 print("D. message payload round-trip (iOS BitchatMessage layout)")
 mid = "550e8400-e29b-41d4-a716-446655440000"
-mp = m.encode_message_payload(mid, "Sage", "hello world", 1_719_200_000_000,
+mp = m.encode_message_payload(mid, "Toga", "hello world", 1_719_200_000_000,
                               sender_peer_id="1122334455667788")
 msg = m.parse_bitchat_message_payload(mp)
 check("content survives", msg.content == "hello world", msg.content)
 check("id survives", msg.id == mid, msg.id)
 
 print("E. full public MESSAGE packet end-to-end")
-pl = m.encode_message_payload(mid, "Sage", "hi there", 1_719_200_000_000, sender_peer_id=snd)
+pl = m.encode_message_payload(mid, "Toga", "hi there", 1_719_200_000_000, sender_peer_id=snd)
 fpkt = m.create_bitchat_packet(snd, m.MessageType.MESSAGE, pl)
 fp = m.parse_bitchat_packet(fpkt)
 check("type=MESSAGE", fp.msg_type == m.MessageType.MESSAGE)
@@ -114,7 +114,7 @@ fm = m.parse_bitchat_message_payload(fp.payload)
 check("end-to-end content", fm.content == "hi there", fm.content)
 
 print("F. clean_nickname strips binary suffix")
-check("nul+binary trimmed", m.clean_nickname(b"Sage\x00\x13\x37\xff") == "Sage", m.clean_nickname(b"Sage\x00\x13\x37\xff"))
+check("nul+binary trimmed", m.clean_nickname(b"Toga\x00\x13\x37\xff") == "Toga", m.clean_nickname(b"Toga\x00\x13\x37\xff"))
 check("plain passes through", m.clean_nickname(b"Alice") == "Alice")
 
 print("G. display_peers() dedups rotating ids by fingerprint")
@@ -139,19 +139,19 @@ check("real announce #2 -> CryptoFox2", a2["nickname"] == "CryptoFox2", a2["nick
 check("fingerprint from 0x02 noise key", isinstance(a1["fingerprint"], str) and len(a1["fingerprint"]) == 64, a1["fingerprint"])
 check("bare-nickname fallback", m.parse_announce(b"CryptoFox")["nickname"] == "CryptoFox")
 
-print("I. Sage's OUTGOING announce is valid TLV (phones can parse it)")
+print("I. Toga's OUTGOING announce is valid TLV (phones can parse it)")
 class _ES:
     def get_public_key(self): return bytes(range(32))
     def get_signing_public_key_bytes(self): return bytes(range(32, 64))
 class _FC:
-    nickname = "Sage"
+    nickname = "Toga"
     my_peer_id = "9e940b5e00000000"
     encryption_service = _ES()
 _out = m.BitchatClient._build_announce_payload(_FC())
 _pa = m.parse_announce(_out)
-check("self-announce nickname round-trips", _pa["nickname"] == "Sage", _pa["nickname"])
+check("self-announce nickname round-trips", _pa["nickname"] == "Toga", _pa["nickname"])
 check("self-announce carries fingerprint", isinstance(_pa["fingerprint"], str) and len(_pa["fingerprint"]) == 64)
-check("self-announce begins with 0x01 nick TLV", _out[0]==0x01 and _out[1]==4 and _out[2:6]==b"Sage", _out[:6].hex())
+check("self-announce begins with 0x01 nick TLV", _out[0]==0x01 and _out[1]==4 and _out[2:6]==b"Toga", _out[:6].hex())
 
 print(f"\nALL {ok} CHECKS PASSED")
 # --- end of file sentinel ---

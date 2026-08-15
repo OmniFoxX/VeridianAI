@@ -1,12 +1,12 @@
 """
-OracleAI / Aether -- skill-sharing TRUST CORE (Layer 1).
+VeridianAI / Aether -- skill-sharing TRUST CORE (Layer 1).
 
-Zero-trust foundation for sharing learned skills + tools between Sages. This
+Zero-trust foundation for sharing learned skills + tools between Togas. This
 module does crypto + verification ONLY: it never executes a skill, never touches
 the network, and grants no trust on its own. Higher layers (store, catalog,
 capability gating, transport) build on top.
 
-Trust model: each Sage has an Ed25519 signing identity. Outgoing skills are
+Trust model: each Toga has an Ed25519 signing identity. Outgoing skills are
 signed; incoming skills are verified by (a) content hash and (b) signature over
 the declared metadata. A valid signature proves the artifact is authentic and
 unmodified -- it does NOT make the author trusted. Trust is a separate decision
@@ -50,7 +50,7 @@ def _canonical(obj):
 
 
 # --------------------------------------------------------------------------
-# identity (per-Sage signing keypair)
+# identity (per-Toga signing keypair)
 # --------------------------------------------------------------------------
 def _data_dir(explicit=None):
     if explicit is not None:
@@ -68,7 +68,7 @@ def _key_path(key_dir=None):
 
 
 def load_or_create_identity(key_dir=None):
-    """Load this Sage's Ed25519 private key, creating one on first use. The 32-byte
+    """Load this Toga's Ed25519 private key, creating one on first use. The 32-byte
     seed lives 0600 in sage_data (outside the project) and never leaves the host."""
     p = _key_path(key_dir)
     try:

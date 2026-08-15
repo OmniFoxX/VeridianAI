@@ -1,5 +1,5 @@
 """
-OracleAI / Aether -- skill SERVICE: serve + fetch (Layer 4).
+VeridianAI / Aether -- skill SERVICE: serve + fetch (Layer 4).
 
 Ties the trust core (L1), store (L2), and gate (L3) into the share workflow, in a
 TRANSPORT-AGNOSTIC way. The serving side produces a small catalog + per-hash
@@ -30,7 +30,7 @@ class SkillService:
 
     # ---- author / serve side ----
     def publish(self, body, name, version="", capabilities=None, author=""):
-        """Sign a local skill with this Sage's key and store it PROMOTED (served)."""
+        """Sign a local skill with this Toga's key and store it PROMOTED (served)."""
         if isinstance(body, str):
             body = body.encode("utf-8")
         env = skill_trust.sign_artifact(body, name=name, version=version,

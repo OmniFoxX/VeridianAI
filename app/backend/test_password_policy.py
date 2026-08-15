@@ -91,7 +91,7 @@ check(not ok("thequickbrownfoxjumpsoverthelazydog"), "blocklist: pangram")
 print("== reject list: app name substring (case-insensitive) ==")
 check(not ok("my VeridianAI password 42"), "contains VeridianAI")
 check(not ok("ilove-veridian-forever"), "contains veridian")
-check(not ok("ORACLEAI is my favourite app"), "contains ORACLEAI")
+check(not ok("VERIDIANAI is my favourite app"), "contains VERIDIANAI")
 check(ok("a viridian green meadow at dusk"), "'viridian' (different word) accepted")
 
 print("== reject list: username substring ==")

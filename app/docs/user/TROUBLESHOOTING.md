@@ -127,7 +127,7 @@ New-Item -ItemType Directory -Path $d -Force | Out-Null
 
 Attach both log files. They contain paths and version numbers but no
 conversation content, no keys and no personal data — the backend's own logs
-live separately under `sage_data/logs/`.
+live separately under `sage_data/logs/`. Email: "todd@mentispheresoftware.com"
 
 Also useful:
 

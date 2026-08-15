@@ -4,7 +4,7 @@ MentiSphere Software LLC d.b.a VeridianAI — "Keep an open MentiSphere."
 
 Argo-Net as a first-class Socials channel. This is the seam that lets the
 transport-agnostic mesh (LAN + BLE + consent-gated Aether) ride the exact
-same SageChannelRouter plumbing every other channel uses: the channel list,
+same TogaChannelRouter plumbing every other channel uses: the channel list,
 per-thread feed, auto-reply, peer display, connect/disconnect, per-profile
 isolation, and the localhost access-policy chokepoint all come for free.
 
@@ -41,7 +41,7 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from sage_messaging_adapter import (
     ChannelMessage,
     ChannelProfile,
-    SageMessagingAdapter,
+    TogaMessagingAdapter,
 )
 from state_paths import CONFIG_FILE  # v2.13 read-only-install support
 
@@ -149,7 +149,7 @@ def _default_identity() -> str:
         return "veridianai-node"
 
 
-class ArgoNetBridge(SageMessagingAdapter):
+class ArgoNetBridge(TogaMessagingAdapter):
     """Argo-Net mesh as a Socials channel adapter."""
 
     PROFILE = ChannelProfile(

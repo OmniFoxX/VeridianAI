@@ -1,4 +1,4 @@
-"""Developer Mode — hide/show OracleAI's background console windows (Windows).
+"""Developer Mode — hide/show VeridianAI's background console windows (Windows).
 
 A simple on/off so normal users get a clean desktop while devs can reveal all
 the log terminals. State lives in sage_data/ui_prefs.json (cross-process: the
@@ -20,7 +20,7 @@ except Exception:  # pragma: no cover
 
 _KEY = "developer_mode"
 
-# Console-window titles OracleAI's launchers set (start.bat) plus substrings of
+# Console-window titles VeridianAI's launchers set (start.bat) plus substrings of
 # the Python-spawned consoles' default (command-line) titles. Matched lowercased.
 _TITLE_HINTS = (
     "oracleai", "ollama-oracle", "llama-sage", "llama-daemon",

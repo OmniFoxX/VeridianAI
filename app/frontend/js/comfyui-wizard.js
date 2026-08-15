@@ -1,5 +1,5 @@
 /**
- * ComfyUI Setup Wizard — VeridianAI v2.9.10
+ * ComfyUI Setup Wizard — VeridianAI
  * =========================================
  * Handles detection, download, install, and verification of ComfyUI portable.
  * Triggered by the image generation button (🎨) when ComfyUI is not set up.

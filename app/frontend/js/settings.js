@@ -170,17 +170,51 @@ async function loadMultiProfileToggle() {
 // this did -- would leave the switch showing "on" over a setting that never
 // changed, and the person would find out much later, from the wrong symptom.
 async function setMultiProfile(enabled) {
-  const r = await updateSetting("multiuser_enabled", !!enabled);
+  // v2.15.1: turning this ON is not an ordinary settings write.
+  //
+  // The first account created on an install becomes the Owner, so the backend
+  // refuses to switch multi-profile on while no Owner exists -- otherwise the
+  // next person to make an account silently owns everything. v2.15 added that
+  // refusal and nothing that could satisfy it: the toggle answered "Create the
+  // owner account first" and offered no way to create one. Multi-Profile was
+  // unreachable on any install whose first-run dialog had already been
+  // answered, which is every install after its first launch.
+  //
+  // So the toggle now opens the Owner account form itself, and the mode is
+  // switched on only after that account exists. Nothing is written if the
+  // person cancels.
+  if (enabled) {
+    if (!window.OracleAuth || typeof window.OracleAuth.createOwnerAccount !== "function") {
+      setChecked("toggle-multiprofile", false);
+      setStatus("Multi-Profile setup is unavailable — auth.js did not load.");
+      return;
+    }
+    setStatus("Multi-Profile — create the Owner account to finish.");
+    await window.OracleAuth.createOwnerAccount({
+      // The switch stays visually ON while the form is up, because that is what
+      // the person just did. It only goes back if the change does not happen.
+      onCancel: function () {
+        setChecked("toggle-multiprofile", false);
+        setStatus("Multi-Profile setup cancelled — nothing was changed.");
+      },
+      onError: function (detail) {
+        setChecked("toggle-multiprofile", false);
+        setStatus(detail || "Multi-Profile could not be enabled.");
+      },
+    });
+    // On success the page reloads as the Owner. No sign-out: the account
+    // creation issued the session. The username/password prompt appears on the
+    // NEXT launch, once the session cookie is gone.
+    return;
+  }
+
+  const r = await updateSetting("multiuser_enabled", false);
   if (r && r.ok === false) {
-    setChecked("toggle-multiprofile", !enabled);   // put the switch back
+    setChecked("toggle-multiprofile", true);   // put the switch back
     setStatus(r.detail || "Multi-Profile could not be changed.");
     return;
   }
-  setStatus(
-    enabled
-      ? "Multi-Profile enabled — each person now signs in to their own profile"
-      : "Multi-Profile disabled — back to single-user mode",
-  );
+  setStatus("Multi-Profile disabled — back to single-user mode");
 }
 window.setMultiProfile = setMultiProfile;
 
@@ -401,11 +435,11 @@ async function reloadModels() {
         opt.value = m.id;
         // Show tier as a small suffix if present, so user can tell which
         // tier a model lives on. Falls back to just name if no tier info.
-        // v2.12.0 rebrand: internal tier labels (Oracle/Sage/Daemon) stay stable
+        // v2.12.0 rebrand: internal tier labels (Oracle/Toga/Daemon) stay stable
         // for routing/logs; users see functional names that never need renaming.
         const TIER_DISPLAY = {
           Oracle: "Reasoning",
-          Sage: "Agent",
+          Toga: "Agent",
           Daemon: "Utility",
           NPU: "NPU",
         };
@@ -447,7 +481,7 @@ async function reloadModels() {
     if (restarted_tiers && restarted_tiers.length > 0) {
       const _TIER_DISPLAY = {
         Oracle: "Reasoning",
-        Sage: "Agent",
+        Toga: "Agent",
         Daemon: "Utility",
         NPU: "NPU",
       };

@@ -2,7 +2,7 @@ DOCUMENT 1 OF 4: PRIVACY POLICY
 VERIDIANAI — MENTISPHERE SOFTWARE
 ████████████████████████████████████████████████████████████████████████
 VERIDIANAI PRIVACY POLICY
-Published by: MentiSphere Software Contact: silverfox4816@gmail.com Governing Jurisdiction: King County, Washington State, USA Effective Date: July 2026 Version: 1.0
+Published by: MentiSphere Software Contact: Todd@MentiSphereSoftware.com Governing Jurisdiction: King County, Washington State, USA Effective Date: July 2026 Version: 2
 
 PREAMBLE: A PLAIN-LANGUAGE COMMITMENT
 Before the formal legal text begins, we want to say this plainly:
@@ -14,7 +14,7 @@ What we do hold is narrow, necessary, and described in full below. We hold it on
 This policy is long because the world's privacy laws require completeness. But the underlying truth is short: your content is yours, it stays on your machine, and we have zero access to it.
 
 SECTION 1 — IDENTITY OF THE DATA CONTROLLER
-Business Name: MentiSphere Software Place of Formation and Principal Operations: Washington State, United States of America Contact for All Privacy Matters: silverfox4816@gmail.com Product: VeridianAI — a local artificial intelligence inference platform
+Business Name: MentiSphere Software Place of Formation and Principal Operations: Washington State, United States of America Contact for All Privacy Matters: Todd@MentiSphereSoftware.com Product: VeridianAI — a local artificial intelligence inference platform
 
 For purposes of the General Data Protection Regulation (EU) 2016/679 ("GDPR"), the UK General Data Protection Regulation as retained by the Data Protection Act 2018 ("UK GDPR"), the California Consumer Privacy Act as amended by the California Privacy Rights Act (Cal. Civ. Code § 1798.100 et seq.) ("CCPA/CPRA"), the Washington Privacy Act (RCW Chapter 19.390) ("WPA"), and other applicable privacy statutes, MentiSphere Software ("we," "us," "our," "the Publisher") is the data controller solely with respect to the limited categories of operational data described in Section 3 of this Policy.
 
@@ -259,4 +259,4 @@ Your continued use of VeridianAI after the effective date of any updated Policy 
 SECTION 16 — HOW TO EXERCISE YOUR RIGHTS AND CONTACT US
 To exercise any privacy right described in this Policy, to submit a data subject access request, to request deletion, or to raise any privacy concern, contact Publisher directly:
 
-Email: silverfox4816@gmail.com Subject Line Recommended: "Privacy Rights Request — Washington State - King County" Response Commitment: Publisher will acknowledge receipt within five (5) business days and provide a substantive response within the applicable statutory deadline for your jurisdiction. Identity Verification: Publisher may request reasonable verification of your identity before fulfilling a rights request, in order to protect you from unauthorized access to your data. Appeals: If Publisher declines a rights request, you will receive a written explanation. You may appeal that decision by contacting Publisher with the word "APPEAL" in your subject line or by contacting the applicable regulatory authority for your jurisdiction.
+Email: Todd@MentiSphereSoftware.com Subject Line Recommended: "Privacy Rights Request — Washington State - King County" Response Commitment: Publisher will acknowledge receipt within five (5) business days and provide a substantive response within the applicable statutory deadline for your jurisdiction. Identity Verification: Publisher may request reasonable verification of your identity before fulfilling a rights request, in order to protect you from unauthorized access to your data. Appeals: If Publisher declines a rights request, you will receive a written explanation. You may appeal that decision by contacting Publisher with the word "APPEAL" in your subject line or by contacting the applicable regulatory authority for your jurisdiction. 

@@ -1,4 +1,4 @@
-"""Spawn the OracleAI inference tiers + Python daemons with console visibility
+"""Spawn the VeridianAI inference tiers + Python daemons with console visibility
 driven by Developer Mode.
 
   Dev Mode ON  -> each tier gets its own console window.
@@ -8,7 +8,7 @@ driven by Developer Mode.
 
 Called by start.bat, which has already resolved the paths / ports / models into
 the environment (LLAMA_SERVER, SAGE_MODEL, DAEMON_MODEL, *_PORT, *_CTX_SIZE,
-DAEMON_MODEL_PRESENT, PYTHON_CMD, OAI_ROOT). Dev Mode is a RESTART-to-apply
+DAEMON_MODEL_PRESENT, PYTHON_CMD, VAI_ROOT). Dev Mode is a RESTART-to-apply
 setting. Fully defensive: each tier is best-effort so one failure never blocks
 the others, and start.bat's readiness probes still report any tier that's down.
 
@@ -53,7 +53,7 @@ if _here not in _sys.path:
     _sys.path.insert(0, _here)
 from state_paths import STATE_DIR, CONFIG_FILE, PID_REGISTRY, CHAT_MEMORY_FILE, LOCK_DIR, HASH_CHAIN_LOG  # v2.13 read-only-install support
 
-ROOT = Path(os.environ.get("OAI_ROOT") or Path(__file__).resolve().parent.parent)
+ROOT = Path(os.environ.get("VAI_ROOT") or Path(__file__).resolve().parent.parent)
 BACKEND = ROOT / "backend"
 
 if str(BACKEND) not in sys.path:
@@ -288,7 +288,7 @@ def _ollama_registry_env() -> dict:
     Why: these are often set as MACHINE env vars (Todd's models live at
     E:\\Ollamas\\.ollama\\models via one). A spawned process only inherits
     the environment its parent chain captured at ITS launch -- so whether
-    our Ollama saw the models depended on how/when OracleAI happened to be
+    our Ollama saw the models depended on how/when VeridianAI happened to be
     started. That roulette is how 31 models 'vanished' from the picker.
     The registry value is authoritative; read it directly, always."""
     out = {}
@@ -379,7 +379,7 @@ def _spawn_npu_tier():
               "install AMD's Lemonade Server to run models on the Ryzen AI NPU)")
         return
     # v2.12.3: pin Lemonade's ctx_size. Its v10.x auto-update loads models
-    # with a small default context (observed 4096), which the Sage system
+    # with a small default context (observed 4096), which the Toga system
     # prompt overflows -- the RyzenAI hybrid backend then hangs on prefill
     # instead of erroring. v10's serve CLI accepts only --port/--host (no
     # --ctx-size flag; passing one kills the spawn with a usage error), so
@@ -423,13 +423,13 @@ def main():
         "OLLAMA_GPU_OVERHEAD": "536870912",
     })
 
-    # Tier 2 - Sage (llama-server, agentic engine).
+    # Tier 2 - Toga (llama-server, agentic engine).
     if llama and sage_model:
-        _spawn("Llama-Sage", [llama, "-m", sage_model, "--host", "127.0.0.1",
+        _spawn("Llama-Toga", [llama, "-m", sage_model, "--host", "127.0.0.1",
                               "--port", p_sage, "--ctx-size", sage_ctx, "-ngl", "0", "--metrics"]
                              + _eos_args(sage_model))
     else:
-        print("[tier_launcher] Sage tier skipped (LLAMA_SERVER/SAGE_MODEL not set)")
+        print("[tier_launcher] Toga tier skipped (LLAMA_SERVER/SAGE_MODEL not set)")
 
     # Tier 3 - Daemon (llama-server, tiny) - only if its model is present.
     if daemon_present and llama and daemon_model:
@@ -464,8 +464,8 @@ def main():
     # Tier 4 (optional) - NPU (Ryzen AI via Lemonade Server).
     _spawn_npu_tier()
 
-    # Sage Daemon (Python mechanics service).
-    _spawn("Sage-Daemon", [py, str(BACKEND / "sage_daemon.py")])
+    # Toga Daemon (Python mechanics service).
+    _spawn("Toga-Daemon", [py, str(BACKEND / "sage_daemon.py")])
 
     # Overseer Daemon (Python supervisor).
     _spawn("Overseer", [py, str(BACKEND / "overseer_daemon.py")])

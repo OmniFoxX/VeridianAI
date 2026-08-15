@@ -1,27 +1,27 @@
 """
-ipc_monitor.py — live terminal + browser feed of Sage's browser activity.
+ipc_monitor.py — live terminal + browser feed of Toga's browser activity.
 =========================================================================
 
-Standalone monitor that listens on the OracleAI IPC bridge (port 9999) and
-displays every browser event Sage emits in real time:
+Standalone monitor that listens on the VeridianAI IPC bridge (port 9999) and
+displays every browser event Toga emits in real time:
 
   * Terminal feed:   one line per event, colour-coded (when a terminal
                      supports ANSI), useful when you're already running
-                     OracleAI from a console.
+                     VeridianAI from a console.
   * Web page:        a small HTML dashboard at http://localhost:9997/
                      that auto-refreshes via /events.json polling, useful
                      when you want to watch from another window.
 
 The monitor is fully self-contained — it does NOT import sage_engine or
 browser_tool. It speaks only the IPC bridge protocol from ipc_bridge.py
-and HTTP. Run while OracleAI is up:
+and HTTP. Run while VeridianAI is up:
 
     cd <project>/backend
     py ipc_monitor.py
 
-Stop with Ctrl+C. Safe to start/stop independently of OracleAI.
+Stop with Ctrl+C. Safe to start/stop independently of VeridianAI.
 
-v2.1.5 — wires up Todd's "watch Sage browse" requirement that the IPC
+v2.1.5 — wires up Todd's "watch Toga browse" requirement that the IPC
 bridge has been waiting for since the browser_tool.py swap.
 """
 from __future__ import annotations
@@ -129,7 +129,7 @@ def _on_message(msg: dict) -> None:
 # ---------- HTTP handler for the optional web view ----------------- #
 _HTML = (
     "<!doctype html><html><head><meta charset=utf-8>"
-    "<title>OracleAI — Sage Browser Live Feed</title>"
+    "<title>VeridianAI — Toga Browser Live Feed</title>"
     "<style>"
     "body{font-family:ui-monospace,Menlo,Consolas,monospace;"
     "background:#0d0d12;color:#d6d6d6;margin:0;padding:1rem}"
@@ -144,7 +144,7 @@ _HTML = (
     ".captcha_solved{color:#7afa9b}"
     ".muted{color:#666}"
     "</style></head><body>"
-    "<h1>OracleAI — Sage Browser Live Feed "
+    "<h1>VeridianAI — Toga Browser Live Feed "
     "<span class=muted>(IPC :{ipc} | UI :{web})</span></h1>"
     "<div id=feed></div>"
     "<script>"

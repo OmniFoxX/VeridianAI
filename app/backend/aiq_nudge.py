@@ -1,22 +1,22 @@
 """
-OracleAI AIQNudge — HMAC-signed mid-run side-channel
+VeridianAI AIQNudge — HMAC-signed mid-run side-channel
 =====================================================
 v2.1.10 #44 implementation.
 
 What this is
 ------------
-Todd's mid-run side-channel for guiding Sage during long agentic runs
+Todd's mid-run side-channel for guiding Toga during long agentic runs
 without aborting. Without code, the pattern was: Todd would rename a
-file or paste content somewhere Sage could see it on her next step.
+file or paste content somewhere Toga could see it on her next step.
 That works, but it means ANYONE who can write a file with the right
-name into the watch directory can inject prompts into Sage's active
+name into the watch directory can inject prompts into Toga's active
 run — a self-prompt-injection vector, exactly the thing #44 was
 queued to address.
 
 The fix: every nudge file carries an HMAC-SHA256 signature. The
 consumer verifies the signature before forwarding the content to
-Sage. Unsigned or tampered files get quarantined (renamed to
-.rejected_<timestamp>) and never reach the agentic loop. Sage only
+Toga. Unsigned or tampered files get quarantined (renamed to
+.rejected_<timestamp>) and never reach the agentic loop. Toga only
 sees verified nudges, injected as a system-role priority directive.
 
 File format
@@ -197,7 +197,7 @@ class AIQNudge:
         Failure to read or rename a file is silently logged to stdout
         and skipped — we never raise from this function because we're
         called from inside the agentic loop and one bad file should
-        not break Sage's run.
+        not break Toga's run.
         """
         results: List[dict] = []
         try:

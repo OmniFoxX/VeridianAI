@@ -1,7 +1,7 @@
 {
   "meta": {
-    "archives_dir": "**\\VeridianAI_v2.12\\archives",
-    "plm_path": "**\\VeridianAI_v2.12\\backend\\mlm_training_data\\sage_plm.pt",
+    "archives_dir": "**\\VeridianAI_v2.**\\archives",
+    "plm_path": "**\\VeridianAI_v2.**\\backend\\mlm_training_data\\sage_plm.pt",
     "sessions_processed": 101,
     "sessions_skipped": 0,
     "total_user_tokens": 212687,
@@ -1190,7 +1190,7 @@
     ]
   },
   "personalization_candidates": {
-    "description": "Words User uses frequently that Sage does not mirror back \u2014 User unique signal for CRAIID personalization layer.",
+    "description": "Words User uses frequently that Toga does not mirror back \u2014 User unique signal for CRAIID personalization layer.",
     "user_unique_vocabulary": {
       "zero": 105,
       "wschat": 60,
