@@ -2821,9 +2821,22 @@ async def api_update_config(payload: dict, request: Request):
     # v2.11.13 per-user settings: a signed-in NON-owner writes only their
     # own overlay, and only PER_USER_KEYS. System keys from a non-owner →
     # 403 naming the key, so the UI can say why. The owner (and single-
-    # user mode) keeps the existing global write path — including
-    # multiuser_enabled itself, which is therefore owner-only by
-    # construction.
+    # user mode) keeps the existing global write path.
+    #
+    # v2.15 CORRECTION: this used to claim multiuser_enabled was therefore
+    # "owner-only by construction". True in multi-user mode; VACUOUS in
+    # single-user mode, where _session_ns() is None and every caller takes
+    # the global path. That is the hole the explicit gate below closes.
+    # v2.15: install_claimed is written by /api/first-run and by nothing else.
+    # Its whole value is being ONE-SHOT: clearing it here would re-arm the
+    # first-run claim dialog for whoever opens the app next, which is the same
+    # hole /api/first-run closes, approached from the settings side. It stays in
+    # to_flat_dict so it PERSISTS; it just is not a setting.
+    if "install_claimed" in payload:
+        raise HTTPException(
+            status_code=403,
+            detail="install_claimed is set during first-run setup only")
+
     ns = _session_ns(request)
     if ns:
         bad = [k for k in payload.keys() if k not in PER_USER_KEYS]
@@ -2833,6 +2846,24 @@ async def api_update_config(payload: dict, request: Request):
                 detail=f"setting {bad[0]!r} is managed by the owner profile")
         _save_user_overlay(ns, payload)
         return _effective_config(ns)
+
+    # v2.15 OWNERSHIP GATE. The first account created becomes the owner
+    # (users.py). Turning multi-profile ON while no owner exists therefore hands
+    # the install to whoever opens the app next -- which on a shared machine is
+    # not necessarily the person who just clicked the toggle.
+    #
+    # This cannot be an ordinary owner-permission check: in SINGLE-user mode
+    # _is_owner() is True for everyone and _session_ns() returns None, so the
+    # write lands here with nobody to authorise it. The gate has to be the
+    # EXISTENCE of an owner account, not a permission.
+    if payload.get("multiuser_enabled") and not config.get("multiuser_enabled", False):
+        import users as _users
+        if not _users.any_users():
+            raise HTTPException(
+                409,
+                "Create the owner account first. Multi-profile mode cannot be "
+                "switched on while this install has no owner, because the next "
+                "account created would silently become it.")
 
     config.update(payload)
     save_config(config)
@@ -5002,6 +5033,64 @@ def _cookie_secure(request: Request) -> bool:
         return "https" in request.headers.get("x-forwarded-proto", "").lower()
     except Exception:
         return False
+
+
+@app.get("/api/first-run")
+async def api_first_run_state(request: Request):
+    """Has this install been claimed, and how?
+
+    Local-only. Who owns an install is not a question a remote caller gets to
+    ask, and certainly not one it gets to answer.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    import users as _users
+    return {"claimed": bool(config.get("install_claimed", False)),
+            "multiuser": bool(config.get("multiuser_enabled", False)),
+            "any_users": _users.any_users()}
+
+
+@app.post("/api/first-run")
+async def api_first_run_choose(payload: dict, request: Request):
+    """Record the install-time choice: single profile, or multi profile.
+
+    WHY THIS EXISTS (v2.15). The first account created becomes the owner
+    (users.py). Nothing decided WHEN that could happen, so on any machine more
+    than one person touches -- a family PC, a demo unit, a review machine -- the
+    first person to switch on multi-profile owned the install and everything in
+    it. The disclaimer is now where that decision gets made, by the person doing
+    the installing, before anybody else reaches the UI.
+
+    ONE SHOT. Once claimed this refuses. Without that it would itself be a fresh
+    unauthenticated way to take ownership, which would be a worse bug than the
+    one it closes.
+
+    "multi" requires the owner account to ALREADY exist -- created through
+    /api/auth/setup, which carries its own "409 if an owner exists" guard. That
+    ordering is the point: it means there is never an instant where
+    multi-profile is switched on and unclaimed, which is the exact race being
+    closed. Setting the flag first and trusting the user to finish would leave
+    the window open.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    if config.get("install_claimed", False):
+        raise HTTPException(409, "this install has already been set up")
+    mode = str(payload.get("mode") or "").strip().lower()
+    if mode not in ("single", "multi"):
+        raise HTTPException(400, "mode must be 'single' or 'multi'")
+    import users as _users
+    if mode == "multi" and not _users.any_users():
+        raise HTTPException(
+            409,
+            "Create the owner account before enabling multi-profile mode.")
+    config.update({"multiuser_enabled": (mode == "multi"),
+                   "install_claimed": True})
+    save_config(config)
+    model_manager.config = config
+    _audit_api_action(request, "install.claim", {"mode": mode})
+    return {"ok": True, "mode": mode,
+            "multiuser": bool(config.get("multiuser_enabled", False))}
 
 
 @app.post("/api/auth/setup")

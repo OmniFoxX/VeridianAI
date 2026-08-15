@@ -2051,7 +2051,7 @@
     <script src="/static/js/games.js?v=2.11.16"></script>
     <script src="/static/js/socials.js?v=2.11.15"></script>
     <script src="/static/js/hardware.js?v=2.11.13"></script>
-    <script src="/static/js/settings.js?v=2.11.15"></script>
+    <script src="/static/js/settings.js?v=2.15.0"></script>
     <script src="/static/js/chat.js?v=2.11.16"></script>
     <script src="/static/js/app.js?v=2.9.10"></script>
     <script src="/static/js/auth.js?v=2.11.15"></script>
@@ -2094,44 +2094,355 @@
         border: 0;
       }
     </style>
-    <!-- First-run AI disclaimer acknowledgment (shown once per browser/device) -->
+    <!-- =====================================================================
+         FIRST-RUN INSTALL GATE  +  AI DISCLAIMER
+         =====================================================================
+         WHY THIS IS INLINE AND NOT A FILE IN /static/js
+         This is the only screen that decides who owns the install. A blocked or
+         missing static request must not be able to skip it, so it ships inside
+         the document it guards.
+
+         WHAT CHANGED IN v2.15
+         It used to be a single "I understand" button gated on localStorage --
+         a notice, not a decision. Meanwhile users.py grants ownership to the
+         first account ever created ("owner = ... or not store.get('users')"),
+         and nothing said WHEN that could happen. On any machine more than one
+         person touches -- a family PC, a demo unit, a review machine -- whoever
+         first switched on multi-profile owned the install and everything in it.
+
+         So the choice is made here, once, by the person doing the installing,
+         before anybody else reaches the UI:
+           Accept (Single Profile)   -> no accounts, so there is no owner to take
+           Accept (Multi-Profile)    -> create the Owner account IN THIS FLOW
+           Decline (Exit VeridianAI) -> quit; nothing is claimed
+
+         Multi-profile is never switched on and left unclaimed: the owner is
+         created first (/api/auth/setup, which 409s if one already exists) and
+         only then is the mode recorded (/api/first-run, which is one-shot).
+         That ordering is the fix -- there is no instant where the door is open.
+
+         AUTHORITY IS THE SERVER, NOT localStorage. localStorage is per-browser
+         and clearable, so it may say "already acknowledged"; it must not be
+         allowed to say "already owned". GET /api/first-run answers that. The
+         CLAIM_KEY below is only a cached echo of that answer, used while the
+         backend is still starting, so a cold start never accuses a claimed
+         install of being unclaimed.
+
+         Pure-ASCII source, matching the frontend modules.
+    -->
     <script>
       (function () {
-        try {
-          if (localStorage.getItem("oai_disclaimer_ack") === "1") return;
-        } catch (e) {
-          /* storage blocked -> just show it this load */
-        }
-        function show() {
-          if (document.getElementById("oai-disclaimer-overlay")) return;
-          var ov = document.createElement("div");
-          ov.id = "oai-disclaimer-overlay";
-          ov.setAttribute("role", "dialog");
-          ov.setAttribute("aria-modal", "true");
-          ov.style.cssText =
-            "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:rgba(4,8,16,0.80);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)";
-          ov.innerHTML =
-            '<div role="dialog" aria-modal="true" aria-labelledby="oai-disclaimer-title" aria-describedby="oai-disclaimer-desc" style="max-width:480px;margin:20px;background:#0b1430;border:1px solid rgba(240,165,0,0.35);border-radius:14px;padding:26px 26px 22px;box-shadow:0 20px 60px rgba(0,0,0,0.55);font-family:\'Segoe UI\',system-ui,sans-serif;color:#e9edf6">' +
-            '<div id="oai-disclaimer-title" style="font-size:17px;letter-spacing:.14em;color:#f0a500;text-align:center;margin-bottom:14px">WELCOME TO VERIDIAN AI</div>' +
-            '<p id="oai-disclaimer-desc" style="font-size:13.5px;line-height:1.6;margin:8px 0">Toga is a <strong>local AI assistant</strong> and can make mistakes or produce inaccurate information &mdash; especially about events after its training cutoff.</p>' +
-            '<p style="font-size:13.5px;line-height:1.6;margin:8px 0">Always verify important answers against reliable sources. Toga does not provide professional legal, medical, or financial advice.</p>' +
-            '<button id="oai-disc-ok" style="margin-top:16px;width:100%;background:#f0a500;color:#0b1430;border:0;border-radius:9px;padding:11px;font-size:14px;font-weight:600;cursor:pointer">I understand</button>' +
-            "</div>";
-          document.body.appendChild(ov);
-          ov.setAttribute("tabindex", "-1");
-          ov.focus();
-          var btn = document.getElementById("oai-disc-ok");
-          btn.focus();
-          btn.addEventListener("click", function () {
-            try {
-              localStorage.setItem("oai_disclaimer_ack", "1");
-            } catch (e) {}
-            ov.remove();
+        "use strict";
+
+        var ACK_KEY = "oai_disclaimer_ack";          // AI notice seen (per browser)
+        var CLAIM_KEY = "veridian_install_claimed";  // cached echo of the server's answer
+        var POLL_MS = 1500;
+
+        var ov = null, release = null, pollTimer = null;
+
+        function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+        function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+        function byId(id) { return ov ? ov.querySelector("#" + id) : null; }
+
+        function postJSON(url, body) {
+          return fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "same-origin",
+            body: JSON.stringify(body)
           });
         }
+
+        // Server-supplied message, or the status code. Never a raw object and
+        // never a stack -- the backend already decides what a client may read.
+        function detailOf(r) {
+          return r.json().then(
+            function (j) { return (j && (j.detail || j.error)) || ("HTTP " + r.status); },
+            function () { return "HTTP " + r.status; }
+          );
+        }
+
+        // ---- styling --------------------------------------------------------
+        var OVERLAY =
+          "position:fixed;inset:0;z-index:99999;display:flex;align-items:center;" +
+          "justify-content:center;background:rgba(4,8,16,0.88);backdrop-filter:blur(4px);" +
+          "-webkit-backdrop-filter:blur(4px)";
+        var PANEL =
+          "max-width:520px;margin:20px;max-height:88vh;overflow:auto;background:#0b1430;" +
+          "border:1px solid rgba(240,165,0,0.35);border-radius:14px;padding:26px 26px 22px;" +
+          "box-shadow:0 20px 60px rgba(0,0,0,0.55);font-family:'Segoe UI',system-ui,sans-serif;" +
+          "color:#e9edf6";
+        var TITLE =
+          "font-size:17px;letter-spacing:.14em;color:#f0a500;text-align:center;margin-bottom:14px";
+        var LEAD =
+          "font-size:13.5px;line-height:1.6;margin:0 0 14px;padding:11px 13px;border-radius:9px;" +
+          "background:rgba(240,165,0,0.10);border:1px solid rgba(240,165,0,0.35)";
+        var P = "font-size:13.5px;line-height:1.6;margin:8px 0";
+        var PMUTED = "font-size:12.5px;line-height:1.55;margin:14px 0 2px;color:#9fb0cc";
+        var HINT =
+          "font-size:11.5px;line-height:1.5;margin:6px 2px 0;color:#9fb0cc;text-align:center";
+        var MSG =
+          "min-height:18px;margin-top:12px;font-size:12.5px;line-height:1.5;color:#ffb4a2;" +
+          "text-align:center";
+        var INPUT =
+          "width:100%;padding:10px 12px;margin:6px 0;border-radius:8px;background:#142036;" +
+          "color:#e2e8f8;border:1px solid #2a3a5a;font-size:14px;box-sizing:border-box";
+
+        function btn(kind) {
+          var s = "display:block;width:100%;margin-top:10px;border-radius:9px;padding:11px;" +
+                  "font-size:14px;font-weight:600;cursor:pointer;border:1px solid transparent";
+          if (kind === "primary") return s + ";background:#f0a500;color:#0b1430;border-color:#f0a500";
+          if (kind === "ghost") return s + ";background:transparent;color:#f0a500;border-color:rgba(240,165,0,0.55)";
+          return s + ";background:transparent;color:#9fb0cc;border-color:rgba(159,176,204,0.35)";
+        }
+
+        function panel(inner) {
+          return '<div role="dialog" aria-modal="true" aria-labelledby="oai-fr-title" ' +
+                 'aria-describedby="oai-fr-lead" style="' + PANEL + '">' + inner + "</div>";
+        }
+        function heading(t) {
+          return '<div id="oai-fr-title" style="' + TITLE + '">' + t + "</div>";
+        }
+
+        // ---- mount / unmount -------------------------------------------------
+        function mount(html, focusSel) {
+          if (!ov) {
+            ov = document.createElement("div");
+            ov.id = "oai-disclaimer-overlay";
+            ov.setAttribute("tabindex", "-1");
+            ov.style.cssText = OVERLAY;
+            document.body.appendChild(ov);
+          }
+          // Replace the content FIRST, then release the old a11y binding. Its
+          // release() returns focus to whatever opened the dialog; by now that
+          // node is gone from the document, so it correctly leaves focus alone
+          // and the new binding below places it inside the new screen.
+          ov.innerHTML = html;
+          if (release) { try { release(); } catch (e) {} release = null; }
+          if (window.modalA11y) {
+            // No onEscape, deliberately. Escape must not dismiss a decision.
+            release = window.modalA11y(ov, { initialFocus: focusSel || null });
+          } else {
+            var f = focusSel && ov.querySelector(focusSel);
+            try { (f || ov).focus(); } catch (e) {}
+          }
+        }
+
+        function close() {
+          if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+          if (release) { try { release(); } catch (e) {} release = null; }
+          if (ov) { ov.remove(); ov = null; }
+        }
+
+        function say(t) { var m = byId("oai-fr-msg"); if (m) m.textContent = t || ""; }
+
+        function busy(on, t) {
+          var bs = ov ? ov.querySelectorAll("button") : [];
+          for (var i = 0; i < bs.length; i++) bs[i].disabled = !!on;
+          say(t);
+        }
+
+        // ---- server calls ----------------------------------------------------
+        // Resolves to the state, or {na:true} when this client is not entitled to
+        // an answer (the route cloaks itself as 404 for non-local callers, and a
+        // remote browser cannot claim the install anyway). ONLY a genuine network
+        // failure rejects, and that means "the backend has not started yet".
+        function fetchState() {
+          return fetch("/api/first-run", { credentials: "same-origin" }).then(function (r) {
+            if (!r.ok) return { na: true };
+            return r.json().then(
+              function (j) { return j || { na: true }; },
+              function () { return { na: true }; }
+            );
+          });
+        }
+
+        function claim(mode) {
+          return postJSON("/api/first-run", { mode: mode }).then(function (r) {
+            if (r.ok) return true;
+            return detailOf(r).then(function (d) {
+              // Already claimed: the decision exists and was never ours to make
+              // twice. Anything else -- including "create the owner first" -- is
+              // a real failure the user needs to see.
+              if (r.status === 409 && /already been set up/i.test(d)) return true;
+              throw new Error(d);
+            });
+          });
+        }
+
+        // ---- screens ---------------------------------------------------------
+        function showGate(waiting) {
+          var dis = waiting ? "disabled " : "";
+          mount(panel(
+            heading("WELCOME TO VERIDIAN AI") +
+            '<p id="oai-fr-lead" style="' + LEAD + '">The first Multi-Profile user becomes the ' +
+              "<strong>Owner</strong> account. We recommend setting this up now.</p>" +
+            '<p style="' + P + '">Toga is a <strong>local AI assistant</strong> and can make ' +
+              "mistakes or produce inaccurate information &mdash; especially about events after " +
+              "its training cutoff.</p>" +
+            '<p style="' + P + '">Always verify important answers against reliable sources. Toga ' +
+              "does not provide professional legal, medical, or financial advice.</p>" +
+            '<p style="' + PMUTED + '">Choose how this installation is set up. You are asked once, ' +
+              "on this machine.</p>" +
+            '<button id="oai-fr-single" ' + dis + 'style="' + btn("ghost") +
+              '">Accept (Single Profile)</button>' +
+            '<button id="oai-fr-multi" ' + dis + 'style="' + btn("primary") +
+              '">Accept (Multi-Profile)</button>' +
+            '<div style="' + HINT + '">Recommended if more than one person will use this PC ' +
+              "&mdash; you become the Owner.</div>" +
+            // Extra gap: the hint above belongs to Multi-Profile, and sitting
+            // flush against Decline made it read as if it described Decline.
+            '<button id="oai-fr-decline" style="' + btn("muted") + ';margin-top:20px">' +
+              "Decline (Exit VeridianAI)</button>" +
+            '<div id="oai-fr-msg" role="status" aria-live="polite" style="' + MSG + '">' +
+              (waiting ? "Waiting for the local service to start..." : "") + "</div>"
+          ), waiting ? "#oai-fr-decline" : "#oai-fr-single");
+
+          byId("oai-fr-single").addEventListener("click", function () {
+            busy(true, "Setting up single-profile mode...");
+            claim("single").then(function () {
+              lsSet(ACK_KEY, "1");
+              lsSet(CLAIM_KEY, "1");
+              close();
+            }, function (e) {
+              busy(false, (e && e.message) || "Could not complete setup.");
+            });
+          });
+
+          byId("oai-fr-multi").addEventListener("click", showOwnerForm);
+          byId("oai-fr-decline").addEventListener("click", decline);
+
+          if (waiting) beginPolling();
+        }
+
+        function showOwnerForm() {
+          mount(panel(
+            heading("CREATE THE OWNER ACCOUNT") +
+            '<p id="oai-fr-lead" style="' + LEAD + '">This account owns the install: it manages ' +
+              "profiles, settings and data for everyone else who uses VeridianAI on this PC. The " +
+              "first account created is the Owner, so it is created here, now.</p>" +
+            '<label class="sr-only" for="oai-fr-user">Username</label>' +
+            '<input id="oai-fr-user" placeholder="Username" autocomplete="username" style="' +
+              INPUT + '">' +
+            '<label class="sr-only" for="oai-fr-pass">Password</label>' +
+            '<input id="oai-fr-pass" type="password" placeholder="Password" ' +
+              'autocomplete="new-password" style="' + INPUT + '">' +
+            '<label class="sr-only" for="oai-fr-conf">Confirm password</label>' +
+            '<input id="oai-fr-conf" type="password" placeholder="Confirm password" ' +
+              'autocomplete="new-password" style="' + INPUT + '">' +
+            '<button id="oai-fr-create" style="' + btn("primary") +
+              '">Create Owner and Continue</button>' +
+            '<button id="oai-fr-back" style="' + btn("muted") + '">Back</button>' +
+            '<div id="oai-fr-msg" role="alert" aria-live="assertive" style="' + MSG + '"></div>'
+          ), "#oai-fr-user");
+
+          byId("oai-fr-back").addEventListener("click", function () { showGate(false); });
+          byId("oai-fr-create").addEventListener("click", createOwner);
+          byId("oai-fr-conf").addEventListener("keydown", function (e) {
+            if (e.key === "Enter") createOwner();
+          });
+        }
+
+        function createOwner() {
+          var u = (byId("oai-fr-user").value || "").trim();
+          var p = byId("oai-fr-pass").value || "";
+          var c = byId("oai-fr-conf").value || "";
+          if (!u) { say("Enter a username for the Owner account."); byId("oai-fr-user").focus(); return; }
+          if (p !== c) { say("The two passwords do not match."); byId("oai-fr-conf").focus(); return; }
+
+          busy(true, "Creating the Owner account...");
+          postJSON("/api/auth/setup", { username: u, password: p })
+            .then(function (r) {
+              // 409 = an owner already exists. Nothing to create, and recording
+              // the mode below is still the right next step.
+              if (r.ok || r.status === 409) return true;
+              return detailOf(r).then(function (d) { throw new Error(d); });
+            })
+            .then(function () { return claim("multi"); })
+            .then(function () {
+              lsSet(ACK_KEY, "1");
+              lsSet(CLAIM_KEY, "1");
+              // Reload rather than just closing: auth.js reads /api/auth/status
+              // once at load, and multi-profile only just came on.
+              window.location.reload();
+            })
+            .catch(function (e) {
+              busy(false, (e && e.message) || "Could not create the Owner account.");
+            });
+        }
+
+        function decline() {
+          var api = window.electronAPI;
+          if (api && typeof api.send === "function") {
+            try { api.send("veridian-decline-exit"); } catch (e) {}
+            mount(panel(
+              heading("CLOSING VERIDIAN AI") +
+              '<p id="oai-fr-lead" style="' + P + '">Exiting. Nothing was set up and no account ' +
+                "was created.</p>"
+            ), null);
+            return;
+          }
+          // Plain browser: there is no app to quit, so say so and stay blocked.
+          // Silently dismissing would leave an unclaimed install usable, which is
+          // the exact thing this dialog exists to prevent.
+          mount(panel(
+            heading("SETUP DECLINED") +
+            '<p id="oai-fr-lead" style="' + P + '">VeridianAI has not been set up on this machine. ' +
+              "Close this tab or window to exit.</p>" +
+            '<p style="' + PMUTED + '">Reopen VeridianAI when you want to make this choice.</p>'
+          ), null);
+        }
+
+        function showAck() {
+          if (lsGet(ACK_KEY) === "1") { close(); return; }
+          mount(panel(
+            heading("WELCOME TO VERIDIAN AI") +
+            '<p id="oai-fr-lead" style="' + P + '">Toga is a <strong>local AI assistant</strong> ' +
+              "and can make mistakes or produce inaccurate information &mdash; especially about " +
+              "events after its training cutoff.</p>" +
+            '<p style="' + P + '">Always verify important answers against reliable sources. Toga ' +
+              "does not provide professional legal, medical, or financial advice.</p>" +
+            '<button id="oai-disc-ok" style="' + btn("primary") + '">I understand</button>'
+          ), "#oai-disc-ok");
+          byId("oai-disc-ok").addEventListener("click", function () {
+            lsSet(ACK_KEY, "1");
+            close();
+          });
+        }
+
+        // ---- dispatch ---------------------------------------------------------
+        function apply(st) {
+          if (st.na) { showAck(); return; }
+          if (st.claimed) { lsSet(CLAIM_KEY, "1"); showAck(); return; }
+          showGate(false);
+        }
+
+        function beginPolling() {
+          if (pollTimer) return;
+          pollTimer = setInterval(function () {
+            fetchState().then(function (st) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              apply(st);
+            }, function () { /* still starting; keep waiting */ });
+          }, POLL_MS);
+        }
+
+        function start() {
+          // Fast path: this browser has seen the notice AND has seen the server
+          // call the install claimed. Nothing to draw, nothing to ask.
+          if (lsGet(ACK_KEY) === "1" && lsGet(CLAIM_KEY) === "1") return;
+          fetchState().then(apply, function () {
+            // Backend not up yet. A previously confirmed claim is enough to know
+            // this is not a fresh install.
+            if (lsGet(CLAIM_KEY) === "1") { showAck(); return; }
+            showGate(true);
+          });
+        }
+
         if (document.readyState === "loading")
-          document.addEventListener("DOMContentLoaded", show);
-        else show();
+          document.addEventListener("DOMContentLoaded", start);
+        else start();
       })();
     </script>
   </body>

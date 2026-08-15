@@ -395,6 +395,16 @@ function createWindow(opts) {
   ipcMain.removeAllListeners('oracle-unstick');   // idempotent if createWindow runs again
   ipcMain.on('oracle-unstick', reclaimFocus);
 
+  // v2.15: someone declined the first-run terms. Nothing has been claimed and
+  // no owner exists, so there is nothing to save -- just leave. Quitting is the
+  // honest response to "Decline"; leaving the window open behind a dismissed
+  // dialog would mean the button did not do what it said.
+  ipcMain.removeAllListeners('veridian-decline-exit');  // idempotent if createWindow runs again
+  ipcMain.on('veridian-decline-exit', () => {
+    blog('first-run terms declined -- quitting');
+    app.quit();
+  });
+
   // --- Open the user's data folder ------------------------------------
   // Under MSIX the install directory lives in C:\Program Files\WindowsApps,
   // which the user cannot browse -- and their archives, uploads, downloads

@@ -45,8 +45,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // the path itself, so the renderer can ask to open the user's own data
     // folder and cannot ask to open anything else. A channel that accepted a
     // path would be a file-explorer-anywhere primitive handed to web content.
+    // 'veridian-decline-exit' carries NO payload either. It is sent only when
+    // someone declines the first-run terms, and main.js decides what quitting
+    // means -- the renderer cannot pass an exit code or anything else.
     const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick',
-                     'open-data-folder'];
+                     'open-data-folder', 'veridian-decline-exit'];
     if (allowed.includes(channel)) {
       ipcRenderer.send(channel, data);
     }

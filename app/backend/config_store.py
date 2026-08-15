@@ -105,6 +105,11 @@ class NetworkSection:
     remote_node_url: str = ""
     offload_enabled: bool = False
     multiuser_enabled: bool = False   # Phase 2: gate the app behind per-user login
+    # v2.15: has the install-time ownership choice been made? The FIRST account
+    # created becomes the owner (users.py), so "nobody has chosen yet" is a
+    # claimable state. This records that the person who installed the app made
+    # the decision, rather than leaving it to whoever opens the app next.
+    install_claimed: bool = False
     skill_share_enabled: bool = False  # Aether: serve/share signed skills (OFF)
     relay_server_enabled: bool = False  # Aether: host the relay broker (OFF)
     relay_source_enabled: bool = False  # Aether: serve my skills over a relay (OFF)
@@ -466,6 +471,7 @@ class OracleConfig:
             "remote_node_url":    self.network.remote_node_url,
             "offload_enabled":    self.network.offload_enabled,
             "multiuser_enabled":  self.network.multiuser_enabled,
+            "install_claimed":    self.network.install_claimed,
             "skill_share_enabled": self.network.skill_share_enabled,
             "relay_server_enabled": self.network.relay_server_enabled,
             "relay_source_enabled": self.network.relay_source_enabled,
@@ -585,6 +591,8 @@ class OracleConfig:
             cfg.network.offload_enabled = bool(flat["offload_enabled"])
         if "multiuser_enabled" in flat:
             cfg.network.multiuser_enabled = bool(flat["multiuser_enabled"])
+        if "install_claimed" in flat:
+            cfg.network.install_claimed = bool(flat["install_claimed"])
         if "skill_share_enabled" in flat:
             cfg.network.skill_share_enabled = bool(flat["skill_share_enabled"])
         if "relay_server_enabled" in flat:
@@ -745,6 +753,8 @@ class OracleConfig:
                 cfg.network.offload_enabled = bool(raw["network"]["offload_enabled"])
             if "multiuser_enabled" in raw["network"]:
                 cfg.network.multiuser_enabled = bool(raw["network"]["multiuser_enabled"])
+            if "install_claimed" in raw["network"]:
+                cfg.network.install_claimed = bool(raw["network"]["install_claimed"])
             if "skill_share_enabled" in raw["network"]:
                 cfg.network.skill_share_enabled = bool(raw["network"]["skill_share_enabled"])
             if "relay_server_enabled" in raw["network"]:

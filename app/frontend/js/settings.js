@@ -164,8 +164,18 @@ async function loadMultiProfileToggle() {
   }
 }
 
+// v2.15: the backend can now REFUSE this. Switching multi-profile on while the
+// install has no owner account would hand ownership to whoever creates the next
+// account, so POST /api/config 409s. Reporting success anyway -- which is what
+// this did -- would leave the switch showing "on" over a setting that never
+// changed, and the person would find out much later, from the wrong symptom.
 async function setMultiProfile(enabled) {
-  await updateSetting("multiuser_enabled", !!enabled);
+  const r = await updateSetting("multiuser_enabled", !!enabled);
+  if (r && r.ok === false) {
+    setChecked("toggle-multiprofile", !enabled);   // put the switch back
+    setStatus(r.detail || "Multi-Profile could not be changed.");
+    return;
+  }
   setStatus(
     enabled
       ? "Multi-Profile enabled — each person now signs in to their own profile"
@@ -241,27 +251,49 @@ window.loadDevAndBrowserToggles = loadDevAndBrowserToggles;
 window.setDevMode = setDevMode;
 window.setBrowserCookies = setBrowserCookies;
 
+// v2.15: this used to swallow the answer entirely -- it wrote the optimistic
+// value into window._appConfig, fired the POST and returned, so a REFUSED save
+// looked exactly like a saved one. That is fine for a setting the backend never
+// refuses and wrong for one it does (multiuser_enabled now 409s when the install
+// has no owner account). Returns {ok, status, detail} so a caller that can be
+// told "no" can act on it. Callers that cannot simply ignore the return, as
+// before.
 async function updateSetting(key, value) {
   window._appConfig[key] = value;
   try {
+    let r;
     if (key === "system_prompt") {
       // #68 Phase E Step 6: system_prompt has its own endpoint backed by
       // a real file. POSTing it via /api/config would now 400 because
       // the validator's allowlist no longer includes the key.
-      await fetch("/api/prompts/system", {
+      r = await fetch("/api/prompts/system", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ system_prompt: value }),
       });
     } else {
-      await fetch("/api/config", {
+      r = await fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [key]: value }),
       });
     }
+    if (r && r.ok) return { ok: true, status: r.status, detail: "" };
+    let detail = "";
+    try {
+      const j = await r.json();
+      detail = (j && (j.detail || j.error)) || "";
+    } catch (e) {
+      /* non-JSON body: the status code is all we have */
+    }
+    // The optimistic write above is now known to be wrong. Drop it rather than
+    // leave the cache disagreeing with the server.
+    delete window._appConfig[key];
+    console.error("[Settings] Save refused", key, r && r.status, detail);
+    return { ok: false, status: (r && r.status) || 0, detail: detail };
   } catch (e) {
     console.error("[Settings] Save failed", e);
+    return { ok: false, status: 0, detail: "Could not reach the local service." };
   }
 }
 
