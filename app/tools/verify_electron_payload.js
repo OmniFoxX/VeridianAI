@@ -138,7 +138,12 @@ VeridianAI.exe runs app.asar, NOT the loose electron/ folder -- so the release
 would ship code you have not edited since the asar was last built, while the
 electron/ folder in that same release displays the current source.
 
-Fix, from the project root:
+Fix -- normally you do NOT have to do this by hand:
+
+    powershell -ExecutionPolicy Bypass -File tools\\make_release.ps1
+
+make_release.ps1 repacks a stale asar itself, in the source tree, before it
+takes the staging snapshot. If you want to do it manually anyway:
 
     node tools/build_asar.js .
     node tools/verify_electron_payload.js .
@@ -148,5 +153,11 @@ also works, but downloads the ~100 MB Electron runtime and drives the whole
 Windows toolchain to regenerate one 500 KB archive of files already on disk --
 and the Electron runtime is not the part that goes stale here.
 
-Do this BEFORE genmanifest, so the manifest hashes the artifact that ships.`);
+CORRECTION (v2.15): an earlier version of this message said to repack "BEFORE
+genmanifest, so the manifest hashes the artifact that ships". The manifest does
+NOT hash the asar and never did -- build_integrity.py excludes the whole
+electron/ directory, and .asar is not in INCLUDE_EXT. The two are independent:
+the manifest covers loose source, and Electron covers the asar. Repack first
+anyway, because then there is one order to remember instead of two rules and an
+exception.`);
 process.exit(1);
