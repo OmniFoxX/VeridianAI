@@ -76,10 +76,26 @@ EXCLUDE_DIRS = {"node_modules", "__pycache__", ".git", "dist", "build",
                 # resources/app.asar at build time and are not present loose in
                 # a packaged install -- so verify() found them "missing" and
                 # reported the whole build as MODIFIED. (That is the tamper
-                # switch that started tripping.) Excluding them is not a loss of
-                # coverage: what actually RUNS is the asar, and electron-builder
-                # embeds an asar integrity hash in the executable which Electron
-                # checks natively. The loose copies are leftover source.
+                # switch that started tripping.) The exclusion is right; the
+                # reason recorded here was not.
+                #
+                # v2.15 CORRECTION. This used to add: "what actually RUNS is the
+                # asar, and electron-builder embeds an asar integrity hash in the
+                # executable which Electron checks natively." Read the fuses in
+                # VeridianAI.exe and embedded_asar_integrity is DISABLED (so is
+                # only_load_app_from_asar). Nothing validates the asar's contents
+                # at launch. The claim was a reassurance, not a fact, and it is
+                # the kind that stops people looking.
+                #
+                # So the asar is covered by exactly one thing:
+                # tools/verify_electron_payload.js, run by tools/make_release.ps1
+                # BEFORE it takes the staging snapshot. If that check is ever
+                # skipped or reordered, a stale shell ships unnoticed -- which is
+                # precisely what happened between 2026-07-26 and 2026-08-12.
+                #
+                # Turning the fuse on is a real option, but it is a packaging
+                # change: with it enabled, a hand-repacked asar would refuse to
+                # launch unless the embedded hash is updated too.
                 "electron",
                 # v2.13 Store build: the BUNDLED CPython runtime (tools/
                 # bundle_python.ps1) is vendored third-party code, not
