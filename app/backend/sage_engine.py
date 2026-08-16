@@ -33,6 +33,9 @@ import atrest  # at-rest encryption for chat archives
 _tavily_call_count   = 0      # resets per response
 _tavily_session_count = 0     # resets per session (manual or auto)
 _tavily_last_call_time = 0.0  # timestamp of last call
+# v2.15.2: the three counters above are read-modify-written from the
+# prioritiser's worker threads, and were doing it unguarded. See web_search().
+_tavily_lock = threading.Lock()
 
 TAVILY_MAX_PER_RESPONSE = 10        # hard cap per agentic loop
 TAVILY_MIN_DELAY_MS     = 500      # minimum ms between calls
@@ -1133,54 +1136,76 @@ def pre_process_query(query: str) -> Tuple[dict, dict]:
     results = {}
     result_lock = threading.Lock()
     completed = threading.Event()
-    pending = []
 
-    def collect(task_result):
-        output = task_result.output
-        if isinstance(output, dict) and "key" in output:
-            with result_lock:
-                results[output["key"]] = output["value"]
-        with result_lock:
-            if len(results) >= len(pending):
-                completed.set()
-
-    original_cb = sage_d._result_callback
-    def patched_cb(task_result):
-        collect(task_result)
-        original_cb(task_result)
-    sage_d._result_callback = patched_cb
+    # v2.15.2 -- this function used to collect its results by swapping a
+    # one-argument `patched_cb` into sage_d._result_callback. The dispatcher
+    # calls that slot with TWO arguments, (result, failed_task), so every
+    # result raised TypeError inside the worker thread, where a bare
+    # `except Exception: pass` swallowed it. Nothing was ever collected,
+    # `completed` never fired, and this waited out its full 120 seconds and
+    # returned {} -- while the searches underneath had all succeeded. Same bug
+    # as main.py's [PRIORITISE:] handler; same fix here.
+    #
+    # Now every job reports ITSELF and touches no shared state. Two other
+    # defects go with it:
+    #
+    #   * the completion test compared against `pending`, which was being
+    #     appended to WHILE tasks were already running -- a fast first result
+    #     could satisfy "len(results) >= len(pending)" when pending held one
+    #     entry and end the batch early. The job list is now built in full
+    #     before anything is dispatched, so the target cannot move.
+    #   * sage_d is process-wide. Two chats pre-processing at once overwrote
+    #     each other's collector, and whichever finished first restored a
+    #     callback the other was still relying on. Nothing is patched now.
+    jobs = []          # (key, zero-arg callable) -- built BEFORE dispatch
 
     if needs["weather"] and needs["location"] and is_feature_enabled("weather"):
         loc = needs["location"]
-        pending.append("weather")
-        sage_d.submit_raw_task({
-            "type": "weather", "importance": 0.9,
-            "deadline": TimeManager.epoch() + 10, "key": "weather",
-            "fn": lambda: get_weather(loc),
-        })
+        jobs.append(("weather", 0.9, 10,
+                     lambda loc=loc: get_weather(loc)))
 
     if needs["news"]:
         q = query
-        pending.append("news")
-        sage_d.submit_raw_task({
-            "type": "news", "importance": 0.7,
-            "deadline": TimeManager.epoch() + 15, "key": "news",
-            "fn": lambda: web_search(q + " latest news", search_type="news"),
-        })
+        jobs.append(("news", 0.7, 15,
+                     lambda q=q: web_search(q + " latest news",
+                                            search_type="news")))
 
     if needs["general"] and needs["location"]:
         loc = needs["location"]
-        pending.append("general")
+        jobs.append(("general", 0.5, 15,
+                     lambda loc=loc: web_search(
+                         f"best restaurants and attractions in {loc}",
+                         search_type="general")))
+
+    expected = len(jobs)
+    pending = [k for k, _i, _d, _f in jobs]
+
+    def reporting(key, fn):
+        """Run one job and record its own result."""
+        def _run():
+            try:
+                value = fn()
+            except Exception as e:
+                # A failed job is a result, not a silence. Reporting it beats
+                # leaving the batch to sit here until the 120s wall.
+                value = f"({key} failed: {e})"
+            with result_lock:
+                results[key] = value
+                if len(results) >= expected:
+                    completed.set()
+            return {"key": key, "value": value}
+        return _run
+
+    for key, importance, lead, fn in jobs:
         sage_d.submit_raw_task({
-            "type": "general", "importance": 0.5,
-            "deadline": TimeManager.epoch() + 15, "key": "general",
-            "fn": lambda: web_search(f"best restaurants and attractions in {loc}", search_type="general"),
+            "type": key, "importance": importance,
+            "deadline": TimeManager.epoch() + lead, "key": key,
+            "fn": reporting(key, fn),
         })
 
     if pending:
         completed.wait(timeout=120)
 
-    sage_d._result_callback = original_cb
     return results, needs
 
 
@@ -1189,27 +1214,51 @@ def pre_process_query(query: str) -> Tuple[dict, dict]:
 # ===============================================================================
 
 def web_search(query: str, num_results: int = 5, search_type: str = "news") -> str:
-    global _tavily_call_count, _tavily_session_count, _tavily_last_call_time
-
     if not TAVILY_API_KEY:
         return "Tavily API key not configured."
 
-    # Session budget check
-    if _tavily_session_count >= TAVILY_SESSION_BUDGET:
-        return "Tavily session budget exhausted. Reset in settings."
+    # v2.15.2 -- BUDGET + THROTTLE, under a lock.
+    #
+    # Everything in this block is read-modify-write on module globals, and once
+    # [PRIORITISE:] started actually delivering results (it did not, before this
+    # release) it runs on three worker threads at once. Two problems, both real:
+    #
+    #   * Lost updates. Three threads read _tavily_call_count as 0 and each
+    #     write 1, so the per-response cap counts three calls as one and the
+    #     session budget drifts low.
+    #   * The throttle did not throttle. Three threads read the SAME
+    #     _tavily_last_call_time, compute the same `elapsed`, sleep the same
+    #     amount and then fire simultaneously -- which is the opposite of a
+    #     minimum delay between calls, and the likeliest way to earn a 429 from
+    #     the API on a burst.
+    #
+    # Serialising just the bookkeeping fixes both: each caller stamps the clock
+    # before releasing, so the next one measures from a real previous call and
+    # genuinely waits. Three parallel searches now start ~TAVILY_MIN_DELAY_MS
+    # apart instead of all at once.
+    #
+    # The HTTP request itself stays OUTSIDE the lock. Holding it across the
+    # network call would serialise the searches completely and throw away the
+    # point of dispatching them in parallel.
+    global _tavily_call_count, _tavily_session_count, _tavily_last_call_time
+    with _tavily_lock:
+        # Session budget check
+        if _tavily_session_count >= TAVILY_SESSION_BUDGET:
+            return "Tavily session budget exhausted. Reset in settings."
 
-    # Per-response hard limit
-    if _tavily_call_count >= TAVILY_MAX_PER_RESPONSE:
-        return "Search limit reached for this response (max 5 per response)."
+        # Per-response hard limit
+        if _tavily_call_count >= TAVILY_MAX_PER_RESPONSE:
+            return (f"Search limit reached for this response "
+                    f"(max {TAVILY_MAX_PER_RESPONSE} per response).")
 
-    # Minimum delay between calls
-    elapsed = (time.time() - _tavily_last_call_time) * 1000
-    if elapsed < TAVILY_MIN_DELAY_MS:
-        time.sleep((TAVILY_MIN_DELAY_MS - elapsed) / 1000)
+        # Minimum delay between calls
+        elapsed = (time.time() - _tavily_last_call_time) * 1000
+        if elapsed < TAVILY_MIN_DELAY_MS:
+            time.sleep((TAVILY_MIN_DELAY_MS - elapsed) / 1000)
 
-    _tavily_call_count += 1
-    _tavily_session_count += 1
-    _tavily_last_call_time = time.time()
+        _tavily_call_count += 1
+        _tavily_session_count += 1
+        _tavily_last_call_time = time.time()
 
     import requests
     cfg = {"topic": "general"} if search_type == "general" else {

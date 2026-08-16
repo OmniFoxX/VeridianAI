@@ -8426,36 +8426,66 @@ async def ws_chat(websocket: WebSocket):
                                         f"(unrecognised subtask: "
                                         f"{s})"))
 
+                                # v2.15.2 -- THE PRIORITISE TIMEOUT BUG.
+                                #
+                                # This block used to collect results by swapping its
+                                # own callback into the SHARED dispatcher:
+                                #
+                                #     def _patched_cb(tr): ...          # ONE argument
+                                #     sage_engine.oracle_d._result_callback = _patched_cb
+                                #
+                                # task_prioritiser calls that slot with TWO arguments
+                                # (result, failed_task). So every result raised
+                                # TypeError inside the worker thread, where a bare
+                                # `except Exception: pass` ate it. Nothing was ever
+                                # collected, done_evt never fired, this waited the
+                                # full 60 seconds and reported "(timed out)" for
+                                # every subtask -- while the searches themselves had
+                                # succeeded, every time.
+                                #
+                                # It also explains why raising TASK_TIMEOUT never
+                                # helped: TASK_TIMEOUT was never what fired. The 60s
+                                # below was, and it always will when nothing reports.
+                                #
+                                # The fix is not a wider signature. It is to stop
+                                # reaching into shared state at all: each subtask now
+                                # records its own result and sets the Event itself --
+                                # exactly the pattern _taskp_run_or_direct already
+                                # used, which is precisely why the plain [SEARCH:]
+                                # path never had this problem.
+                                #
+                                # Three things fixed by the same change:
+                                #   * results are delivered
+                                #   * two chats running PRIORITISE at once no longer
+                                #     overwrite each other's collector (that slot is
+                                #     process-wide; this no longer touches it)
+                                #   * _expected is fixed BEFORE dispatch, so a fast
+                                #     first subtask can no longer satisfy
+                                #     "len(collected) >= len(pending)" while the rest
+                                #     are still being submitted, and cut the batch
+                                #     short
+                                _expected = len(subtasks_raw)
                                 _pending_keys: list = []
                                 _results_collect: dict = {}
                                 done_evt = threading.Event()
                                 _lock = threading.Lock()
 
-                                def _collect(task_result):
-                                    out = task_result.output
-                                    if (isinstance(out, dict)
-                                            and "key" in out):
+                                def _make_runner(key, fn):
+                                    """Wrap a subtask so it reports itself."""
+                                    def _run():
+                                        try:
+                                            val = fn()
+                                        except Exception as _se:
+                                            # A failed subtask is a RESULT, not a
+                                            # silence. Reporting it beats letting the
+                                            # batch sit here until the 60s wall.
+                                            val = f"(subtask failed: {_se})"
                                         with _lock:
-                                            _results_collect[
-                                                out["key"]] = out["value"]
-                                            if (len(_results_collect)
-                                                    >= len(_pending_keys)):
+                                            _results_collect[key] = val
+                                            if len(_results_collect) >= _expected:
                                                 done_evt.set()
-
-                                _orig_cb = (
-                                    sage_engine.oracle_d._result_callback
-                                )
-
-                                def _patched_cb(tr):
-                                    _collect(tr)
-                                    try:
-                                        _orig_cb(tr)
-                                    except Exception:
-                                        pass
-
-                                sage_engine.oracle_d._result_callback = (
-                                    _patched_cb
-                                )
+                                        return {"key": key, "value": val}
+                                    return _run
 
                                 try:
                                     for idx, sub in enumerate(
@@ -8469,7 +8499,7 @@ async def ws_chat(websocket: WebSocket):
                                             "deadline": (
                                                 TimeManager.epoch() + 30),
                                             "key": key,
-                                            "fn": fn,
+                                            "fn": _make_runner(key, fn),
                                         })
                                     if _pending_keys:
                                         loop2 = (
@@ -8496,10 +8526,6 @@ async def ws_chat(websocket: WebSocket):
                                 except Exception as _pe:
                                     result = (
                                         f"PRIORITISE error: {_pe}"
-                                    )
-                                finally:
-                                    sage_engine.oracle_d._result_callback = (
-                                        _orig_cb
                                     )
                                 tool_results_acc[
                                     f"prioritise:"

@@ -2,6 +2,22 @@
 VeridianAI Task Prioritisation System (Oracle instance) v2.2
 Agent names prefixed with 'O' to coexist with TogaBot's TaskP.
 
+THE CALLBACK CONTRACT (read this before assigning _result_callback)
+------------------------------------------------------------------
+Anything assigned to a dispatcher's or sub-agent's `_result_callback` is
+invoked as:
+
+    callback(result: TaskResult, failed_task: PrioritizedTask | None)
+
+TWO arguments, always. A one-argument callback raises TypeError inside the
+worker thread, which is logged (v2.15.2) but cannot be raised out of there.
+
+Better still: do not assign to it at all. It is a single shared slot on a
+process-wide dispatcher, so two concurrent requests silently overwrite each
+other's collector. Have the submitted `fn` record its own result and set its
+own Event instead -- that is what main.py's _taskp_run_or_direct does, and it
+is the reason the plain [SEARCH:] path never had this problem.
+
 Fixes applied vs previous version:
 - _pop_task() now respects urgency ordering via heapq
 - Added per-task timeout and max retry limit
@@ -151,8 +167,32 @@ class OSubAgent:
             if self._result_callback:
                 try:
                     self._result_callback(result, task if not success else None)
-                except Exception:
-                    pass
+                except Exception as cb_err:
+                    # v2.15.2: this was `except Exception: pass`, and that bare
+                    # pass is why a real bug survived here for months.
+                    #
+                    # The callers of this dispatcher (main.py's [PRIORITISE:]
+                    # handler, sage_engine.pre_process_query) swapped in their
+                    # own collector by assigning to _result_callback -- and
+                    # defined it as `def cb(task_result)`, ONE argument. The
+                    # line above passes TWO. Every single result raised
+                    # TypeError right here, and this handler ate it. Nothing was
+                    # ever collected, the caller's completion Event never fired,
+                    # and it waited out its full timeout and reported
+                    # "(timed out)". The work had actually succeeded, every
+                    # time; the delivery is what failed.
+                    #
+                    # Raising would be worse -- it would kill the worker thread
+                    # and take the sub-agent with it. But SILENCE is what made
+                    # this cost real debugging time, twice. Say it.
+                    print(
+                        f"[OSubAgent:{self.name}] RESULT CALLBACK FAILED for "
+                        f"task {task.task_id} ({type(cb_err).__name__}: "
+                        f"{cb_err}). The task itself "
+                        f"{'succeeded' if success else 'failed'}; the result "
+                        f"could not be delivered. A callback assigned to "
+                        f"_result_callback MUST accept (result, failed_task)."
+                    )
 
             # Update stats only on successful, non-timed-out completions
             if success and not timed_out:
