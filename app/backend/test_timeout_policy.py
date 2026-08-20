@@ -273,8 +273,22 @@ ok("the runaway ceiling is still checked first",
 
 ok("the construction site passes the new budget",
    "first_token_timeout_sec=_stall_first" in MAIN)
-ok("an install that pinned the OLD single knob is not silently tightened",
-   "max(_stall_tok, 600.0)" in MAIN)
+# Asserted against the DEFAULT rather than a literal. The first version of
+# this check hardcoded "max(_stall_tok, 600.0)" and broke the moment the
+# default was retuned to 900 -- a test that has to be edited in lockstep with
+# the value it guards is just a second copy of that value, and copies drift.
+_fb = re.search(r"max\(_stall_tok,\s*([0-9.]+)\)", MAIN)
+ok("the fallback uses max() so an old pinned knob is not silently tightened",
+   _fb is not None,
+   "an install that set only stall_token_timeout_sec should keep one coherent "
+   "number, not acquire a tighter budget it never chose")
+if _fb:
+    ok("the fallback floor equals the cold-load default (%s)"
+       % _defaults.get("stall_first_token_timeout_sec"),
+       float(_fb.group(1)) == float(
+           _defaults.get("stall_first_token_timeout_sec", -1)),
+       "fallback says %s, default says %s -- these must move together"
+       % (_fb.group(1), _defaults.get("stall_first_token_timeout_sec")))
 
 
 # =============================================================================

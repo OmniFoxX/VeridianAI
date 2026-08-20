@@ -157,7 +157,7 @@ _LIST_TIMEOUT = 5.0
 _CONNECT_TIMEOUT = 10.0     # loopback: fast or broken
 _WRITE_TIMEOUT   = 120.0    # generous for very large prompts
 _POOL_TIMEOUT    = 30.0     # should never bind; fresh client per attempt
-_META_TIMEOUT    = 15.0     # /api/show etc. -- must never hang a turn
+_META_TIMEOUT    = 30.0     # /api/show etc. -- must never hang a turn
 
 # v2.11.13: priority levels for the per-server generation gate.
 PRIORITY_LOCAL_URGENT  = 0
@@ -1192,7 +1192,7 @@ class ModelManager:
         # Now 900s (15 min). For a STREAM httpx applies this per chunk, not to
         # the whole response, so it resets on every token -- it bounds the
         # longest legitimate SILENCE, which is the cold load before the first
-        # token. It sits just above the user-facing 600s cold-load budget in
+        # token. It sits just above the user-facing 900s cold-load budget in
         # main.py's stall watchdog, which is the control that can actually
         # explain itself to the user. Raise config.ollama_read_timeout_sec if
         # a genuine cold load ever needs longer.

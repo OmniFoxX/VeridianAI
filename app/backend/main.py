@@ -715,9 +715,9 @@ DEFAULT_CONFIG = {
     # v2.15.2: the comment here claimed 1800s while the value was 56010 --
     # 15.5 hours. httpx applies this PER CHUNK on a stream, so it resets on
     # every token; it bounds the longest legitimate silence, which is the
-    # cold load before the first token. 900s sits just above the 600s
+    # cold load before the first token. 1200s sits just above the 900s
     # user-facing budget below.
-    "ollama_read_timeout_sec": 900,
+    "ollama_read_timeout_sec": 1200,
     # v2.1.8 #56 stall-detection knobs. Defaults are conservative so the
     # watchdog only fires on real silence, never on legitimate slow
     # generation. Bump these in config.json on slower hardware, lower
@@ -732,7 +732,21 @@ DEFAULT_CONFIG = {
     # prompt pass (minutes, legitimately); every token after it arrives in
     # well under a second. Sizing ONE number for the cold load is what forced
     # the absurd value and left mid-generation death undetectable.
-    "stall_first_token_timeout_sec": 600,   # 10 min to start = cold-load budget
+    #
+    # HOW THESE WERE SIZED (record it, so the next person does not have to
+    # guess, and so a future bump has something to argue with):
+    #   - Local inference is slow by nature. Almost nobody is running a
+    #     cluster; assume 1-3 models on one consumer box, and assume the user
+    #     already accepts the speed trade-off.
+    #   - The reference rig is upper-mid-range. The budgets are then padded by
+    #     several minutes for hardware BELOW it -- a GPU-less 4-core/8-thread
+    #     laptop is a real target and does run this acceptably.
+    #   - The ceiling is human patience, not hardware. 15 minutes with no
+    #     first token is already past the point where a person concludes the
+    #     app is broken (observed: 21 minutes read as "unusually long"). So
+    #     these are sized to be generous to slow machines and still finite --
+    #     the failure mode being designed out is SILENCE, not slowness.
+    "stall_first_token_timeout_sec": 900,   # 15 min to start = cold-load budget
     "stall_token_timeout_sec": 300,         # 5 min between tokens = stall
     "stall_tool_timeout_sec":  300,         # 5 min for a tool result = stall
     # v2.1.8 #55 model-aware prompt tier override. Default null = auto-
@@ -7090,7 +7104,7 @@ async def ws_chat(websocket: WebSocket):
             # old single knob keeps one coherent number rather than silently
             # acquiring a tighter one it never chose.
             _stall_first = float(
-                config.get("stall_first_token_timeout_sec") or max(_stall_tok, 600.0))
+                config.get("stall_first_token_timeout_sec") or max(_stall_tok, 900.0))
             try:
                 _runaway = int(config.get("runaway_token_limit", 100000))
             except (TypeError, ValueError):
