@@ -34,6 +34,45 @@ v2.1.4 CHANGES (April 21, 2026):
     get chain-witnessed for verifiable provenance.
   * Added verify_procedure_provenance() and verify_integrity() now
     actually walks the chain when a logger is attached.
+
+v2.15.2 CHANGES (August 20, 2026) -- ENCRYPTED AT REST:
+  This file was being written as PLAINTEXT JSON while every neighbour in
+  sage_data (archives, chat_memory, prompt_cache, the vlts chunks, the memory
+  chain) was Fernet-encrypted. It is not low-value metadata: each entry holds
+  `user_request` -- up to 500 characters of the user's VERBATIM message -- and
+  `final_answer_preview`, 300 characters of the reply. The dict key is a slug
+  of the request text on top of that, so even the key names leaked content:
+
+      "task:276aa555:hello_sage_and_welcome_to_"
+
+  Found on 2026-08-20 during an at-rest audit: 71 entries, 102 KB, zero
+  ciphertext in the file.
+
+  Why it was missed: test_atrest_call_sites.py enforces that every atrest call
+  is classified PROFILE (ns=) or SYSTEM TIER. It audits call sites. This module
+  had NO atrest calls at all, so there was nothing for it to classify and the
+  module was invisible to the guard. A test that checks how existing calls are
+  written cannot see a file that never calls.
+
+  WHOLE-FILE encryption rather than per-field, deliberately:
+    * The keys leak too. Encrypting only `user_request` would leave the slugged
+      key names in the clear -- fixing the visible half of the problem.
+    * The in-memory structure is untouched, so _hash_value, the chain witness
+      and verify_procedure_provenance keep working on exactly the bytes they
+      always hashed. Per-field encryption would change what gets hashed and
+      invalidate the provenance of all 71 existing entries.
+    * atrest.load_json_auto already reads legacy plaintext transparently, so
+      an install upgrading into this loses nothing.
+
+  SYSTEM TIER (ns=None), and that is a decision, not a default: this store is a
+  single process-wide singleton built from one install-wide PROCEDURAL_DIR with
+  no profile context, and it is chain-witnessed alongside the audit chain.
+  Passing a profile ns here would be inventing a scope the object does not have.
+
+  NOTE, unresolved and deliberately not papered over: because the store is
+  install-wide, one profile's `user_request` text sits in a file every
+  profile's session reads. Encryption closes the AT-REST gap; it does not make
+  this per-profile. That is a separate scoping decision.
 """
 
 import json
@@ -92,11 +131,26 @@ class ProceduralMemory:
     # --- Persistence ------------------------------------------------
     def _load(self) -> Dict[str, Dict[str, Any]]:
         """Load the knowledge base; return empty split structure if missing."""
+        # v2.15.2: distinguishes "no file yet" from "file exists but could not
+        # be read". Both used to return an empty base, and the next _save()
+        # would then overwrite a perfectly good file with {}. Harmless while
+        # the format was plaintext and a parse failure meant the file was
+        # already corrupt; NOT harmless now, because a key mismatch makes a
+        # healthy ciphertext file unreadable -- and silently trading the user's
+        # data for an empty dict is the worst possible response to "I can't
+        # decrypt this".
+        self._load_failed = False
         if not os.path.exists(self.file_path):
             return {"successful": {}, "unsuccessful": {}}
         try:
-            with open(self.file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            # SYSTEM TIER (v2.15.2): install-wide singleton, no profile
+            # context, chain-witnessed with the audit chain. See the module
+            # docstring for why this is ns=None by decision, not by default.
+            # load_json_auto also reads a LEGACY PLAINTEXT file, which is what
+            # makes the upgrade lossless for existing installs.
+            import atrest as _atrest
+            with open(self.file_path, "rb") as f:
+                data = _atrest.load_json_auto(f.read())
             if not isinstance(data, dict):
                 return {"successful": {}, "unsuccessful": {}}
             # Migrate a flat legacy structure
@@ -106,16 +160,37 @@ class ProceduralMemory:
             data.setdefault("successful", {})
             data.setdefault("unsuccessful", {})
             return data
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, ValueError) as _err:
+            # A file IS there and we could not read it. Latch that, so _save()
+            # refuses to clobber it, and say so loudly -- an operator can
+            # restore a key or a backup, but only if they know to.
+            self._load_failed = True
+            print(f"[PROCEDURAL] WARNING: {self.file_path} exists but could "
+                  f"not be read ({type(_err).__name__}: {_err}). Continuing "
+                  f"with an EMPTY in-memory base; writes are DISABLED so the "
+                  f"file on disk is preserved. If the at-rest key changed, "
+                  f"restore it -- do not delete the file.", flush=True)
             return {"successful": {}, "unsuccessful": {}}
 
     def _save(self) -> None:
         """Atomically write the knowledge base to disk."""
+        # v2.15.2: see _load. If the existing file could not be read, writing
+        # now would replace it with whatever thin state this process built,
+        # destroying data we merely failed to DECRYPT. Refuse instead.
+        if getattr(self, "_load_failed", False):
+            print("[PROCEDURAL] write refused: the existing store could not "
+                  "be read at startup, so overwriting it would destroy it.",
+                  flush=True)
+            return
         temp_path = self.file_path + ".tmp"
         try:
-            with open(temp_path, "w", encoding="utf-8") as f:
-                json.dump(self._knowledge_base, f,
-                          indent=2, ensure_ascii=False)
+            # SYSTEM TIER (v2.15.2): install-wide singleton, no profile
+            # context. See the module docstring. Whole-file, so the slugged
+            # key names are covered too -- they carry request text.
+            import atrest as _atrest
+            _blob = _atrest.dump_json_encrypted(self._knowledge_base)
+            with open(temp_path, "wb") as f:
+                f.write(_blob)
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(temp_path, self.file_path)  # atomic on POSIX/Windows
@@ -373,8 +448,14 @@ class ProceduralMemory:
         successful procedure that has a chain_hash.
         """
         try:
-            with open(self.file_path, "r", encoding="utf-8") as f:
-                json.load(f)
+            # SYSTEM TIER (v2.15.2): must read through atrest, or this reports
+            # a healthy ENCRYPTED store as corrupt -- the plain json.load here
+            # would choke on ciphertext and return False for every install
+            # that upgraded. Same reader as _load, so the two cannot disagree.
+            import atrest as _atrest
+            with open(self.file_path, "rb") as f:
+                if not isinstance(_atrest.load_json_auto(f.read()), dict):
+                    return False
         except Exception:
             return False
 

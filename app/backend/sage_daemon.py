@@ -604,6 +604,55 @@ def _atomic_write_json(path: Path, obj: Any) -> None:
         os.fsync(f.fileno())
     os.replace(tmp, path)
 
+
+# ---------------------------------------------------------------------------
+# v2.15.2: the procedural store is ENCRYPTED at rest (see procedural_memory.py).
+#
+# _atomic_write_json above stays plaintext on purpose -- DIGEST_FILE and
+# _CRAIID_TASK_FILE are pipeline state, not user content, and changing it
+# globally would silently re-encode those too. So the procedural store gets its
+# own pair, and they are the ONLY way this daemon touches that file.
+#
+# Both call sites matter. The read would have failed closed on ciphertext and
+# quietly disabled consolidation ("read failed: ..."), which is the kind of
+# silent degradation this release has spent its whole time hunting. The WRITE
+# was worse: _atomic_write_json would have put the file back as PLAINTEXT and
+# undone the encryption on the next consolidation tick.
+#
+# SYSTEM TIER (ns=None), matching procedural_memory.py. If these two ever
+# disagree about the namespace, the app and the daemon cannot read each other's
+# writes.
+# ---------------------------------------------------------------------------
+def _read_procedural_kb():
+    """Read the procedural store, encrypted or legacy plaintext. None on
+    failure -- callers must NOT treat that as 'empty and safe to rewrite'."""
+    # SYSTEM TIER: the procedural store is one install-wide singleton with no
+    # profile context, chain-witnessed alongside the audit chain. Matches
+    # procedural_memory.py; if the two disagree on namespace, the app and this
+    # daemon cannot read each other's writes.
+    try:
+        import atrest as _atrest
+        with open(PROCEDURAL_FILE, "rb") as f:
+            kb = _atrest.load_json_auto(f.read())
+        return kb if isinstance(kb, dict) else None
+    except Exception:
+        return None
+
+
+def _write_procedural_kb(kb) -> None:
+    """Atomically write the procedural store as ciphertext."""
+    # SYSTEM TIER: same classification as the reader above and as
+    # procedural_memory.py. Not a default -- this store has no profile context.
+    import atrest as _atrest
+    PROCEDURAL_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = PROCEDURAL_FILE.with_suffix(PROCEDURAL_FILE.suffix + ".tmp")
+    with open(tmp, "wb") as f:
+        f.write(_atrest.dump_json_encrypted(kb))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, PROCEDURAL_FILE)
+
+
 def _log_mlm_training_row(action: str) -> None:
     try:
         row = f"0.0,0.0,0.0,0.0,1.0,{action}\n"
@@ -635,11 +684,14 @@ def _job_consolidate_procedural() -> str:
     if not PROCEDURAL_FILE.exists():
         return "no procedural.json yet"
 
-    try:
-        with open(PROCEDURAL_FILE, "r", encoding="utf-8") as f:
-            kb = json.load(f)
-    except Exception as e:
-        return f"read failed: {e}"
+    # v2.15.2: encrypted at rest. A None here means the file EXISTS and could
+    # not be read -- never "it's empty". Returning early leaves it untouched,
+    # which is the only safe response: consolidation rewrites the whole file,
+    # so proceeding on a misread would delete everything it could not parse.
+    kb = _read_procedural_kb()
+    if kb is None:
+        return ("read failed: procedural store present but unreadable "
+                "(at-rest key mismatch?) -- left untouched")
 
     succ = kb.get("successful", {})
     unsucc = kb.get("unsuccessful", {})
@@ -705,7 +757,10 @@ def _job_consolidate_procedural() -> str:
     kb["unsuccessful"] = unsucc
     
     try:
-        _atomic_write_json(PROCEDURAL_FILE, kb)
+        # v2.15.2: encrypted. _atomic_write_json here would have written the
+        # store back as PLAINTEXT and silently undone the at-rest protection
+        # on the first consolidation tick after migration.
+        _write_procedural_kb(kb)
     except Exception as e:
         return f"write failed: {e}"
         

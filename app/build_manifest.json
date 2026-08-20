@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f64cebbf3e4f4ea6aaef075bad4e4acd",
-    "built_utc": "2026-08-20T12:38:40.100232+00:00",
+    "build_id": "01be35ac1def419fa0c4068ced3eba15",
+    "built_utc": "2026-08-20T13:07:15.438305+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -115,6 +115,7 @@
       "backend/mfa.py": "f5f38dd6336301a5c263fb537a2aed364f47ef51c9caccad826710daf5c53376",
       "backend/migrate_at_rest.py": "09668b7c243dffda6e3ef378493fd8510b32f6f575d504a5cc52722b23b8589a",
       "backend/migrate_config.py": "727f69194d577dabd93855b1c55b7831ca30b2c2b70be874da39f37ea93b3e53",
+      "backend/migrate_procedural_at_rest.py": "e5463e2aabc89b127b8516491b2d541c6a0e8120c33ba23893184998826b9e01",
       "backend/migrate_v216_timestamps.py": "4f1b66f2a54ddcdb510104b144fef293cfac2eb5d4c14c834827f1d32b343b0d",
       "backend/model_manager.py": "5bff80ec17e460c5895c551962b23d2f5838c46bf019b27a943f89d913cb590b",
       "backend/net_guard.py": "45b9c206433d1d64f84aaee348ca8c2efdfafaf2851731fc4fd7931100d3cce7",
@@ -127,14 +128,14 @@
       "backend/pid_registry.py": "0a3c7393b26cee2103181b728e341aac137108e95b0920e8fcf3a342fbeb4417",
       "backend/plugin_manager.py": "0893c9cd9cbce50737d5b707b2514396eb04fef7a0f4ab01a185502d3ad48442",
       "backend/probe_environment.py": "fbb8b52bfdd12b9bf87f266edf2ad00c752c6610120bc1ebffc856937592696e",
-      "backend/procedural_memory.py": "cca0a5e487d695a5009b47592684f8e08446fd496ea636e9da3dcb9dd7b39e43",
+      "backend/procedural_memory.py": "cf197891c5a62e4f251b46d3310155b44ca92a98611e55941af82068fb4aae4f",
       "backend/profile_keys.py": "89d1202b6a8e21976173c2c6cd9450e7dee292c17f0deaef5eb6bd714f34dfa1",
       "backend/prompt_cache_manager.py": "874f0d99602136b58338f5ea3b59c8d9dc7bbd1bc630dd1a8e1785e7ec21b8d4",
       "backend/relay_api.py": "2316031a21ce3dd4037114e743cb4da26bffd0f5ed7699c1ed11461a9e3ea586",
       "backend/relay_client.py": "c49e861553ea1c6928187681211e2166ccd80167e840197becec3772e26484df",
       "backend/relay_core.py": "ebbe4277ba561f1cd6aaa66a2794c0fe72c0c88a12e2c8b36c6a697bf4ac34a2",
       "backend/request_scheduler.py": "f662779a754097c4619a214bf8d53b8ca7ad1e336f31e6dde4c9d11c5dee3e8a",
-      "backend/sage_daemon.py": "c478186465b66e419f831f3fb3c8d73f5d615939fd57bcb4727032676ee3dc4a",
+      "backend/sage_daemon.py": "467fc367dc0abbc3257a26e15a4801e78d9b450dd91fee977fc052e575508f6a",
       "backend/sage_daemon_client.py": "fed83c0f91c813eddc29e705e7b555b1ab6e66d9ef791ea5c7d899c7c04e34bc",
       "backend/sage_engine.py": "019da3307a86c093504ec9ae4b6b6370e18f5c4d6ec76f46736d3ee8206cb0c7",
       "backend/sage_messaging_adapter.py": "339761c5f2e3c78bd3c5c8b9f3bf79c6789633fdf463aabbbf3a22d8c4b64617",
@@ -191,6 +192,7 @@
       "backend/test_ns_guard.py": "c90a198e7ec4507d99860b1e680053d8ff2172862785b1c7700e3d8cd75b4958",
       "backend/test_ollama_message_shape.py": "d0c770c1c8a61c67cdfab137a95a933d8bd9672dd6aca3c07afbdc8ce2f2f269",
       "backend/test_password_policy.py": "add77bfa9fd64d06bc926cd60c93c788a302980e41e37da5d023e21d2bbcb668",
+      "backend/test_procedural_at_rest.py": "50a20e5d5a68c123b608d80bef54f2313b35c8091c0f252e5aecf5aee882b097",
       "backend/test_profile_key_residency.py": "e871e164c38b3c75810db1a5bddced046f906d5f301b4e64965331206a2e3238",
       "backend/test_profile_keys.py": "a776bbbc105373adef264bcc3b98f9f9c4229c351d08afe6ee6566d55d063078",
       "backend/test_prompt_cache_manager.py": "5175cd41c43adcbda8a01c01a437b9bdc11e7e5d41beeb4fb7d5bde4962340bc",
@@ -276,5 +278,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "8xaL4JsUJGOJsTpGKFGXcb7DmUwH8Em+dlgof12Gyo/OELWMAdExzomXNcrkfx0prqXKu/EA3vn6874TsmY4AQ=="
+  "signature_b64": "Puq4LuPmTPm2J3SghIl/gModT8rWyHvID1HrFO2xYIV1cv3WLoZxLcodOWrM2XZWUSooZ5DHjk5ox69ZqRtBCQ=="
 }
