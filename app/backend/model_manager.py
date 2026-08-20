@@ -119,6 +119,46 @@ NPU_TIER: Tuple[str, str, str, str] = (BACKEND_NPU, "NPU", NPU_LLM_URL, "openai"
 # stall the UI's model picker.
 _LIST_TIMEOUT = 5.0
 
+# ---------------------------------------------------------------------------
+# v2.15.2 TIMEOUT POLICY
+#
+# What went wrong (2026-08-20): Ollama wedged -- process alive, port accepting,
+# 0.8s of CPU in 40 minutes, no model loaded, answering nothing. A turn hung
+# for 21+ minutes showing "thinking", with no error, because every bound that
+# could have caught it was set to 56000 seconds (15.5 HOURS): connect, read,
+# write, pool, the metadata client, the stall watchdog and the tool watchdog.
+# The comments beside those values said "5 min" and "3 min". The numbers were
+# cranked during the Arc B580 era, when everything genuinely was that slow, and
+# the comments were never updated -- so the system read as protected while
+# being, in practice, unbounded.
+#
+# The policy now separates waits that have genuinely different natures instead
+# of sizing one number for the slowest of them:
+#
+#   connect  -- a TCP handshake to 127.0.0.1. Succeeds in milliseconds or the
+#               server is not accepting. NO hardware makes this slow, so a long
+#               value buys nothing and costs the fast detection of a dead
+#               server. This is the value that turned a wedge into a spinner.
+#   read     -- for a STREAM this is the gap between chunks, not the total, so
+#               it resets on every token. It must cover the longest legitimate
+#               silence, which is the cold load before the first token.
+#   write    -- pushing the request body over loopback. Bounded by prompt size.
+#   pool     -- waiting for a free connection. We build a fresh client per
+#               attempt, so this should never bind at all.
+#   metadata -- /api/show and friends. Cheap lookups with a working fallback;
+#               they must never be able to hang a turn. This one ran BEFORE
+#               generation, so a wedged server hung the turn before the stream
+#               was ever opened.
+#
+# The user-facing budget for a cold load lives in main.py's stall watchdog
+# (stall_first_token_timeout_sec), which can explain itself to the user. These
+# are backstops sized just above it, not the primary control.
+# ---------------------------------------------------------------------------
+_CONNECT_TIMEOUT = 10.0     # loopback: fast or broken
+_WRITE_TIMEOUT   = 120.0    # generous for very large prompts
+_POOL_TIMEOUT    = 30.0     # should never bind; fresh client per attempt
+_META_TIMEOUT    = 15.0     # /api/show etc. -- must never hang a turn
+
 # v2.11.13: priority levels for the per-server generation gate.
 PRIORITY_LOCAL_URGENT  = 0
 PRIORITY_LOCAL_NORMAL  = 1   # default for every request that doesn't say otherwise
@@ -398,7 +438,11 @@ class ModelManager:
 
         trained: Optional[int] = None
         try:
-            async with httpx.AsyncClient(timeout=56000.0) as c:
+            # v2.15.2: was 56000.0 (15.5h). This is a metadata lookup with a
+            # working fallback, and it runs BEFORE the stream is opened -- so
+            # on 2026-08-20 a wedged Ollama hung the turn HERE, ahead of any
+            # generation timeout. See the timeout policy block above.
+            async with httpx.AsyncClient(timeout=_META_TIMEOUT) as c:
                 r = await c.post(
                     f"{base_url}/api/show",
                     json={"name": model_id},
@@ -1136,15 +1180,28 @@ class ModelManager:
         # running nemotron-3-super:120b with 6/89 layers on GPU and the
         # rest on CPU, the cold-load alone takes ~150s, then prompt
         # processing eats another 60-180s, leaving zero budget for
-        # actual generation inside a 300s window. Default raised to
-        # 1800s (30 min) which comfortably covers cold-load + heavy
-        # prompts + multi-minute generation. Users on faster hardware
-        # can lower it via config.ollama_read_timeout_sec.
+        # actual generation inside a 300s window.
+        #
+        # v2.15.2 (2026-08-20): that reasoning was sound and the number that
+        # followed it was not. The comment said the default became 1800s; the
+        # code said 56000.0 -- 15.5 hours -- and the Arc B580 it was sized for
+        # is gone. A comment describing a value the code does not hold is
+        # worse than no comment: it is why a wedged Ollama read as "thinking"
+        # for 21 minutes instead of erroring.
+        #
+        # Now 900s (15 min). For a STREAM httpx applies this per chunk, not to
+        # the whole response, so it resets on every token -- it bounds the
+        # longest legitimate SILENCE, which is the cold load before the first
+        # token. It sits just above the user-facing 600s cold-load budget in
+        # main.py's stall watchdog, which is the control that can actually
+        # explain itself to the user. Raise config.ollama_read_timeout_sec if
+        # a genuine cold load ever needs longer.
         _read_timeout = float(
-            self.config.get("ollama_read_timeout_sec", 56000.0)
+            self.config.get("ollama_read_timeout_sec", 900.0)
         )
         client_timeout = httpx.Timeout(
-            connect=56000.0, read=_read_timeout, write=56000.0, pool=56000.0,
+            connect=_CONNECT_TIMEOUT, read=_read_timeout,
+            write=_WRITE_TIMEOUT, pool=_POOL_TIMEOUT,
         )
         max_attempts = 4
 
@@ -1359,10 +1416,11 @@ class ModelManager:
         # v2.1.8: read timeout now config-driven, default 1800s. See
         # _gen_ollama comment block for the full rationale.
         _read_timeout = float(
-            self.config.get("ollama_read_timeout_sec", 56000.0)
+            self.config.get("ollama_read_timeout_sec", 900.0)
         )
         client_timeout = httpx.Timeout(
-            connect=56000.0, read=_read_timeout, write=56000.0, pool=56000.0,
+            connect=_CONNECT_TIMEOUT, read=_read_timeout,
+            write=_WRITE_TIMEOUT, pool=_POOL_TIMEOUT,
         )
         max_attempts = 4
 

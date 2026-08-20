@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "0d2216bec9a8411a8418c51890f0941b",
-    "built_utc": "2026-08-20T11:45:54.752408+00:00",
+    "build_id": "1e7d83d3172e422aac0916d8490f2530",
+    "built_utc": "2026-08-20T12:11:16.411344+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "319cd88dc06fe0e12d0646b115857c32ffe592570119cba1c9ba26ffa19fd0dc",
+      "backend/main.py": "df3c6cc74d911f3972f17fb7c08d9ba89af6326e63e62eb046e02932922706f6",
       "backend/mcp_handlers.py": "89462f7e6bcd76b76a38bb7ea86b48658bcf23a1f0ac0a39f5f0dc12408b2331",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "be28f9524a02243b715c63b7518454645d39e2870599f42551b3deffc360d6c8",
@@ -116,7 +116,7 @@
       "backend/migrate_at_rest.py": "09668b7c243dffda6e3ef378493fd8510b32f6f575d504a5cc52722b23b8589a",
       "backend/migrate_config.py": "727f69194d577dabd93855b1c55b7831ca30b2c2b70be874da39f37ea93b3e53",
       "backend/migrate_v216_timestamps.py": "4f1b66f2a54ddcdb510104b144fef293cfac2eb5d4c14c834827f1d32b343b0d",
-      "backend/model_manager.py": "ddb296049605013deaed18b4f2ac15672e50df7818956b1c447fbd8d3bd0ef91",
+      "backend/model_manager.py": "9be5c6e22df646be9890afdd044e49da0c05594694f096ea6f12e3149883a868",
       "backend/net_guard.py": "45b9c206433d1d64f84aaee348ca8c2efdfafaf2851731fc4fd7931100d3cce7",
       "backend/node_client.py": "d2edb3bbdc83cc9dedc4728161be5e3db5389d23db1f569066d397ffd0f517d2",
       "backend/node_server.py": "1e56d4a81b0d028514de3318d190518a911c05612b374789a844dabf546cfa6d",
@@ -213,6 +213,7 @@
       "backend/test_state_migration.py": "f7b051c7ef79c8e66396f28392a104c828414cefbbc3aba4ff2279904c2b6c5d",
       "backend/test_tag_parser_v213.py": "2984de9a3e4cab988d9d36583024d6157a2bba6fd73b6f21e0d9de71bbfc74a2",
       "backend/test_task_prioritiser.py": "e7a87688fe56ba8a4d7955ae1f97326a1261692a74e3b17deb8505584798165f",
+      "backend/test_timeout_policy.py": "1446b27b960dfdba4abaa2316b995e75a4cf92adbf773a019ef41da0060abe2c",
       "backend/test_token_wraps.py": "c2eb230a33180c45d8023c70948a2c40310a76540563e120d5da24f5854f2f9c",
       "backend/test_ui_prefs_scope.py": "55984ae5ded9f05eb9dcc5ff6dfd3a286b725147935e428ab73496efb888a4d7",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
@@ -275,5 +276,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "D8ZZqe0QmAKCZDQ8aQqFnQFmK80gC2g4PyEPC8X/aLkm0k8JhHRZFf+yifLJqEB4KThlP87NLXPu5a5qChmHBg=="
+  "signature_b64": "AUd3nb/sbkjvSlwLFWI8qa4OpyXfwstDwVjehw2y4Px6Kb0Eb+njmorpNgDO5416vmHiSi1m1b5lO9Drj1wvDw=="
 }

@@ -140,7 +140,12 @@ async def _taskp_run_or_direct(
     fn,
     *,
     importance: float = 0.5,
-    timeout_seconds: float = 56000.0,
+    # v2.15.2: was 56000.0 -- 15.5 hours -- directly under a docstring saying
+    # this exists "so a wedged dispatcher can't hang the agentic loop
+    # forever". It could. 600s makes it a real backstop that sits ABOVE the
+    # 300s stall_tool_timeout_sec, so the watchdog (which can explain itself
+    # to the user) fires first and this only catches what it misses.
+    timeout_seconds: float = 600.0,
 ):
     """Dispatch fn() through TaskP when the toggle is on, else direct.
 
@@ -278,8 +283,24 @@ class _StallWatchdog:
     """
 
     def __init__(self, token_timeout_sec: float, tool_timeout_sec: float,
-                 runaway_token_limit: int = -1):
+                 runaway_token_limit: int = -1,
+                 first_token_timeout_sec: float = None):
         self.token_timeout    = token_timeout_sec
+        # v2.15.2: time-to-FIRST-token is its own budget.
+        #
+        # These are two different waits wearing one number. The first token
+        # arrives after a model load and a prompt pass -- minutes, legitimately.
+        # Every token after it arrives in well under a second. One knob has to
+        # be sized for the slow case, which leaves it blind to the fast one:
+        # to survive a 120b cold load, stall_token_timeout_sec had been pushed
+        # to 56000s (15.5 hours), and at that setting a model that died
+        # mid-generation could never be detected either.
+        #
+        # Split, each bound can be honest. Defaults to token_timeout when not
+        # supplied so existing constructions keep their old behaviour.
+        self.first_token_timeout = float(
+            token_timeout_sec if first_token_timeout_sec is None
+            else first_token_timeout_sec)
         self.tool_timeout     = tool_timeout_sec
         # v2.13 runaway guard (2026-07-17 incident, task 759): the stall
         # timers catch SILENCE; this catches the OPPOSITE — unbounded
@@ -290,9 +311,8 @@ class _StallWatchdog:
         self.runaway_limit    = int(runaway_token_limit)
         self.token_count      = 0
         # Initialize last_token_ts to "now" so the time-to-first-token
-        # is part of the budget. Cold-load is the user's responsibility
-        # to size correctly via stall_token_timeout_sec and the
-        # underlying ollama_read_timeout_sec.
+        # is part of the budget -- measured against first_token_timeout
+        # until a token actually arrives, then against token_timeout.
         self.last_token_ts    = time.time()
         self.pending_tool_ts  = None
         self.pending_tool     = None
@@ -344,12 +364,24 @@ class _StallWatchdog:
                 return
 
             tok_gap = now - self.last_token_ts
-            if tok_gap > self.token_timeout:
+            # Before the first token this is a cold-load wait; after it, a
+            # mid-stream gap. Different budgets, and different explanations --
+            # "the model never started" and "the model stopped partway" send
+            # the user to different places.
+            _first = (self.token_count == 0)
+            _limit = self.first_token_timeout if _first else self.token_timeout
+            if tok_gap > _limit:
                 self.stalled = True
                 self.stall_reason = (
-                    f"No tokens received in {tok_gap:.0f}s "
-                    f"(limit {self.token_timeout:.0f}s). The model may "
-                    f"have hung mid-generation."
+                    (f"No response started in {tok_gap:.0f}s "
+                     f"(limit {_limit:.0f}s). The model never produced its "
+                     f"first token -- the server may be wedged, or the model "
+                     f"may be failing to load. Check that the backend is "
+                     f"answering, then retry.")
+                    if _first else
+                    (f"No tokens received in {tok_gap:.0f}s "
+                     f"(limit {_limit:.0f}s). The model may "
+                     f"have hung mid-generation.")
                 )
                 try:
                     await on_stall(self.stall_reason)
@@ -679,17 +711,30 @@ DEFAULT_CONFIG = {
     "hard_cap_ctx": True, "ctx_min": 8192,
     "ctx_response_headroom": 1500, "ctx_padding_factor": 1.0,
     # v2.1.8: Ollama read timeout in seconds. Was hardcoded at 300s in
-    # v2.1.7 which killed legit big-model + cold-load workflows. 1800s
-    # (30 min) covers cold-load + heavy prompts + multi-minute
-    # generation on slow hardware. Lower it on fast rigs if you want
-    # quicker failure detection.
-    "ollama_read_timeout_sec": 56010,
+    # v2.1.7 which killed legit big-model + cold-load workflows.
+    # v2.15.2: the comment here claimed 1800s while the value was 56010 --
+    # 15.5 hours. httpx applies this PER CHUNK on a stream, so it resets on
+    # every token; it bounds the longest legitimate silence, which is the
+    # cold load before the first token. 900s sits just above the 600s
+    # user-facing budget below.
+    "ollama_read_timeout_sec": 900,
     # v2.1.8 #56 stall-detection knobs. Defaults are conservative so the
     # watchdog only fires on real silence, never on legitimate slow
     # generation. Bump these in config.json on slower hardware, lower
     # them on fast rigs if you want quicker failure detection.
-    "stall_token_timeout_sec": 56000,   # 5 min between tokens = stall
-    "stall_tool_timeout_sec":  56000,   # 3 min for a tool result = stall
+    # v2.15.2: these two said "5 min" and "3 min" in their own comments while
+    # holding 56000 -- 15.5 hours. Cranked for the Arc B580 era and never
+    # walked back when that card left, so on 2026-08-20 a wedged Ollama could
+    # hang a turn indefinitely with every watchdog nominally armed. The values
+    # now match the words beside them.
+    #
+    # first vs between: the first token arrives after a model load and a
+    # prompt pass (minutes, legitimately); every token after it arrives in
+    # well under a second. Sizing ONE number for the cold load is what forced
+    # the absurd value and left mid-generation death undetectable.
+    "stall_first_token_timeout_sec": 600,   # 10 min to start = cold-load budget
+    "stall_token_timeout_sec": 300,         # 5 min between tokens = stall
+    "stall_tool_timeout_sec":  300,         # 5 min for a tool result = stall
     # v2.1.8 #55 model-aware prompt tier override. Default null = auto-
     # detect via _model_size_hint(model_id). Set to "small" or "full" to
     # force a specific tier regardless of model size. Useful if you want
@@ -7038,14 +7083,21 @@ async def ws_chat(websocket: WebSocket):
             # finally below — even on exception, we stop the watchdog
             # and cancel its task so we don't leak background coroutines
             # across turns.
-            _stall_tok = float(config.get("stall_token_timeout_sec", 56000.0))
-            _stall_tool = float(config.get("stall_tool_timeout_sec", 56000.0))
+            _stall_tok = float(config.get("stall_token_timeout_sec", 300.0))
+            _stall_tool = float(config.get("stall_tool_timeout_sec", 300.0))
+            # v2.15.2: the cold-load budget. Falls back to _stall_tok only if
+            # the key is absent AND undefaulted, so an install that pinned the
+            # old single knob keeps one coherent number rather than silently
+            # acquiring a tighter one it never chose.
+            _stall_first = float(
+                config.get("stall_first_token_timeout_sec") or max(_stall_tok, 600.0))
             try:
                 _runaway = int(config.get("runaway_token_limit", 100000))
             except (TypeError, ValueError):
                 _runaway = 100000
             watchdog = _StallWatchdog(_stall_tok, _stall_tool,
-                                      runaway_token_limit=_runaway)
+                                      runaway_token_limit=_runaway,
+                                      first_token_timeout_sec=_stall_first)
 
             async def _on_stall(reason):
                 """Callback fired by the watchdog when a stall is detected.
