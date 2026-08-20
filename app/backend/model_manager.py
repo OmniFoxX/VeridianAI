@@ -902,6 +902,52 @@ class ModelManager:
             _gate.release()
 
     # --- Ollama streaming (/api/chat) ------------------------------------
+def _no_answer_notice(tier_label: str, reasoning_parts: List[str]) -> str:
+    """What to say when the model thought and never answered.
+
+    v2.15.2. A reasoning model can spend its entire generation budget inside
+    the thinking block and emit zero content tokens. Both stream loops treated
+    that as "nothing to yield" and returned in silence -- message sent, no
+    reply, instantly the user's turn again, no clue why. Four re-prompts in a
+    row for one news briefing, on 2026-08-17.
+
+    That is the same ghosting the llama-server fallback path already has a
+    comment about ("Ghosting the user hides real incompatibilities"). It was
+    fixed there for the no-tokens-at-all case and missed here, because here
+    tokens DID arrive -- they just all went to the reasoning channel.
+
+    Says what happened and what to change, because "no reply" is not a symptom
+    anyone can act on.
+    """
+    _chars = sum(len(p) for p in reasoning_parts)
+    return (f"[{tier_label}: the model used its whole generation budget "
+            f"thinking and produced no answer. {_chars:,} characters of "
+            f"reasoning were captured. Raise max_tokens, or cap the thinking "
+            f"with reasoning_budget, and ask again.]")
+
+
+def _turn_stats(options: Dict):
+    """The per-turn side-channel, or None.
+
+    v2.15.2. Both backends now have things worth reporting that are not
+    tokens-to-display: the model's reasoning trace, and the server's own token
+    counts. The generators yield plain strings and every consumer expects that,
+    so the reporting cannot ride on the yield.
+
+    It rides on `options` instead -- the caller passes in its OWN dict under
+    "_turn_stats" and reads it after the stream ends. Deliberately NOT an
+    attribute on the manager: that is a single slot on a process-wide object,
+    and two concurrent chats would overwrite each other's stats. (That exact
+    shape is what broke the parallel sub-agents in this same release.) A
+    caller-owned dict cannot collide with anyone else's.
+
+    The leading underscore marks it private, matching the existing
+    options["_ident"] convention.
+    """
+    s = options.get("_turn_stats")
+    return s if isinstance(s, dict) else None
+
+
 def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
     """Ollama refuses a system message anywhere except index 0.
 
@@ -1109,6 +1155,9 @@ def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
                             f"{resp.status_code}: {body[:120]}]"
                         )
                         return
+                    _stats = _turn_stats(options)
+                    _reasoning_parts = []
+                    _content_seen = False
                     async for line in resp.aiter_lines():
                         if not line.strip():
                             continue
@@ -1116,10 +1165,36 @@ def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
                             chunk = json.loads(line)
                         except json.JSONDecodeError:
                             continue
-                        content = chunk.get("message", {}).get("content", "")
+                        _msg = chunk.get("message") or {}
+                        # v2.15.2: Ollama puts the model's reasoning in
+                        # message.thinking, NOT message.content. We were
+                        # reading only content, so on a thinking model the
+                        # trace was generated, streamed to us, and dropped.
+                        _think = _msg.get("thinking")
+                        if _think:
+                            _reasoning_parts.append(_think)
+                        content = _msg.get("content", "")
                         if content:
+                            _content_seen = True
                             yield content
                         if chunk.get("done"):
+                            # The final chunk carries the server's OWN token
+                            # counts. They were being discarded by this return.
+                            if _stats is not None:
+                                _stats["prompt_tokens"] = chunk.get(
+                                    "prompt_eval_count")
+                                _stats["completion_tokens"] = chunk.get(
+                                    "eval_count")
+                                _stats["n_ctx"] = effective_ctx
+                                _stats["backend"] = "ollama"
+                                _stats["tier"] = tier_label
+                                _stats["base_url"] = base_url
+                                if _reasoning_parts:
+                                    _stats["reasoning"] = "".join(
+                                        _reasoning_parts)
+                            if not _content_seen and _reasoning_parts:
+                                yield _no_answer_notice(
+                                    tier_label, _reasoning_parts)
                             return
 
         for attempt in range(max_attempts):
@@ -1302,6 +1377,10 @@ def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
                     # turn ended instantly with an empty reply.
                     _yielded = False
                     _sse_tokens = 0          # v2.12.19 diagnostics
+                    # v2.15.2 reasoning + usage capture. See _turn_stats.
+                    _stats = _turn_stats(options)
+                    _reasoning_parts = []
+                    _finished = False
                     _finish = None
                     _raw_lines = []
                     async for line in resp.aiter_lines():
@@ -1320,11 +1399,55 @@ def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
                         # v2.1.6 fix: choices is a LIST per OpenAI shape
                         # (see docstring above: {"choices":[{"delta":...}]}),
                         # not a dict. Use choices[0] for delta + finish.
+                        # v2.15.2: the server's own token counts, which are
+                        # what restores CRAIID's context-fill signal now that
+                        # llamacpp:kv_cache_usage_ratio is gone from llama.cpp.
+                        #
+                        # Read BOTH shapes, because which one you get depends on
+                        # the build. An earlier draft of this set
+                        # stream_options.include_usage and trusted `usage` --
+                        # then a string search of llama-server.exe 8639 came
+                        # back with include_usage and stream_options ABSENT.
+                        # The flag would have been accepted, ignored, and this
+                        # whole feature would have silently done nothing on the
+                        # llama-server tiers while looking correct in the diff.
+                        # `timings` (prompt_n / predicted_n) IS in that binary.
+                        #
+                        # Neither present just means no counts this turn. The
+                        # consumer already treats that as "no data".
+                        if _stats is not None:
+                            _usage = chunk.get("usage")
+                            if isinstance(_usage, dict):
+                                _stats["prompt_tokens"] = _usage.get(
+                                    "prompt_tokens")
+                                _stats["completion_tokens"] = _usage.get(
+                                    "completion_tokens")
+                            _tm = chunk.get("timings")
+                            if isinstance(_tm, dict):
+                                if _tm.get("prompt_n") is not None:
+                                    _stats["prompt_tokens"] = _tm.get("prompt_n")
+                                if _tm.get("predicted_n") is not None:
+                                    _stats["completion_tokens"] = _tm.get(
+                                        "predicted_n")
+                            if _usage or chunk.get("timings"):
+                                _stats["backend"] = "llama-server"
+                                _stats["tier"] = tier_label
+                                _stats["base_url"] = base_url
                         choices = chunk.get("choices") or []
                         if not choices:
                             continue
                         choice = choices[0]
                         delta = choice.get("delta") or {}
+                        # v2.15.2: with --reasoning-format auto (the default on
+                        # this build) llama-server EXTRACTS the thinking out of
+                        # content and puts it here. Reading only `content` meant
+                        # the trace was produced, parsed, streamed to us, and
+                        # dropped on the floor -- and on a turn where the model
+                        # thought its whole budget away, content stayed empty
+                        # and the turn ended in silence.
+                        _rc = delta.get("reasoning_content")
+                        if _rc:
+                            _reasoning_parts.append(_rc)
                         # 'content' is standard; 'text' covers legacy /
                         # completion-style deltas some servers emit.
                         content = delta.get("content") or delta.get("text") \
@@ -1334,14 +1457,31 @@ def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
                             _sse_tokens += 1
                             yield content
                         if choice.get("finish_reason") is not None:
-                            break
+                            # Do NOT break: the usage chunk is emitted AFTER
+                            # finish_reason. Breaking here is what would have
+                            # thrown it away even with include_usage set.
+                            _finished = True
+                            continue
                     # v2.12.19: one line per completed stream, so a hung tier
                     # can be told apart from a tier that answered and then had
                     # its gate leak. Pair this with [GATE-FREE].
                     print(f"[STREAM-END] tier={tier_label} model={model_id} "
                           f"sse_tokens={_sse_tokens} yielded={_yielded} "
+                          f"reasoning_chars="
+                          f"{sum(len(p) for p in _reasoning_parts)} "
                           f"non_sse_lines={len(_raw_lines)}", flush=True)
+                    if _stats is not None and _reasoning_parts:
+                        _stats["reasoning"] = "".join(_reasoning_parts)
                     if _yielded:
+                        return
+                    # v2.15.2: the model thought and never answered. Before
+                    # this, _yielded stayed False, _raw_lines was empty (it was
+                    # all SSE), and the function returned having yielded
+                    # NOTHING -- which is precisely the "empty response, my
+                    # turn again" that cost four re-prompts. Tokens did arrive;
+                    # they all went to the reasoning channel.
+                    if _reasoning_parts:
+                        yield _no_answer_notice(tier_label, _reasoning_parts)
                         return
                     # Fallback: non-streamed OpenAI JSON body.
                     if _raw_lines:
