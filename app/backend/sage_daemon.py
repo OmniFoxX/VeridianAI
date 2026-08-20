@@ -608,10 +608,22 @@ def _atomic_write_json(path: Path, obj: Any) -> None:
 # ---------------------------------------------------------------------------
 # v2.15.2: the procedural store is ENCRYPTED at rest (see procedural_memory.py).
 #
-# _atomic_write_json above stays plaintext on purpose -- DIGEST_FILE and
-# _CRAIID_TASK_FILE are pipeline state, not user content, and changing it
-# globally would silently re-encode those too. So the procedural store gets its
+# _atomic_write_json above stays plaintext, so the procedural store gets its
 # own pair, and they are the ONLY way this daemon touches that file.
+#
+# CORRECTION (same day): the first version of this comment justified that by
+# saying DIGEST_FILE and _CRAIID_TASK_FILE are "pipeline state, not user
+# content". That is true of _CRAIID_TASK_FILE. It is NOT true of DIGEST_FILE:
+# chain_digest.json carries recent_chrono -- 50 entries each with a ~59-char
+# `preview` of a memory entry -- plus a ~1200-char `summary`. That is derived
+# conversation content, and it is on disk in the clear, which is the same
+# finding as procedural.json one file over.
+#
+# Left plaintext for now ONLY because encrypting it is a separate decision with
+# its own reader (handle_read_digest serves it to the UI), not because it is
+# safe. Recorded here rather than quietly fixed or quietly forgotten -- a
+# comment asserting the wrong classification is precisely how procedural.json
+# stayed plaintext for as long as it did.
 #
 # Both call sites matter. The read would have failed closed on ciphertext and
 # quietly disabled consolidation ("read failed: ..."), which is the kind of

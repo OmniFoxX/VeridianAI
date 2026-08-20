@@ -291,10 +291,19 @@ ok("...and a dedicated encrypted writer", "_write_procedural_kb" in _dsrc)
 ok("the generic plaintext writer no longer touches the procedural file",
    "_atomic_write_json(PROCEDURAL_FILE" not in _dsrc,
    "that call would have silently reverted the encryption")
-ok("the generic plaintext writer still exists for pipeline state",
-   "_atomic_write_json(DIGEST_FILE" in _dsrc,
-   "digest and CRAIID task state are not user content; encrypting them was "
-   "not in scope and should not happen by accident")
+ok("the generic plaintext writer still exists for genuine pipeline state",
+   "_atomic_write_json(_CRAIID_TASK_FILE" in _dsrc,
+   "CRAIID task state is not user content; encrypting it was not in scope")
+# Deliberately NOT asserting that DIGEST_FILE keeps using the plaintext writer.
+# The first draft did, on the same wrong classification the code comment made:
+# chain_digest.json carries recent_chrono (50 x ~59-char message previews) and
+# a ~1200-char summary -- derived conversation content, in the clear. Pinning
+# it to the plaintext writer would have turned that mistake into a test that
+# BLOCKS the fix. Its status is tracked in the sage_daemon comment instead.
+ok("the digest's contents are documented as an open item, not as safe",
+   "chain_digest.json carries recent_chrono" in _dsrc,
+   "a comment asserting the wrong tier is how procedural.json stayed "
+   "plaintext for as long as it did")
 ok("no raw json.load of the procedural file remains",
    'open(PROCEDURAL_FILE, "r"' not in _dsrc)
 
