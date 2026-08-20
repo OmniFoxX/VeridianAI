@@ -1473,106 +1473,95 @@ def _job_fatigue_check() -> str:
 
 # v2.15.2: one-shot latch so the "metric is gone" notice is said once per
 # process instead of every 30 seconds for the life of the daemon.
-_KV_METRIC_ABSENT_LOGGED = False
+_KV_ABSENT_LOGGED = False
 
 
 def _job_llama_progress() -> str:
-    """CRAIID Phase 3: Poll llama-server /metrics for KV-cache usage.
+    """CRAIID Phase 3: the 0.0-1.0 context-window fill.
 
-    Queries LLAMA_SAGE_URL/metrics (Prometheus text format) for
-    llamacpp:kv_cache_usage_ratio. This is the 'progress' value from
-    the handoff summary — a 0.0-1.0 measure of context window fill.
+    v2.15.2: this used to scrape llamacpp:kv_cache_usage_ratio from
+    LLAMA_SAGE_URL/metrics. llama.cpp REMOVED that metric. Build 8639 exposes
+    eleven metrics and not one is a KV gauge, and /slots was trimmed to
+    {id, n_ctx, speculative, is_processing}. So the scrape could never succeed,
+    llama_progress sat at 0.0 forever, and `llama_progress >=
+    _LLAMA_CLIFF_THRESHOLD` in the fatigue check became unreachable code
+    against a constant zero. The detector had quietly been running on one
+    signal instead of two.
 
-    Thresholds:
+    We never needed the gauge. Both halves of the ratio are ours already:
+    n_ctx is what we launch the tier with, and the token counts come from the
+    server's own tokenizer on every completed turn. main.py computes the ratio
+    and publishes it at /api/context-fill; this polls that.
+
+    Why an HTTP hop for something in the same product: sage_daemon runs in its
+    OWN PROCESS. main.py does not import it and cannot hand it a module global.
+
+    A null ratio means NO DATA -- no turn has completed yet -- and is NOT the
+    same as an empty cache. The two readings look identical as 0.000 and mean
+    opposite things, so a null is never coerced to zero here.
+
+    Thresholds (unchanged):
       >= 0.90 : warning territory — fatigue check urgency increases
       >= 0.95 : cliff territory — unconditional task emit on next
                 fatigue check regardless of ops_mode
 
-    Uses synchronous httpx (this runs in a thread, not async context).
-    Timeout is intentionally short — a slow /metrics response means
-    the server is under load, which is itself a signal.
+    Uses synchronous httpx (this runs in a thread, not an async context).
 
     Returns a human-readable summary string for the logger.
     """
+    # Imported OUTSIDE the try below on purpose. The except clauses name
+    # _httpx.ConnectError / _httpx.TimeoutException, and an except clause is
+    # EVALUATED when an exception fires -- so if the import lived inside the
+    # try and failed, _httpx would be unbound and the handler itself would
+    # raise NameError, replacing a tidy return with a traceback in the daemon.
     try:
         import httpx as _httpx
-        from config import LLAMA_SAGE_URL as _SAGE_URL
+    except Exception as _imp_err:
+        return (f"llama progress check unavailable: httpx not importable "
+                f"({type(_imp_err).__name__}: {_imp_err})")
 
-        resp = _httpx.get(
-            f"{_SAGE_URL}/metrics",
-            timeout=3.0,
-        )
+    try:
+        try:
+            from config import PORT_APP as _APP_PORT
+        except Exception:
+            _APP_PORT = 8000
+        _FILL_URL = f"http://127.0.0.1:{_APP_PORT}"
+
+        resp = _httpx.get(f"{_FILL_URL}/api/context-fill", timeout=3.0)
 
         if resp.status_code != 200:
-            return f"metrics endpoint returned {resp.status_code}"
+            return f"context-fill endpoint returned {resp.status_code}"
 
-        # Parse Prometheus text format — find kv_cache_usage_ratio
-        kv_ratio    = None
-        cached_toks = None
-
-        for line in resp.text.splitlines():
-            line = line.strip()
-            if line.startswith("#"):
-                continue
-            if "kv_cache_usage_ratio" in line and kv_ratio is None:
-                try:
-                    kv_ratio = float(line.split()[-1])
-                except (ValueError, IndexError):
-                    pass
-            if "kv_cache_tokens_direct" in line and cached_toks is None:
-                try:
-                    cached_toks = int(float(line.split()[-1]))
-                except (ValueError, IndexError):
-                    pass
+        doc = resp.json() or {}
+        kv_ratio = doc.get("ratio")
+        cached_toks = doc.get("prompt_tokens")
 
         if kv_ratio is None:
-            # v2.15.2 CORRECTION. This used to say "not yet present" and blame
-            # "no inference has run since server start" -- i.e. wait and it will
-            # show up. It will not. llamacpp:kv_cache_usage_ratio was REMOVED
-            # upstream. Build 8639 exposes exactly eleven metrics and none of
-            # them is a KV gauge:
-            #
-            #   prompt_tokens_total, prompt_seconds_total,
-            #   tokens_predicted_total, tokens_predicted_seconds_total,
-            #   n_decode_total, n_tokens_max, n_busy_slots_per_decode,
-            #   prompt_tokens_seconds, predicted_tokens_seconds,
-            #   requests_processing, requests_deferred
-            #
-            # /slots does not help either -- it was trimmed to
-            # {id, n_ctx, speculative, is_processing}, with no occupancy field.
-            #
-            # So this poll can never succeed on this llama.cpp, and the old
-            # message printed every 30 seconds forever, describing a wait that
-            # had no end. Say it once and go quiet.
-            #
-            # WHAT THIS COSTS, stated plainly rather than left to be discovered:
-            # llama_progress stays 0.0, so the KV limb of the fatigue detector
-            # is dead -- `llama_progress >= _LLAMA_CLIFF_THRESHOLD` can never
-            # fire, and `context_fill = max(llama_progress, token_fill)` is just
-            # token_fill. Fatigue detection still works; it is running on one
-            # signal instead of two. Note that a reported kv=0.000 therefore
-            # means "no data", NOT "cache empty" -- which are opposite readings.
-            global _KV_METRIC_ABSENT_LOGGED
-            if not _KV_METRIC_ABSENT_LOGGED:
-                _KV_METRIC_ABSENT_LOGGED = True
-                return ("llamacpp:kv_cache_usage_ratio is not exposed by this "
-                        "llama.cpp build -- KV-pressure input to fatigue "
-                        "detection is unavailable; token_fill is the sole "
-                        "signal. (Logged once.)")
+            # No turn has completed since boot, so there is genuinely nothing
+            # to measure yet. That is a real "not yet" -- unlike the old
+            # message, which said "not yet" about a metric llama.cpp had
+            # DELETED and would never send. Said once, then quiet.
+            global _KV_ABSENT_LOGGED
+            if not _KV_ABSENT_LOGGED:
+                _KV_ABSENT_LOGGED = True
+                return ("no context-fill reading yet -- waiting for the first "
+                        "completed turn. (Logged once.)")
             return ""
+        _KV_ABSENT_LOGGED = False        # a reading arrived; re-arm the notice
 
-        # Determine alert level
+        # Determine alert level (thresholds unchanged from the metric era --
+        # this is the same 0.0-1.0 quantity, derived from a source that exists).
         if kv_ratio >= _LLAMA_CLIFF_THRESHOLD:
             level = "CLIFF"
             logger.error(
-                f"[CRAIID] llama-server KV cache at CLIFF level: "
+                f"[CRAIID] context window at CLIFF level: "
                 f"{kv_ratio:.3f} >= {_LLAMA_CLIFF_THRESHOLD} — "
                 f"context reconstruction urgently needed"
             )
         elif kv_ratio >= _LLAMA_WARN_THRESHOLD:
             level = "WARN"
             logger.warning(
-                f"[CRAIID] llama-server KV cache warning: "
+                f"[CRAIID] context window warning: "
                 f"{kv_ratio:.3f} >= {_LLAMA_WARN_THRESHOLD}"
             )
         else:
@@ -1586,16 +1575,18 @@ def _job_llama_progress() -> str:
         _log_mlm_training_row("llama_progress")
 
         return (
-            f"kv_ratio={kv_ratio:.4f} level={level} "
-            f"cached_tokens={cached_toks or 'n/a'}"
+            f"context_fill={kv_ratio:.4f} level={level} "
+            f"prompt_tokens={cached_toks or 'n/a'} "
+            f"n_ctx={doc.get('n_ctx') or 'n/a'} "
+            f"tier={doc.get('tier') or 'n/a'}"
         )
 
     except _httpx.ConnectError:
-        return "llama-server not reachable on /metrics (tier down or starting)"
+        return "backend not reachable on /api/context-fill (starting?)"
     except _httpx.TimeoutException:
-        return "llama-server /metrics timed out (server under load)"
+        return "/api/context-fill timed out (backend under load)"
     except Exception as e:
-        return f"llama progress check failed: {type(e).__name__}: {e}"    
+        return f"llama progress check failed: {type(e).__name__}: {e}"
 
 
 # ----- Action handlers for the new periodic-worker outputs ------

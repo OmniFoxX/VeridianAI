@@ -413,6 +413,86 @@ async def _node_stream_tokens(messages, options):
         return
 
 
+# ---------------------------------------------------------------------------
+# v2.15.2 -- CONTEXT FILL, recomputed from the servers' own token counts.
+#
+# llamacpp:kv_cache_usage_ratio was removed from llama.cpp. Build 8639 exposes
+# eleven metrics and not one is a KV gauge, and /slots was trimmed to
+# {id, n_ctx, speculative, is_processing}. sage_daemon polled for that gauge
+# every 30 seconds, never found it, and left llama_progress at 0.0 -- which
+# quietly killed the KV limb of the fatigue detector, because
+# `llama_progress >= _LLAMA_CLIFF_THRESHOLD` can never fire against a constant
+# zero.
+#
+# We do not need the gauge. We have both halves of the ratio ourselves:
+#
+#   denominator  n_ctx        -- we set it (--ctx-size), and /slots still reports it
+#   numerator    prompt+completion tokens, counted by the server's OWN tokenizer
+#                and handed to us on every turn (Ollama: prompt_eval_count /
+#                eval_count; llama-server: timings.prompt_n / predicted_n)
+#
+# Scoped to OUR conversation rather than to whatever the server holds across
+# slots, which is arguably the more useful number. The one thing it cannot do
+# is report fill DURING a generation -- these arrive when the turn completes.
+# For "am I approaching the cliff", per-turn is enough; the fatigue check runs
+# on a 30-second cadence, not per token.
+#
+# sage_daemon is a SEPARATE PROCESS (main.py never imports it), so this cannot
+# be handed over through a module global. It is published on a local-only
+# endpoint below and polled.
+# ---------------------------------------------------------------------------
+_CTX_FILL = {
+    "ratio": None, "prompt_tokens": None, "completion_tokens": None,
+    "n_ctx": None, "tier": None, "backend": None, "updated": None,
+}
+_CTX_FILL_LOCK = threading.Lock()
+_NCTX_CACHE: Dict[str, int] = {}
+
+
+async def _resolve_n_ctx(base_url: str, fallback=None):
+    """The context size of a tier. Cached: it cannot change without a restart,
+    and this must not add an HTTP round-trip to every turn."""
+    if not base_url:
+        return fallback
+    if base_url in _NCTX_CACHE:
+        return _NCTX_CACHE[base_url]
+    try:
+        import httpx as _hx
+        async with _hx.AsyncClient(timeout=3.0) as _c:
+            _r = await _c.get(f"{base_url}/slots")
+            _slots = _r.json()
+        _n = int(_slots[0]["n_ctx"])
+        if _n > 0:
+            _NCTX_CACHE[base_url] = _n
+            return _n
+    except Exception:
+        pass
+    return fallback
+
+
+async def _record_context_fill(stats: dict):
+    """Turn one turn's token counts into a 0.0-1.0 context-fill ratio."""
+    if not isinstance(stats, dict):
+        return
+    _pt = stats.get("prompt_tokens")
+    _ct = stats.get("completion_tokens")
+    if _pt is None and _ct is None:
+        return          # this backend told us nothing; leave the last reading
+    _n_ctx = stats.get("n_ctx") or await _resolve_n_ctx(stats.get("base_url"))
+    _used = int(_pt or 0) + int(_ct or 0)
+    _ratio = round(_used / _n_ctx, 4) if _n_ctx else None
+    with _CTX_FILL_LOCK:
+        _CTX_FILL.update({
+            "ratio": _ratio,
+            "prompt_tokens": _pt,
+            "completion_tokens": _ct,
+            "n_ctx": _n_ctx,
+            "tier": stats.get("tier"),
+            "backend": stats.get("backend"),
+            "updated": TimeManager.iso_z(),
+        })
+
+
 async def _watched_generate(messages, model_id, options, watchdog):
     """Wrap model_manager.generate() so every yielded token bumps the
     watchdog's last-token timestamp. Lets us add stall detection at all
@@ -479,6 +559,16 @@ async def _watched_generate(messages, model_id, options, watchdog):
         except Exception as _e:
             _local_err = str(_e)
             _failed = True
+        # v2.15.2: publish the context fill from the counts model_manager just
+        # recorded. Done HERE rather than in a `finally`, because a generator's
+        # finally runs at finalization -- which, if the consumer abandons the
+        # stream, Python defers to whenever the object is collected. That is
+        # the exact deferral model_manager's own [GATE-FREE] comment is about,
+        # and it would make the reading arrive late or not at all.
+        try:
+            await _record_context_fill(options.get("_turn_stats"))
+        except Exception:
+            pass        # telemetry must never break a turn
         if not _failed:
             return
         if _yielded:
@@ -5035,6 +5125,30 @@ def _cookie_secure(request: Request) -> bool:
         return False
 
 
+@app.get("/api/context-fill")
+async def api_context_fill(request: Request):
+    """The current conversation's context fill, 0.0-1.0.
+
+    v2.15.2. Exists because sage_daemon runs in its OWN PROCESS -- main.py never
+    imports it -- so the token counts it needs cannot be handed over through a
+    module global. This is the channel.
+
+    Replaces llamacpp:kv_cache_usage_ratio, which llama.cpp removed. Computed
+    from the server's own tokenizer counts over the tier's n_ctx, so it is a
+    real measurement rather than the constant 0.0 the fatigue detector has been
+    running on since that metric disappeared.
+
+    "ratio": null means NO DATA -- not an empty cache. Those are opposite
+    readings and the caller must not conflate them.
+
+    Local-only. It describes the owner's live conversation.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    with _CTX_FILL_LOCK:
+        return dict(_CTX_FILL)
+
+
 @app.get("/api/first-run")
 async def api_first_run_state(request: Request):
     """Has this install been claimed, and how?
@@ -6763,6 +6877,23 @@ async def ws_chat(websocket: WebSocket):
             # priority lane (0 urgent / 1 normal). The _priority key is
             # server-assigned here; anything a client put there is replaced.
             options["_priority"] = 0 if options.pop("urgent", False) else 1
+
+            # v2.15.2: the per-turn side-channel. model_manager writes the
+            # model's reasoning trace and the server's own token counts here;
+            # neither can ride on the token stream, because every consumer of
+            # generate() expects plain strings.
+            #
+            # A FRESH DICT PER TURN, owned by this handler. Deliberately not an
+            # attribute on model_manager: that is one slot on a process-wide
+            # object, and two chats generating at once would overwrite each
+            # other's stats. That exact shape is what broke the parallel
+            # sub-agents earlier in this release, and it is not worth repeating
+            # for the sake of three fewer characters at the call site.
+            #
+            # Server-assigned like _priority above -- whatever a client sent is
+            # replaced, so a crafted payload cannot pre-seed a reasoning trace.
+            _turn_stats = {}
+            options["_turn_stats"] = _turn_stats
 
             # v2.11.13 per-user settings: fill generation options from this
             # user's overlay where the request didn't set them explicitly.
