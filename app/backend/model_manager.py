@@ -163,6 +163,125 @@ class _PriorityGate:
         self._active = False
 
 
+# ---------------------------------------------------------------------------
+# Module-level helpers.
+#
+# v2.15.2: these live ABOVE `class ModelManager` on purpose. They were briefly
+# placed below it, immediately before `    async def _gen_ollama(...)`, and a
+# zero-indented `def` there ENDS THE CLASS BODY -- so _gen_ollama and
+# _gen_llama_server stopped being methods and became nested functions inside
+# _ollama_safe_messages. Still valid Python. Still parsed. Still passed every
+# test, because the tests exercised the helpers and read the source as text,
+# and never once asked whether ModelManager still had its methods. The app
+# failed on the first real generation with:
+#
+#     'ModelManager' object has no attribute '_gen_ollama'
+#
+# test_reasoning_capture.py now asserts the class shape, so indentation cannot
+# quietly relocate a method again.
+# ---------------------------------------------------------------------------
+
+def _turn_stats(options: Dict):
+    """The per-turn side-channel, or None.
+
+    v2.15.2. Both backends now have things worth reporting that are not
+    tokens-to-display: the model's reasoning trace, and the server's own token
+    counts. The generators yield plain strings and every consumer expects that,
+    so the reporting cannot ride on the yield.
+
+    It rides on `options` instead -- the caller passes in its OWN dict under
+    "_turn_stats" and reads it after the stream ends. Deliberately NOT an
+    attribute on the manager: that is a single slot on a process-wide object,
+    and two concurrent chats would overwrite each other's stats. (That exact
+    shape is what broke the parallel sub-agents in this same release.) A
+    caller-owned dict cannot collide with anyone else's.
+
+    The leading underscore marks it private, matching the existing
+    options["_ident"] convention.
+    """
+    s = options.get("_turn_stats")
+    return s if isinstance(s, dict) else None
+
+
+def _no_answer_notice(tier_label: str, reasoning_parts: List[str]) -> str:
+    """What to say when the model thought and never answered.
+
+    v2.15.2. A reasoning model can spend its entire generation budget inside
+    the thinking block and emit zero content tokens. Both stream loops treated
+    that as "nothing to yield" and returned in silence -- message sent, no
+    reply, instantly the user's turn again, no clue why. Four re-prompts in a
+    row for one news briefing, on 2026-08-17.
+
+    That is the same ghosting the llama-server fallback path already has a
+    comment about ("Ghosting the user hides real incompatibilities"). It was
+    fixed there for the no-tokens-at-all case and missed here, because here
+    tokens DID arrive -- they just all went to the reasoning channel.
+
+    Says what happened and what to change, because "no reply" is not a symptom
+    anyone can act on.
+    """
+    _chars = sum(len(p) for p in reasoning_parts)
+    return (f"[{tier_label}: the model used its whole generation budget "
+            f"thinking and produced no answer. {_chars:,} characters of "
+            f"reasoning were captured. Raise max_tokens, or cap the thinking "
+            f"with reasoning_budget, and ask again.]")
+
+
+def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
+    """Ollama refuses a system message anywhere except index 0.
+
+    main.py deliberately injects volatile context -- the current date/time
+    block, procedural memory, and the CRAIID warm handoff -- as `system`
+    messages immediately BEFORE the final user turn, so that the cacheable
+    system+history prefix stays byte-stable from turn to turn and only the tail
+    is reprocessed. That is a good reason and it should stay.
+
+    llama.cpp's chat templates accept system messages at any position. Ollama's
+    renderer does not. It rejects the entire request in routes.go before any
+    generation happens:
+
+        msg="chat prompt error" error="system message must be at the beginning"
+        POST /api/chat -> 500
+
+    which is exactly why qwen3.8 and laguna-xs-2.1 failed instantly on the
+    Ollama tier while the same conversation worked on the llama-server tiers.
+    It was never about thinking tokens -- the request never reached the model.
+
+    Verified against the live Ollama on 2026-08-19 with qwen3.8:27b-q4_K_M:
+        [system, user]                       -> 200
+        [system, user, system, user]         -> 500   (what we were sending)
+        [system, user, user,   user]         -> 200   (this function's output)
+
+    THE FIX, and why it is a relabel rather than a move: position is what
+    carries the meaning. Hoisting these blocks to the front would put volatile,
+    every-turn text back into the cacheable prefix and defeat the whole reason
+    they sit at the tail. Dropping them would cost Toga the current date. So
+    each non-leading system block is relabelled `user` IN PLACE -- same text,
+    same position, a role Ollama accepts anywhere. The blocks are already
+    self-delimiting ("=== CURRENT DATE & TIME ... === END DATE & TIME ==="), so
+    nothing becomes ambiguous.
+
+    It also slightly strengthens the guarantee main.py already documents for
+    the warm handoff: content framed as data-not-instructions now carries user
+    authority instead of system authority, so a hostile payload has less standing,
+    not more.
+
+    Applied ONLY on the Ollama path. The llama-server tiers keep the system
+    role, because they were never the problem.
+    """
+    out, relabelled = [], 0
+    for i, m in enumerate(messages):
+        if i > 0 and m.get("role") == "system":
+            m = dict(m)
+            m["role"] = "user"
+            relabelled += 1
+        out.append(m)
+    if relabelled:
+        print(f"[OLLAMA] relabelled {relabelled} tail system block(s) to user "
+              f"(Ollama requires system at index 0 only)")
+    return out
+
+
 class ModelManager:
     # ---------------------------------------------------------------
     # v2.1.7 adaptive context sizing — fallback table for known model
@@ -902,107 +1021,6 @@ class ModelManager:
             _gate.release()
 
     # --- Ollama streaming (/api/chat) ------------------------------------
-def _no_answer_notice(tier_label: str, reasoning_parts: List[str]) -> str:
-    """What to say when the model thought and never answered.
-
-    v2.15.2. A reasoning model can spend its entire generation budget inside
-    the thinking block and emit zero content tokens. Both stream loops treated
-    that as "nothing to yield" and returned in silence -- message sent, no
-    reply, instantly the user's turn again, no clue why. Four re-prompts in a
-    row for one news briefing, on 2026-08-17.
-
-    That is the same ghosting the llama-server fallback path already has a
-    comment about ("Ghosting the user hides real incompatibilities"). It was
-    fixed there for the no-tokens-at-all case and missed here, because here
-    tokens DID arrive -- they just all went to the reasoning channel.
-
-    Says what happened and what to change, because "no reply" is not a symptom
-    anyone can act on.
-    """
-    _chars = sum(len(p) for p in reasoning_parts)
-    return (f"[{tier_label}: the model used its whole generation budget "
-            f"thinking and produced no answer. {_chars:,} characters of "
-            f"reasoning were captured. Raise max_tokens, or cap the thinking "
-            f"with reasoning_budget, and ask again.]")
-
-
-def _turn_stats(options: Dict):
-    """The per-turn side-channel, or None.
-
-    v2.15.2. Both backends now have things worth reporting that are not
-    tokens-to-display: the model's reasoning trace, and the server's own token
-    counts. The generators yield plain strings and every consumer expects that,
-    so the reporting cannot ride on the yield.
-
-    It rides on `options` instead -- the caller passes in its OWN dict under
-    "_turn_stats" and reads it after the stream ends. Deliberately NOT an
-    attribute on the manager: that is a single slot on a process-wide object,
-    and two concurrent chats would overwrite each other's stats. (That exact
-    shape is what broke the parallel sub-agents in this same release.) A
-    caller-owned dict cannot collide with anyone else's.
-
-    The leading underscore marks it private, matching the existing
-    options["_ident"] convention.
-    """
-    s = options.get("_turn_stats")
-    return s if isinstance(s, dict) else None
-
-
-def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
-    """Ollama refuses a system message anywhere except index 0.
-
-    main.py deliberately injects volatile context -- the current date/time
-    block, procedural memory, and the CRAIID warm handoff -- as `system`
-    messages immediately BEFORE the final user turn, so that the cacheable
-    system+history prefix stays byte-stable from turn to turn and only the tail
-    is reprocessed. That is a good reason and it should stay.
-
-    llama.cpp's chat templates accept system messages at any position. Ollama's
-    renderer does not. It rejects the entire request in routes.go before any
-    generation happens:
-
-        msg="chat prompt error" error="system message must be at the beginning"
-        POST /api/chat -> 500
-
-    which is exactly why qwen3.8 and laguna-xs-2.1 failed instantly on the
-    Ollama tier while the same conversation worked on the llama-server tiers.
-    It was never about thinking tokens -- the request never reached the model.
-
-    Verified against the live Ollama on 2026-08-19 with qwen3.8:27b-q4_K_M:
-        [system, user]                       -> 200
-        [system, user, system, user]         -> 500   (what we were sending)
-        [system, user, user,   user]         -> 200   (this function's output)
-
-    THE FIX, and why it is a relabel rather than a move: position is what
-    carries the meaning. Hoisting these blocks to the front would put volatile,
-    every-turn text back into the cacheable prefix and defeat the whole reason
-    they sit at the tail. Dropping them would cost Toga the current date. So
-    each non-leading system block is relabelled `user` IN PLACE -- same text,
-    same position, a role Ollama accepts anywhere. The blocks are already
-    self-delimiting ("=== CURRENT DATE & TIME ... === END DATE & TIME ==="), so
-    nothing becomes ambiguous.
-
-    It also slightly strengthens the guarantee main.py already documents for
-    the warm handoff: content framed as data-not-instructions now carries user
-    authority instead of system authority, so a hostile payload has less standing,
-    not more.
-
-    Applied ONLY on the Ollama path. The llama-server tiers keep the system
-    role, because they were never the problem.
-    """
-    out, relabelled = [], 0
-    for i, m in enumerate(messages):
-        if i > 0 and m.get("role") == "system":
-            m = dict(m)
-            m["role"] = "user"
-            relabelled += 1
-        out.append(m)
-    if relabelled:
-        print(f"[OLLAMA] relabelled {relabelled} tail system block(s) to user "
-              f"(Ollama requires system at index 0 only)")
-    return out
-
-
     async def _gen_ollama(self, messages: List[Dict], model_id: str,
                           options: Dict, base_url: str,
                           tier_label: str) -> AsyncGenerator[str, None]:

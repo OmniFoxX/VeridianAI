@@ -62,7 +62,67 @@ no_answer = _ns["_no_answer_notice"]
 
 
 # =============================================================================
-print("=== 1. The side-channel is caller-owned, not shared ===")
+print("=== 0. The class still has its methods ===")
+# =============================================================================
+# This section exists because of a real break, not a hypothetical one.
+#
+# The helpers below (_turn_stats, _no_answer_notice, _ollama_safe_messages) were
+# first added directly above `    async def _gen_ollama(...)`. A zero-indented
+# `def` in that position ENDS THE CLASS BODY: _gen_ollama and _gen_llama_server
+# stopped being methods of ModelManager and became nested functions inside
+# _ollama_safe_messages. That is valid Python. It parses. `ast.parse` was happy,
+# `node --check` equivalents were happy, and every check in this file passed --
+# because they exec the helpers in ISOLATION and read model_manager.py as TEXT.
+# Neither of those can see class structure.
+#
+# VeridianAI failed on the very first generation with:
+#     Generation error: 'ModelManager' object has no attribute '_gen_ollama'
+#
+# So: assert the SHAPE, not just the text.
+import ast  # noqa: E402
+
+_TREE = ast.parse(MM)
+_cls = [n for n in _TREE.body
+        if isinstance(n, ast.ClassDef) and n.name == "ModelManager"]
+ok("ModelManager is still a top-level class", len(_cls) == 1)
+_methods = [m.name for m in _cls[0].body
+            if isinstance(m, (ast.FunctionDef, ast.AsyncFunctionDef))]
+for _want in ("generate", "_gen_ollama", "_gen_llama_server", "list_models"):
+    ok(f"ModelManager.{_want} is a METHOD of the class", _want in _methods,
+       f"found {len(_methods)} methods: {_methods[:6]}...")
+
+# The exact failure signature: a generator method swallowed by a helper.
+_modfns = [n for n in _TREE.body
+           if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+_swallowed = []
+for _fn in _modfns:
+    for _c in ast.walk(_fn):
+        if (isinstance(_c, (ast.FunctionDef, ast.AsyncFunctionDef))
+                and _c is not _fn and _c.name.startswith("_gen_")):
+            _swallowed.append((_fn.name, _c.name))
+ok("no module-level helper has swallowed a _gen_* method", not _swallowed,
+   _swallowed)
+
+# The invariant that keeps it that way: helpers live ABOVE the class.
+_clsline = _cls[0].lineno
+_after = [n.name for n in _modfns if n.lineno > _clsline]
+ok("every module-level helper is defined BEFORE the class", not _after,
+   f"defined after ModelManager: {_after}")
+
+# And when the real module can be imported, ask the runtime directly.
+try:
+    import model_manager as _mm            # noqa: E402
+except Exception as _e:
+    print(f"  ....  runtime import unavailable here ({type(_e).__name__}); "
+          f"AST checks above still stand")
+else:
+    for _want in ("generate", "_gen_ollama", "_gen_llama_server"):
+        ok(f"runtime: ModelManager has {_want}",
+           hasattr(_mm.ModelManager, _want))
+
+
+# =============================================================================
+print("\n=== 1. The side-channel is caller-owned, not shared ===")
 # =============================================================================
 mine, yours = {}, {}
 ok("a caller's own dict is handed back", turn_stats({"_turn_stats": mine}) is mine)
