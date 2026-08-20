@@ -42,6 +42,21 @@ def find_oracle_root() -> Optional[Path]:
     root directory (identified by presence of an 'archives' folder).
     Falls back to absolute path if relative search fails.
     """
+    # v2.15.2: the archives moved to sage_data, so "the root" for the purpose of
+    # `root / "archives"` is now sage_data, not the project directory. Ask
+    # craiid_paths; the candidate list below stays as the standalone fallback.
+    try:
+        import sys as _sys
+        _here = str(Path(__file__).resolve().parent)
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        from craiid_paths import archives_root as _archives_root
+        resolved = _archives_root()
+        if resolved is not None and (Path(resolved) / "archives").exists():
+            return Path(resolved)
+    except Exception:
+        pass
+
     candidates = [
         Path(__file__).parent.parent.parent,   # backend/craiid/ → root
         Path(__file__).parent.parent,           # backend/ → root

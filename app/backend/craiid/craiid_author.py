@@ -98,7 +98,14 @@ def _state_chat_memory() -> Path:
 
 # Input sources
 _CHAT_MEMORY_FILE: Path = _state_chat_memory()   # v2.13: STATE_DIR-aware
-_ARCHIVES_DIR:     Path = _ROOT_DIR / "archives"
+# v2.15.2: was `_ROOT_DIR / "archives"`. User content moved to sage_data on
+# 2026-08-13 and this line did not follow it -- note that the three siblings
+# below/above (chat memory, reconstructs, VLTS, logs) all DID. The Author then
+# read an install-directory folder the migration had emptied, so every
+# reconstruction was built from zero archives and nothing reported an error,
+# because an empty corpus is not an error. Resolved through craiid_paths, which
+# asks state_paths first and only searches as a last resort.
+_ARCHIVES_DIR:     Path = _ROOT_DIR / "archives"          # replaced below
 _VLTS_DIR:         Path = _CRAIID_DIR / "vlts_archives"   # Phase 2
 
 # Output
@@ -125,6 +132,21 @@ try:
     import atrest as _atrest
 except Exception:
     _atrest = None  # keep in-project defaults; write plaintext
+
+# v2.15.2: the archives live wherever state_paths says they live. Kept separate
+# from the try-block above so a failure to import atrest cannot silently leave
+# the Author reading the wrong directory -- that coupling is what let the two
+# drift apart in the first place.
+try:
+    if str(_CRAIID_DIR) not in sys.path:
+        sys.path.insert(0, str(_CRAIID_DIR))
+    from craiid_paths import archives_dir as _resolve_archives
+    _resolved = _resolve_archives()
+    if _resolved is not None:
+        _ARCHIVES_DIR = Path(_resolved)
+except Exception as _e:
+    print(f"[craiid_author] archive path resolver unavailable ({_e}); "
+          f"falling back to {_ARCHIVES_DIR}", flush=True)
 
 
 # ---------------------------------------------------------------------------

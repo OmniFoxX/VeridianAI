@@ -7,6 +7,23 @@ import re
 import sys
 
 def find_archives_root(start_path=None):
+    # v2.15.2: ask the app before searching. User content moved to sage_data on
+    # 2026-08-13; walking up from here finds the install directory's leftover
+    # (empty) archives folder, which is why this reported an empty corpus
+    # instead of an error. craiid_paths keeps the walk-up as its last resort so
+    # a standalone run from a terminal still works.
+    try:
+        import sys as _sys, os as _os
+        _here = _os.path.dirname(_os.path.abspath(__file__))
+        if _here not in _sys.path:
+            _sys.path.insert(0, _here)
+        from craiid_paths import archives_dir as _archives_dir
+        found = _archives_dir(start_path)
+        return str(found) if found else None
+    except Exception:
+        pass
+
+    # Fallback: the original search, unchanged.
     if start_path is None:
         start_path = os.getcwd()
     for _ in range(5):

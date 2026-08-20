@@ -123,7 +123,27 @@ class ArchivistCompressionWorker:
             return self.archive_root.parent / "backend" / "craiid" / "vlts_archives"
 
     def _find_oracle_archive_root(self) -> Path:
-        """Locate OracleAI archives directory by walking up from current file."""
+        """Locate the archives directory.
+
+        v2.15.2: ask craiid_paths first. The walk-up below finds the install
+        directory's `archives` folder, which the 2026-08-13 move to sage_data
+        left behind and empty -- so the Archivist trained its symbol map on
+        nothing and reported success. The traversal is kept as a fallback for
+        standalone runs.
+        """
+        try:
+            import sys as _sys
+            _here = str(Path(__file__).resolve().parent)
+            if _here not in _sys.path:
+                _sys.path.insert(0, _here)
+            from craiid_paths import archives_dir as _archives_dir
+            resolved = _archives_dir()
+            if resolved is not None:
+                logger.info(f"Archive root resolved via craiid_paths: {resolved}")
+                return Path(resolved)
+        except Exception as e:
+            logger.warning(f"craiid_paths unavailable ({e}); falling back to traversal")
+
         current = Path(__file__).resolve()
         
         # Check common locations
