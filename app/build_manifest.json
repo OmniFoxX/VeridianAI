@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "a37fc56b82b64592b9e934e69f7f9288",
-    "built_utc": "2026-08-20T14:12:37.728243+00:00",
+    "build_id": "c48f39ea3f8247c1a494a6d95abd28ea",
+    "built_utc": "2026-08-20T14:14:11.233282+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -240,7 +240,7 @@
       "frontend/css/hljs-github-dark-dimmed.css": "be946d7e2d8cdba5bf372e7fb5afaae10f29cec94e236f0ee04589737db5769d",
       "frontend/css/hljs-github.css": "5b43bc87ce2ed16fa3fc245b45428cb5951da801642644254674f141bfcddd1d",
       "frontend/css/styles.css": "015e7413d40c59a7d6ea077e22f6d0dc3ac9768b25e2b1960ee2160b7f130d9f",
-      "frontend/index.html": "dfdc588a0a0d19f95bb502ca4aab93790dc50b0c2ef7869e5b6a3ddca0c91a98",
+      "frontend/index.html": "9c44fac923bbe9703df19ff475afb6c67b7139193db92a168cafd0149ad3f027",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/api-key.js": "b898dc5a3a28eceb8ee3bf7a1453e146613912866e4c9029d4ebfff5d1b5bbbc",
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
@@ -279,5 +279,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "HSQCzNBbTQJlYLwUCi9aBzI8BY0nV34QwlWpQj8Om9kdLi2KxQXWYSpYltYCWvtwXhsHwqf09bJdzBet1jVNDA=="
+  "signature_b64": "QFnMYsK+/5JlqXUTKyI9DgniAsH+kcRGOdTUbVSplywPc9OeyZA9tKClPH3tNhg0zYPqJW+u+koL/52fKNhCDw=="
 }
