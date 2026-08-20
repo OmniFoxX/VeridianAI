@@ -899,7 +899,12 @@ def _periodic_worker() -> None:
                 with _tick_lock:
                     _tick_state["llama_last_ts"] = now
                     _tick_state["ticks_run"] += 1
-                logger.info(f"[llama_progress] {msg}")
+                # v2.15.2: an empty string means "nothing worth saying this
+                # tick" -- the job still ran and still updated the tick state,
+                # it simply has no news. Logging it anyway is how a diagnostic
+                # turns into 2,880 identical lines a day.
+                if msg:
+                    logger.info(f"[llama_progress] {msg}")
 
             if now - last_op >= _CADENCE_OPS:
                 msg = _job_ops_snapshot()
@@ -1466,6 +1471,11 @@ def _job_fatigue_check() -> str:
         return f"fatigue check failed: {type(e).__name__}: {e}"
 
 
+# v2.15.2: one-shot latch so the "metric is gone" notice is said once per
+# process instead of every 30 seconds for the life of the daemon.
+_KV_METRIC_ABSENT_LOGGED = False
+
+
 def _job_llama_progress() -> str:
     """CRAIID Phase 3: Poll llama-server /metrics for KV-cache usage.
 
@@ -1516,9 +1526,40 @@ def _job_llama_progress() -> str:
                     pass
 
         if kv_ratio is None:
-            # /metrics endpoint exists but doesn't have kv_cache stats yet
-            # (happens when no inference has run since server start)
-            return "metrics available but kv_cache_usage_ratio not yet present"
+            # v2.15.2 CORRECTION. This used to say "not yet present" and blame
+            # "no inference has run since server start" -- i.e. wait and it will
+            # show up. It will not. llamacpp:kv_cache_usage_ratio was REMOVED
+            # upstream. Build 8639 exposes exactly eleven metrics and none of
+            # them is a KV gauge:
+            #
+            #   prompt_tokens_total, prompt_seconds_total,
+            #   tokens_predicted_total, tokens_predicted_seconds_total,
+            #   n_decode_total, n_tokens_max, n_busy_slots_per_decode,
+            #   prompt_tokens_seconds, predicted_tokens_seconds,
+            #   requests_processing, requests_deferred
+            #
+            # /slots does not help either -- it was trimmed to
+            # {id, n_ctx, speculative, is_processing}, with no occupancy field.
+            #
+            # So this poll can never succeed on this llama.cpp, and the old
+            # message printed every 30 seconds forever, describing a wait that
+            # had no end. Say it once and go quiet.
+            #
+            # WHAT THIS COSTS, stated plainly rather than left to be discovered:
+            # llama_progress stays 0.0, so the KV limb of the fatigue detector
+            # is dead -- `llama_progress >= _LLAMA_CLIFF_THRESHOLD` can never
+            # fire, and `context_fill = max(llama_progress, token_fill)` is just
+            # token_fill. Fatigue detection still works; it is running on one
+            # signal instead of two. Note that a reported kv=0.000 therefore
+            # means "no data", NOT "cache empty" -- which are opposite readings.
+            global _KV_METRIC_ABSENT_LOGGED
+            if not _KV_METRIC_ABSENT_LOGGED:
+                _KV_METRIC_ABSENT_LOGGED = True
+                return ("llamacpp:kv_cache_usage_ratio is not exposed by this "
+                        "llama.cpp build -- KV-pressure input to fatigue "
+                        "detection is unavailable; token_fill is the sole "
+                        "signal. (Logged once.)")
+            return ""
 
         # Determine alert level
         if kv_ratio >= _LLAMA_CLIFF_THRESHOLD:

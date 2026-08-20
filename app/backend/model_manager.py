@@ -902,6 +902,61 @@ class ModelManager:
             _gate.release()
 
     # --- Ollama streaming (/api/chat) ------------------------------------
+def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
+    """Ollama refuses a system message anywhere except index 0.
+
+    main.py deliberately injects volatile context -- the current date/time
+    block, procedural memory, and the CRAIID warm handoff -- as `system`
+    messages immediately BEFORE the final user turn, so that the cacheable
+    system+history prefix stays byte-stable from turn to turn and only the tail
+    is reprocessed. That is a good reason and it should stay.
+
+    llama.cpp's chat templates accept system messages at any position. Ollama's
+    renderer does not. It rejects the entire request in routes.go before any
+    generation happens:
+
+        msg="chat prompt error" error="system message must be at the beginning"
+        POST /api/chat -> 500
+
+    which is exactly why qwen3.8 and laguna-xs-2.1 failed instantly on the
+    Ollama tier while the same conversation worked on the llama-server tiers.
+    It was never about thinking tokens -- the request never reached the model.
+
+    Verified against the live Ollama on 2026-08-19 with qwen3.8:27b-q4_K_M:
+        [system, user]                       -> 200
+        [system, user, system, user]         -> 500   (what we were sending)
+        [system, user, user,   user]         -> 200   (this function's output)
+
+    THE FIX, and why it is a relabel rather than a move: position is what
+    carries the meaning. Hoisting these blocks to the front would put volatile,
+    every-turn text back into the cacheable prefix and defeat the whole reason
+    they sit at the tail. Dropping them would cost Toga the current date. So
+    each non-leading system block is relabelled `user` IN PLACE -- same text,
+    same position, a role Ollama accepts anywhere. The blocks are already
+    self-delimiting ("=== CURRENT DATE & TIME ... === END DATE & TIME ==="), so
+    nothing becomes ambiguous.
+
+    It also slightly strengthens the guarantee main.py already documents for
+    the warm handoff: content framed as data-not-instructions now carries user
+    authority instead of system authority, so a hostile payload has less standing,
+    not more.
+
+    Applied ONLY on the Ollama path. The llama-server tiers keep the system
+    role, because they were never the problem.
+    """
+    out, relabelled = [], 0
+    for i, m in enumerate(messages):
+        if i > 0 and m.get("role") == "system":
+            m = dict(m)
+            m["role"] = "user"
+            relabelled += 1
+        out.append(m)
+    if relabelled:
+        print(f"[OLLAMA] relabelled {relabelled} tail system block(s) to user "
+              f"(Ollama requires system at index 0 only)")
+    return out
+
+
     async def _gen_ollama(self, messages: List[Dict], model_id: str,
                           options: Dict, base_url: str,
                           tier_label: str) -> AsyncGenerator[str, None]:
@@ -966,7 +1021,10 @@ class ModelManager:
 
         payload = {
             "model":    model_id,
-            "messages": messages,
+            # v2.15.2: see _ollama_safe_messages -- Ollama 500s on any system
+            # message that is not first, which is what main.py's tail-injected
+            # date/procedural/warm-handoff blocks are.
+            "messages": _ollama_safe_messages(messages),
             "stream":   True,
             "options": {
                 "temperature": options.get("temperature",
