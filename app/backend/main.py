@@ -6000,6 +6000,18 @@ async def _session_gate(request: Request, call_next):
             or _p.startswith("/api/node/")
             or _p == "/api/skills/catalog"
             or _p.startswith("/api/skills/object/")
+            # v2.15.2: sage_daemon polls this from its OWN process on loopback.
+            # It has no login session and cannot get one -- it is a daemon, not
+            # a user -- so with multiuser on it would have taken a hard 401 on
+            # every tick and llama_progress would have stayed pinned at 0.0.
+            # That is the exact bug the endpoint was written to fix, so leaving
+            # it gated here would have moved the failure rather than removed it.
+            # Safe to open: api_context_fill self-gates on _is_local_client and
+            # returns the 404 cloak to anything off-box, so this widens nothing
+            # remotely. What it does expose to other LOCAL processes is a fill
+            # ratio, token counts, n_ctx and a tier name -- no conversation
+            # content, no identity.
+            or _p == "/api/context-fill"
             or _p.startswith("/api/relay/")
             or _p.startswith("/mcp/")):
         return await call_next(request)
