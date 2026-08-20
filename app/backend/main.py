@@ -4439,8 +4439,35 @@ async def _generate_full_routed(messages, model_id, options, on_token=None):
                 return _res["content"]
     except Exception:
         pass
-    return await model_manager.generate_full(messages, model_id, options,
+    _out = await model_manager.generate_full(messages, model_id, options,
                                              on_token=on_token)
+    # v2.15.2: publish the context fill for the NON-STREAMING path too.
+    #
+    # The hook in _watched_generate covers streamed turns. The agentic loop
+    # does not stream -- each step calls this, which calls generate_full --
+    # so on a Toga turn that hook fired for none of the inference. Observed
+    # live on 2026-08-20: turns were plainly completing (the daemon counted
+    # five) while /api/context-fill stayed null, because every one of them
+    # went through here. model_manager was recording the counts correctly
+    # the whole time; nothing was publishing them.
+    #
+    # _step_opts is a shallow dict(options) copy, so options["_turn_stats"]
+    # is the SAME dict object model_manager just wrote into -- the counts are
+    # already here, they only need announcing.
+    #
+    # A caller that never seeded "_turn_stats" passes None and
+    # _record_context_fill returns immediately, so the internal one-off
+    # generate_full calls (title generation and friends) cannot overwrite a
+    # real reading with a stub turn's numbers.
+    #
+    # Deliberately NOT added to the two node-infer call sites: those serve
+    # ANOTHER machine's request, and _CTX_FILL describes the owner's own
+    # conversation. A peer's turn must not move the owner's fatigue gauge.
+    try:
+        await _record_context_fill((options or {}).get("_turn_stats"))
+    except Exception:
+        pass        # telemetry must never break a turn
+    return _out
 
 
 async def _generate_image_routed(prompt, downloads_dir=None,

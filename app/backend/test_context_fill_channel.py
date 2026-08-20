@@ -242,6 +242,84 @@ except Exception as _e:
        "%s: %s" % (type(_e).__name__, _e))
 
 
+# =============================================================================
+print("\n=== 7. EVERY owner-facing generation path publishes ===")
+# =============================================================================
+# The bug this section exists for, found live on 2026-08-20:
+#
+# The hook went into _watched_generate, which covers STREAMED turns. The
+# agentic loop does not stream -- each step calls _generate_full_routed ->
+# generate_full -- so on a Toga turn the hook fired for none of the inference.
+# The daemon counted five completed turns while /api/context-fill sat at null.
+# model_manager had recorded the counts correctly the entire time; nothing
+# called _record_context_fill on that path.
+#
+# Checking "the hook exists" would not have caught that -- the hook existed.
+# What was wrong was the SET of call sites it covered. So this enumerates
+# every model_manager.generate / generate_full call site in main.py and
+# requires each one to sit in a function that publishes, or to be named here
+# with a reason. A new generation path added later fails this until somebody
+# decides which it is.
+_ALLOWED_SILENT = {
+    # Serving ANOTHER machine's request. _CTX_FILL describes the owner's own
+    # conversation; a peer's turn must not move the owner's fatigue gauge.
+    "api_node_infer": "node infer -- a peer's turn, not the owner's",
+    "_stream":        "node infer streaming -- a peer's turn, not the owner's",
+    # Not the owner's conversation either: an outbound auto-reply.
+    "_socials_reply": "social auto-reply, not the owner's chat context",
+    # Separate features with their own transcripts; they do not consume the
+    # chat context window the fatigue detector is watching.
+    "_speak":         "Symposium -- its own transcript",
+    "_build":         "Build Battle -- its own transcript",
+}
+
+
+def _enclosing(tree, funcs, line):
+    best = None
+    for _f in funcs:
+        if _f.lineno <= line <= (_f.end_lineno or _f.lineno):
+            if best is None or _f.lineno > best.lineno:
+                best = _f
+    return best.name if best else "<module>"
+
+
+_funcs = [n for n in ast.walk(_t)
+          if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+_publishers = {
+    _enclosing(_t, _funcs, c.lineno) for c in ast.walk(_t)
+    if isinstance(c, ast.Call) and isinstance(c.func, ast.Name)
+    and c.func.id == "_record_context_fill"
+}
+ok("the streaming path is a publisher", "_watched_generate" in _publishers)
+ok("the AGENTIC path is a publisher too", "_generate_full_routed" in _publishers,
+   "the agentic loop calls generate_full directly and never touches "
+   "_watched_generate -- this is the site that was missed")
+
+_sites = []
+for _n in ast.walk(_t):
+    if isinstance(_n, ast.Call) and isinstance(_n.func, ast.Attribute) \
+            and _n.func.attr in ("generate", "generate_full") \
+            and isinstance(_n.func.value, ast.Name) \
+            and _n.func.value.id == "model_manager":
+        _sites.append((_n.lineno, _n.func.attr,
+                       _enclosing(_t, _funcs, _n.lineno)))
+
+ok("there are generation call sites to check", len(_sites) >= 5, len(_sites))
+_unaccounted = [(ln, at, fn) for ln, at, fn in _sites
+                if fn not in _publishers and fn not in _ALLOWED_SILENT]
+ok("every generation call site either publishes or is a documented exception",
+   not _unaccounted,
+   "unaccounted: %r -- if this is an owner-facing path it must publish; if "
+   "not, add it to _ALLOWED_SILENT with a reason" % (_unaccounted,))
+
+# Guard the other direction: an entry in the allowlist that no longer matches
+# a real call site is stale, and stale allowlists are how exemptions outlive
+# their reasons.
+_site_fns = {fn for _, _, fn in _sites}
+_stale = sorted(set(_ALLOWED_SILENT) - _site_fns)
+ok("no stale entries in the silent-path allowlist", not _stale, _stale)
+
+
 _failed = [n for n, c in _results if not c]
 print("\n  %d/%d passed." % (len(_results) - len(_failed), len(_results)))
 if _failed:

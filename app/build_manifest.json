@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "ede4fa3a201f4ac080fcb80b71909277",
-    "built_utc": "2026-08-20T06:05:36.002234+00:00",
+    "build_id": "0d2216bec9a8411a8418c51890f0941b",
+    "built_utc": "2026-08-20T11:45:54.752408+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "0969cb76b6ccd56cbe3eee044ac1799a86eadb6f850ff78b20e86cb4137d9dba",
+      "backend/main.py": "319cd88dc06fe0e12d0646b115857c32ffe592570119cba1c9ba26ffa19fd0dc",
       "backend/mcp_handlers.py": "89462f7e6bcd76b76a38bb7ea86b48658bcf23a1f0ac0a39f5f0dc12408b2331",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "be28f9524a02243b715c63b7518454645d39e2870599f42551b3deffc360d6c8",
@@ -167,7 +167,7 @@
       "backend/test_build_gate_containment.py": "20b7ad5bd52c2b686f371dab1b85f2dab56b1bea7b9f041d317f1d4af92b615e",
       "backend/test_chat_memory_at_rest.py": "dbb9d98dc1a26f9a0832a2f46fe9bb8c2815c2af52affbb823dbb9820ee8b4cd",
       "backend/test_comfyui_launcher.py": "57ab796134ad80a182d2b19cd7e956bc623f9ff4691122a327a27f9d53367aeb",
-      "backend/test_context_fill_channel.py": "b647da3584df8d5c4e3372fae562cdce79c510d3b8828b295d0e43ef2b1d2116",
+      "backend/test_context_fill_channel.py": "631ac1a14e1b428e22938f3f7bf3b0ba1dffb275544cb53759e482ad193e0d64",
       "backend/test_craiid_archive_paths.py": "b498ad7d5b6111a41bb36f7241f1f4a2fdac1fa59e5bf3d3c6d760feb16f2897",
       "backend/test_craiid_jobs_wiring.py": "fe69933e8d77b0e1be035d604d69601a7498f6752e65062b761e0e63423c0c48",
       "backend/test_customs.py": "9aa13e5bc10b6bfa68bb6c109dbf5645532d515bde05376d0ccb1ffd01ed29a8",
@@ -275,5 +275,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "glI53BaaEwOigCorwJXE6EZ/vLJqJqq2DlWXp+LxF8ZpzDFi9qnusCaDvD92WERABe78Vz5pUndAJzxhQ9qoBQ=="
+  "signature_b64": "D8ZZqe0QmAKCZDQ8aQqFnQFmK80gC2g4PyEPC8X/aLkm0k8JhHRZFf+yifLJqEB4KThlP87NLXPu5a5qChmHBg=="
 }
