@@ -525,6 +525,51 @@ async def _record_context_fill(stats: dict):
         })
 
 
+_ALLOWED_MESSAGE_KEYS = ("role", "content", "images")
+
+
+def _sanitize_client_messages(messages):
+    """Keep only the keys a chat message is allowed to carry.
+
+    v2.15.2. The client owns the conversation array and posts it back every
+    turn, and /api/history hands it whatever we persisted. So the moment the
+    assistant's REASONING trace is stored alongside its message -- which is the
+    point of storing it -- that trace is one round-trip away from being posted
+    back and forwarded straight to the model.
+
+    To be accurate about what this adds: the shipped frontend already
+    whitelists. chat.js's buildPayload().mapMsg builds {role, content} and adds
+    `images` only for the capped recent window, so the browser does not send
+    the trace today. This is the SERVER's copy of that rule, and it is the one
+    that has to hold -- the frontend can change, a non-browser client
+    (Continue.dev, curl, an MCP caller) never had that mapping, and a crafted
+    payload will not volunteer it.
+
+    That would be bad in three separate ways: the model's own discarded
+    thinking re-enters its context as if it were dialogue, the prompt grows by
+    the size of every previous trace (they are frequently longer than the
+    answers), and the cacheable prefix changes shape. The llama-server path
+    forwards unknown keys verbatim to /v1/chat/completions -- it strips only
+    `images` -- so a strict endpoint could reject the request outright.
+
+    Whitelist rather than blacklist: a field added to the stored shape later is
+    then dropped by DEFAULT instead of silently reaching the model, which is
+    the failure this exists to prevent and not one anybody would notice.
+
+    Server-authoritative, in the same spirit as options["_priority"] and
+    options["_turn_stats"]: what the client sent is replaced, not trusted.
+    """
+    if not isinstance(messages, list):
+        return []
+    out = []
+    for m in messages:
+        if not isinstance(m, dict):
+            out.append(m)          # not our shape; leave for the caller to reject
+            continue
+        out.append({k: v for k, v in m.items() if k in _ALLOWED_MESSAGE_KEYS})
+    return out
+
+
 async def _watched_generate(messages, model_id, options, watchdog):
     """Wrap model_manager.generate() so every yielded token bumps the
     watchdog's last-token timestamp. Lets us add stall detection at all
@@ -6967,7 +7012,7 @@ async def ws_chat(websocket: WebSocket):
                 continue                
                 
 
-            messages = data.get("messages", [])
+            messages = _sanitize_client_messages(data.get("messages", []))
             model_id = data.get("model_id")
             options = data.get("options", {})
 
@@ -9123,10 +9168,34 @@ async def ws_chat(websocket: WebSocket):
                                 "content": user_msgs[-1]["content"],
                             })
                         if full_response.strip():
-                            history.append({
+                            _entry = {
                                 "role": "assistant",
                                 "content": full_response,
-                            })
+                            }
+                            # v2.15.2: persist the reasoning trace WITH the
+                            # message it belongs to.
+                            #
+                            # It rides save_chat_memory deliberately rather
+                            # than getting a store of its own: that path is
+                            # already Fernet-encrypted and already scoped to
+                            # this profile's namespace (_ws_ns), so the trace
+                            # is protected at rest from its FIRST write. A new
+                            # store would have had to earn that separately --
+                            # which is exactly the retrofit procedural.json
+                            # needed this morning after being missed.
+                            #
+                            # _sanitize_client_messages strips this key back
+                            # off on the way in, so it is never replayed to
+                            # the model as dialogue.
+                            _reasoning = ""
+                            try:
+                                _reasoning = (_turn_stats or {}).get(
+                                    "reasoning") or ""
+                            except Exception:
+                                _reasoning = ""
+                            if _reasoning:
+                                _entry["reasoning"] = _reasoning
+                            history.append(_entry)
                         # Chat memory window cap removed per project policy:
                         # local system, hardware-limited, no arbitrary turn count.
                         # Full history is persisted; model context handled upstream.
@@ -9138,14 +9207,28 @@ async def ws_chat(websocket: WebSocket):
                     # response and a canonical timestamp so the
                     # frontend can render a per-message model badge
                     # and a local-time stamp on each completed bubble.
-                    await websocket.send_json({
+                    # v2.15.2: hand the reasoning trace to the UI so it can be
+                    # shown in a collapsible panel under the answer. Sent on
+                    # `done` rather than streamed as tokens on purpose -- these
+                    # are not part of the reply, and interleaving them with
+                    # content tokens is what made a thinking model look like it
+                    # had answered with silence.
+                    _done_payload = {
                         "type": "done",
                         "content": full_response,
                         "done": True,
                         "model": model_id or "",
                         "offloaded": (_current_offload.get() or ""),
                         "ts": TimeManager.iso_z(),
-                    })
+                    }
+                    try:
+                        _r = (_turn_stats or {}).get("reasoning") or ""
+                        if _r:
+                            _done_payload["reasoning"] = _r
+                            _done_payload["reasoning_chars"] = len(_r)
+                    except Exception:
+                        pass
+                    await websocket.send_json(_done_payload)
                 # Log the response to memory (v2.1.2: louder error reporting)
                 # v2.1.4: now tags role='assistant' so the chain distinguishes
                 # sides of the conversation.

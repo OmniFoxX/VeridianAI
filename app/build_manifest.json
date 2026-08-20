@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "d5fa17f14f45484eb21017e94bf258eb",
-    "built_utc": "2026-08-20T13:50:52.793147+00:00",
+    "build_id": "a37fc56b82b64592b9e934e69f7f9288",
+    "built_utc": "2026-08-20T14:12:37.728243+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "108a10ba315ad4f8704f1c08863cbc8d106e2f4da944df95b10ec7227cba16fd",
+      "backend/main.py": "47d3e5b70243b66525b6dbdac3fc96b75736b0c835d17e20cb6fd4f68279f4ef",
       "backend/mcp_handlers.py": "89462f7e6bcd76b76a38bb7ea86b48658bcf23a1f0ac0a39f5f0dc12408b2331",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "be28f9524a02243b715c63b7518454645d39e2870599f42551b3deffc360d6c8",
@@ -197,6 +197,7 @@
       "backend/test_profile_keys.py": "a776bbbc105373adef264bcc3b98f9f9c4229c351d08afe6ee6566d55d063078",
       "backend/test_prompt_cache_manager.py": "5175cd41c43adcbda8a01c01a437b9bdc11e7e5d41beeb4fb7d5bde4962340bc",
       "backend/test_reasoning_capture.py": "2ce1d79452777dc2f2695913a1315cc61309eed8dbb1ec378dcddeb88d4b0c67",
+      "backend/test_reasoning_surfaced.py": "a4cf0e7c37297ed79c02144dbba07270cedb82ad8156c8bf18d19cdb4ee8f870",
       "backend/test_recovery_flows.py": "5a70064fc8cd4b22cda4ac4b5020df784a07f5c5e4c84841f9f2f6320db012e4",
       "backend/test_recovery_ui_contract.py": "7cb35647f42c035e0cbe974519903b8dac21ac31bb2ddb7ff74a97f96bff719f",
       "backend/test_relay.py": "31a7c98549596781cf3438fdadc661d5b9b34d9b8aafc4b5dd12b21704851d23",
@@ -245,7 +246,7 @@
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
       "frontend/js/auth.js": "caa3f9f2e8cb49f19cae72a6693638b77a8d510da5bd6917ec5f0333e2d45469",
       "frontend/js/boot-status.js": "1a2cd307c4e91e0f900889f614acbaa0e771328efa052d68a57c467353e4c117",
-      "frontend/js/chat.js": "4ccc6701163b78ed4c0797691a30a01f68d30cf6f004646c793d4dfe690a58f0",
+      "frontend/js/chat.js": "996c781a6843ad1c3e601657e37707a68a2d5151c4bbb6182054cceb28e413ec",
       "frontend/js/comfyui-wizard.js": "b382ec01d4f3fe8f5e9c7a11c89c23e8d399f8da5dcbcf8881f4f4c8e204a736",
       "frontend/js/command-palette.js": "900fc76669700b6b074da4aa9452160fecf020d25c9cd7e1adbda4b28d355547",
       "frontend/js/data-export.js": "ab84065e9d817757b9f32ccda80ec35fdff34c60f63fbdb521025dce3b2c1aa9",
@@ -278,5 +279,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "hxNccEZHkqxsQGYLCGIo3PHhf8+AVUMk8oynLE+cZvuzcLGlGQgh+fwdxYUundhf+YpamMYGitescfmKyingCQ=="
+  "signature_b64": "HSQCzNBbTQJlYLwUCi9aBzI8BY0nV34QwlWpQj8Om9kdLi2KxQXWYSpYltYCWvtwXhsHwqf09bJdzBet1jVNDA=="
 }

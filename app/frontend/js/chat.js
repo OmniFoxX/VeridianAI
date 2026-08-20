@@ -423,6 +423,60 @@ function handleStreamToken(token) {
   scrollToBottom();
 }
 
+/**
+ * v2.15.2: the model's reasoning trace, in a collapsible panel under the answer.
+ *
+ * Reasoning models emit their thinking on a SEPARATE channel from the reply
+ * (Ollama's message.thinking, llama-server's reasoning_content). We were
+ * reading only the content channel, so on a thinking model the trace was
+ * generated, streamed to us, and dropped -- and when a model spent its whole
+ * budget thinking, the turn ended with no reply and no explanation.
+ *
+ * Collapsed by default: this is provenance, not conversation. Someone auditing
+ * a decision wants it; someone reading the chat does not.
+ *
+ * textContent, never innerHTML. The trace is model output, and model output is
+ * not trusted markup -- the reply bubble goes through renderMarkdown because a
+ * reply is meant to be formatted; a thinking trace is meant to be READ AS
+ * WRITTEN, and rendering it would be both wrong and an injection path.
+ *
+ * <details> rather than a hand-rolled toggle: native disclosure semantics,
+ * keyboard operable and announced correctly by screen readers for free.
+ */
+function attachReasoningPanel(target, reasoning) {
+  if (!target || !reasoning) return;
+  // Never double-attach (a reload or a second `done` for the same bubble).
+  const existing = target.querySelector(".reasoning-panel");
+  if (existing) existing.remove();
+
+  const box = document.createElement("details");
+  box.className = "reasoning-panel";
+  box.style.cssText =
+    "margin-top:8px;border:1px solid rgba(127,127,127,0.35);border-radius:6px;" +
+    "background:rgba(127,127,127,0.06);font-size:12px";
+
+  const head = document.createElement("summary");
+  const chars = String(reasoning.length).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  head.textContent = "Thinking — " + chars + " characters";
+  head.style.cssText =
+    "cursor:pointer;padding:5px 9px;opacity:0.75;user-select:none";
+  head.setAttribute(
+    "title",
+    "The model's internal reasoning for this reply. Not part of the answer.",
+  );
+  box.appendChild(head);
+
+  const body = document.createElement("pre");
+  body.className = "reasoning-body";
+  body.textContent = reasoning; // NOT innerHTML -- see the note above.
+  body.style.cssText =
+    "margin:0;padding:8px 10px;white-space:pre-wrap;word-break:break-word;" +
+    "max-height:340px;overflow:auto;opacity:0.85;font-size:12px;line-height:1.45";
+  box.appendChild(body);
+
+  target.appendChild(box);
+}
+
 function handleStreamDone(fullContent, meta) {
   streaming = false;
   const final = fullContent || streamText;
@@ -435,6 +489,13 @@ function handleStreamDone(fullContent, meta) {
     // v2.1.6: stash model + ts on the message object for archive
     if (meta && meta.model) last.model = meta.model;
     if (meta && meta.ts) last.ts = meta.ts;
+    // v2.15.2: keep the trace on the message object so it survives into the
+    // archive alongside model + ts. It also means this array carries it back
+    // to the server on the next turn -- harmless, because the server strips
+    // every key outside {role, content, images} before building a prompt
+    // (_sanitize_client_messages). The trace must never re-enter the model's
+    // context as if it were dialogue.
+    if (meta && meta.reasoning) last.reasoning = meta.reasoning;
   }
 
   // v2.1.6 diagnostic: visible in DevTools so we can trace whether
@@ -531,6 +592,11 @@ function handleStreamDone(fullContent, meta) {
         footer.appendChild(tstamp);
       }
       target.appendChild(footer);
+    }
+    // v2.15.2: after the footer, so the reading order is
+    // answer -> model/time -> (collapsed) reasoning.
+    if (meta && meta.reasoning) {
+      attachReasoningPanel(target, meta.reasoning);
     }
   }
 
@@ -964,6 +1030,15 @@ function appendMessage(msg, isStreaming = false) {
       footer.appendChild(tstamp);
     }
     wrap.appendChild(footer);
+  }
+
+  // v2.15.2: an archived or reloaded assistant message carries its reasoning
+  // trace the same way it carries model + ts. Rendered HERE as well as in
+  // handleStreamDone, or the panel would appear on the live turn and vanish on
+  // the next reload -- which is worse than not showing it at all, because it
+  // looks like the trace was lost rather than merely not re-rendered.
+  if (!isStreaming && msg.role === "assistant" && msg.reasoning) {
+    attachReasoningPanel(wrap, msg.reasoning);
   }
 
   container.appendChild(wrap);
