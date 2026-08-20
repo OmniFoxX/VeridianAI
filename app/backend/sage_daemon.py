@@ -613,17 +613,17 @@ def _atomic_write_json(path: Path, obj: Any) -> None:
 #
 # CORRECTION (same day): the first version of this comment justified that by
 # saying DIGEST_FILE and _CRAIID_TASK_FILE are "pipeline state, not user
-# content". That is true of _CRAIID_TASK_FILE. It is NOT true of DIGEST_FILE:
-# chain_digest.json carries recent_chrono -- 50 entries each with a ~59-char
-# `preview` of a memory entry -- plus a ~1200-char `summary`. That is derived
-# conversation content, and it is on disk in the clear, which is the same
-# finding as procedural.json one file over.
+# content". That is true of _CRAIID_TASK_FILE. It was NOT true of DIGEST_FILE:
+# chain_digest.json carries recent_chrono -- up to 50 entries each with a
+# 160-char `preview` of real message content -- plus a ~1200-char extractive
+# `summary` of the same. Derived, but derived FROM user text, which makes it
+# user content. It is now encrypted too.
 #
-# Left plaintext for now ONLY because encrypting it is a separate decision with
-# its own reader (handle_read_digest serves it to the UI), not because it is
-# safe. Recorded here rather than quietly fixed or quietly forgotten -- a
-# comment asserting the wrong classification is precisely how procedural.json
-# stayed plaintext for as long as it did.
+# So _atomic_write_json is left with exactly one caller, _CRAIID_TASK_FILE,
+# which really is pipeline state. Anything added here later that touches user
+# text wants _write_encrypted_json instead -- and if you are unsure which a
+# file is, open it and look, rather than reasoning from its name. Both of this
+# file's plaintext stores looked like infrastructure from the outside.
 #
 # Both call sites matter. The read would have failed closed on ciphertext and
 # quietly disabled consolidation ("read failed: ..."), which is the kind of
@@ -635,34 +635,55 @@ def _atomic_write_json(path: Path, obj: Any) -> None:
 # disagree about the namespace, the app and the daemon cannot read each other's
 # writes.
 # ---------------------------------------------------------------------------
-def _read_procedural_kb():
-    """Read the procedural store, encrypted or legacy plaintext. None on
-    failure -- callers must NOT treat that as 'empty and safe to rewrite'."""
-    # SYSTEM TIER: the procedural store is one install-wide singleton with no
-    # profile context, chain-witnessed alongside the audit chain. Matches
-    # procedural_memory.py; if the two disagree on namespace, the app and this
-    # daemon cannot read each other's writes.
+def _read_encrypted_json(path):
+    """Read a JSON store that may be ciphertext OR legacy plaintext.
+
+    Returns None on ANY failure. That is the important part of the contract:
+    None means "a file is there and I could not read it", never "it is empty".
+    A caller that rewrites the whole file must treat None as 'do nothing'.
+    """
+    # SYSTEM TIER: these stores are install-wide, written by background work
+    # with no signed-in user, alongside the audit chain. Matches
+    # procedural_memory.py -- if the two disagree on namespace, the app and
+    # this daemon cannot read each other's writes.
     try:
         import atrest as _atrest
-        with open(PROCEDURAL_FILE, "rb") as f:
-            kb = _atrest.load_json_auto(f.read())
-        return kb if isinstance(kb, dict) else None
+        with open(path, "rb") as f:
+            obj = _atrest.load_json_auto(f.read())
+        return obj if isinstance(obj, dict) else None
     except Exception:
         return None
 
 
-def _write_procedural_kb(kb) -> None:
-    """Atomically write the procedural store as ciphertext."""
-    # SYSTEM TIER: same classification as the reader above and as
-    # procedural_memory.py. Not a default -- this store has no profile context.
+def _write_encrypted_json(path, obj) -> None:
+    """Atomically write a JSON store as ciphertext."""
+    # SYSTEM TIER: same classification as the reader above. Not a default.
     import atrest as _atrest
-    PROCEDURAL_FILE.parent.mkdir(parents=True, exist_ok=True)
-    tmp = PROCEDURAL_FILE.with_suffix(PROCEDURAL_FILE.suffix + ".tmp")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
     with open(tmp, "wb") as f:
-        f.write(_atrest.dump_json_encrypted(kb))
+        f.write(_atrest.dump_json_encrypted(obj))
         f.flush()
         os.fsync(f.fileno())
-    os.replace(tmp, PROCEDURAL_FILE)
+    os.replace(tmp, path)
+
+
+def _read_procedural_kb():
+    """The procedural store: verbatim user_request / final_answer_preview."""
+    return _read_encrypted_json(PROCEDURAL_FILE)
+
+
+def _write_procedural_kb(kb) -> None:
+    return _write_encrypted_json(PROCEDURAL_FILE, kb)
+
+
+def _read_digest():
+    """The rolling chain digest: message previews + an extractive summary."""
+    return _read_encrypted_json(DIGEST_FILE)
+
+
+def _write_digest(digest) -> None:
+    return _write_encrypted_json(DIGEST_FILE, digest)
 
 
 def _log_mlm_training_row(action: str) -> None:
@@ -824,7 +845,11 @@ def _job_chain_digest() -> str:
                 for e in recent_chrono
             ],
         }
-        _atomic_write_json(DIGEST_FILE, digest)
+        # v2.15.2: encrypted. recent_chrono carries up to 50 x 160-char
+        # previews of real message content, and `summary` is an extractive
+        # digest of the same -- derived, but derived FROM user text, which
+        # makes it user content. It was plaintext until this change.
+        _write_digest(digest)
         _log_mlm_training_row("run_digest_now")
         return (f"digest written, {len(summary)} chars, "
                 f"{len(recent_chrono)} recent entries")
@@ -1675,12 +1700,15 @@ def handle_read_digest(req: Dict[str, Any]) -> Dict[str, Any]:
             "digest": None,
             "message": "no digest yet — run job or wait for first tick",
         }
-    try:
-        with open(DIGEST_FILE, "r", encoding="utf-8") as f:
-            digest = json.load(f)
-        return {"status": "success", "digest": digest}
-    except Exception as e:
-        return {"status": "error", "error": str(e)}
+    # v2.15.2: encrypted at rest. Reads either form, so a digest written
+    # before this change still opens.
+    digest = _read_digest()
+    if digest is None:
+        return {"status": "error",
+                "error": "digest present but unreadable (at-rest key "
+                         "mismatch?). It is a derived artifact -- deleting it "
+                         "lets the next tick regenerate one."}
+    return {"status": "success", "digest": digest}
 
 
 def handle_anomaly_status(req: Dict[str, Any]) -> Dict[str, Any]:

@@ -178,5 +178,62 @@ def migrate(dry_run=False):
     return 0
 
 
+def sweep_digest(dry_run=False):
+    """The rolling chain digest, sage_data/memory_log/chain_digest.json.
+
+    Same finding as procedural.json, one file over: recent_chrono holds up to
+    50 message previews (160 chars each) and `summary` is an extractive digest
+    of real conversation. It was plaintext. sage_daemon now writes it
+    encrypted.
+
+    REMOVED rather than encrypted, and that is the safer option here BECAUSE of
+    what this file is: a derived artifact, explicitly "safe to delete, fully
+    regenerable" in its own writer's docstring. Encrypting it would mean
+    round-tripping data that is about to be recomputed anyway; deleting it
+    takes the plaintext off disk NOW, and the next digest tick writes a fresh
+    encrypted one. Nothing is lost that is not reproduced from the chain.
+
+    (The procedural store is the opposite: irreplaceable, so it gets the
+    careful verified conversion above and is never deleted.)
+    """
+    from config import MEMORY_DIR
+    path = os.path.join(str(MEMORY_DIR), "chain_digest.json")
+    print("[migrate_procedural] digest:", path)
+
+    if not os.path.exists(path):
+        print("[migrate_procedural] no digest present -- nothing to do.")
+        return 0
+
+    raw = io.open(path, "rb").read()
+    if atrest.is_encrypted(raw):
+        print("[migrate_procedural] digest already encrypted -- nothing to do.")
+        return 0
+
+    print("[migrate_procedural] plaintext digest found, %d bytes" % len(raw))
+    if dry_run:
+        print("[migrate_procedural] --dry-run: would REMOVE it "
+              "(regenerates encrypted on the next digest tick).")
+        return 0
+
+    try:
+        os.unlink(path)
+    except Exception as e:
+        print("[migrate_procedural] could not remove digest (%s: %s). It will "
+              "be overwritten with ciphertext on the next tick regardless."
+              % (type(e).__name__, e))
+        return 10
+
+    print("[migrate_procedural] plaintext digest removed; the next tick will "
+          "write an encrypted one.")
+    return 0
+
+
 if __name__ == "__main__":
-    sys.exit(migrate(dry_run="--dry-run" in sys.argv))
+    _dry = "--dry-run" in sys.argv
+    _rc = migrate(dry_run=_dry)
+    # The digest sweep runs even if the procedural conversion reported nothing
+    # to do, but NOT if it failed -- a failure there means something is wrong
+    # with the key or the file, and that is not the moment to start deleting.
+    if _rc == 0:
+        _rc = sweep_digest(dry_run=_dry)
+    sys.exit(_rc)

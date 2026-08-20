@@ -300,10 +300,11 @@ ok("the generic plaintext writer still exists for genuine pipeline state",
 # a ~1200-char summary -- derived conversation content, in the clear. Pinning
 # it to the plaintext writer would have turned that mistake into a test that
 # BLOCKS the fix. Its status is tracked in the sage_daemon comment instead.
-ok("the digest's contents are documented as an open item, not as safe",
+ok("the digest's real contents are recorded, not guessed at from its name",
    "chain_digest.json carries recent_chrono" in _dsrc,
-   "a comment asserting the wrong tier is how procedural.json stayed "
-   "plaintext for as long as it did")
+   "this file was first classified 'pipeline state' without being opened. "
+   "Keeping the actual contents written down is what stops the next person "
+   "reasoning from the filename the way I did.")
 ok("no raw json.load of the procedural file remains",
    'open(PROCEDURAL_FILE, "r"' not in _dsrc)
 
@@ -327,6 +328,89 @@ ok("app and daemon both classify the store SYSTEM TIER",
    "SYSTEM TIER" in _psrc and "SYSTEM TIER" in _dsrc,
    "a namespace disagreement between the two processes would look like "
    "random corruption")
+
+
+# =============================================================================
+print("\n=== 8. The rolling digest, same finding one file over ===")
+# =============================================================================
+# chain_digest.json holds recent_chrono -- up to 50 entries each with a
+# 160-char `preview` of real message content -- plus a ~1200-char extractive
+# `summary`. Derived, but derived FROM user text. It was plaintext, and the
+# first version of this test file asserted it should STAY on the plaintext
+# writer, which would have turned a bad classification into a blocker.
+ok("the digest has an encrypted writer", "_write_digest" in _dsrc)
+ok("...and an auto-detecting reader", "_read_digest" in _dsrc)
+ok("the digest job writes through it",
+   "_write_digest(digest)" in _dsrc and
+   "_atomic_write_json(DIGEST_FILE" not in _dsrc)
+ok("handle_read_digest no longer does a raw json.load",
+   'open(DIGEST_FILE, "r"' not in _dsrc)
+ok("an unreadable digest is reported, not served as empty",
+   "digest present but unreadable" in _dsrc)
+
+# _atomic_write_json should now have exactly ONE caller left, and it should be
+# the file that genuinely is pipeline state.
+_plain_callers = [l.strip() for l in _dsrc.splitlines()
+                  if "_atomic_write_json(" in l and "def " not in l]
+ok("the plaintext writer has exactly one caller left",
+   len(_plain_callers) == 1, _plain_callers)
+ok("...and it is the CRAIID task file",
+   _plain_callers and "_CRAIID_TASK_FILE" in _plain_callers[0], _plain_callers)
+
+ok("both stores share one reader/writer pair",
+   "_read_encrypted_json" in _dsrc and "_write_encrypted_json" in _dsrc,
+   "two near-identical pairs is how they drift apart")
+
+
+# =============================================================================
+print("\n=== 9. A READABLE export can still decrypt system-tier files ===")
+# =============================================================================
+# This is the escape hatch the whole HIPAA posture rests on: everything is
+# encrypted E2E, and a readable export decrypts it when the user needs plain
+# files. data_export calls atrest.read_file_auto(f, ns=ns) with the PROFILE
+# namespace -- but the procedural store and the digest are written at SYSTEM
+# TIER. If the profile key were the only one tried, tonight's change would have
+# quietly turned those folders into unreadable ciphertext inside a "readable"
+# export, and the failure would only show up when someone actually needed one.
+_d5 = _fresh("export")
+_pm6 = ProceduralMemory(storage_dir=_d5)
+_pm6.add_procedure(SECRET_KEY, {"user_request": SECRET_REQ})
+
+_NS = "test-profile-ns"
+try:
+    import os as _os
+    _dek = _os.urandom(32)
+    atrest.register_profile_key(_NS, _dek)
+    _registered = atrest.has_profile_key(_NS)
+except Exception as _e:
+    _registered = False
+    print("          (profile key registration unavailable: %s)" % _e)
+
+ok("a profile key can be registered for the test", _registered)
+if _registered:
+    # Exactly what data_export does in readable mode.
+    _plain = atrest.read_file_auto(_store_path(_d5), ns=_NS)
+    ok("a system-tier file opens when read with a PROFILE ns",
+       SECRET_REQ.encode() in _plain,
+       "decrypt_bytes tries the profile key, then falls back to the system "
+       "key -- that fallback is what keeps readable exports working")
+    _round = json.loads(_plain.decode("utf-8"))
+    ok("...and parses back to the real structure",
+       _round.get("successful", {}).get(SECRET_KEY, {}).get("value")
+       == {"user_request": SECRET_REQ})
+    try:
+        atrest.forget_profile_key(_NS)
+    except Exception:
+        pass
+
+_esrc = io.open(os.path.join(_HERE, "data_export.py"), encoding="utf-8").read()
+ok("readable export decrypts rather than copying blobs",
+   "read_file_auto" in _esrc)
+ok("readable mode is a distinct, named mode", "MODE_READABLE" in _esrc)
+ok("the procedural folder is actually included in exports",
+   "PROCEDURAL_DIR" in _esrc,
+   "encrypting a folder nobody exports would just be data loss with extra "
+   "steps")
 
 
 shutil.rmtree(_TMP, ignore_errors=True)
