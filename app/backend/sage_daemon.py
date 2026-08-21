@@ -344,6 +344,25 @@ def handle_status(req: Dict[str, Any]) -> Dict[str, Any]:
             "cadence_consolidate_sec": _CADENCE_CONSOLIDATE,
             "cadence_digest_sec":      _CADENCE_DIGEST,
             "cadence_verify_sec":      _CADENCE_VERIFY,
+            # v2.15.2 liveness. Everything above reports what the worker LAST
+            # DID, which is exactly the shape of information that cannot tell
+            # you it has stopped -- a worker dead for 12 hours still has a
+            # perfectly good last_digest_msg. These three say whether it is
+            # still running RIGHT NOW.
+            "worker_heartbeat_ts":   tick_snap.get("worker_heartbeat_ts"),
+            "worker_heartbeat_age_sec": (
+                round(TimeManager.epoch()
+                      - tick_snap["worker_heartbeat_ts"], 1)
+                if tick_snap.get("worker_heartbeat_ts") else None),
+            # The loop sleeps 30s, so anything past ~90s is two missed passes
+            # and not a scheduling wobble. None = has not run its first pass
+            # yet (there is a 15s startup grace), which is not a fault.
+            "worker_healthy": (
+                None if not tick_snap.get("worker_heartbeat_ts")
+                else (TimeManager.epoch()
+                      - tick_snap["worker_heartbeat_ts"]) < 90),
+            "worker_restarts":    tick_snap.get("worker_restarts", 0),
+            "worker_last_death":  tick_snap.get("worker_last_death"),
         },
     }
 
@@ -590,6 +609,10 @@ _tick_state: Dict[str, Any] = {
     "llama_last_ts":          None,    # epoch of last llama log parse
     "craiid_task_emitted":    False,   # True after task written to disk
     "craiid_task_emitted_ts": None,    # epoch of last task emit
+    # v2.15.2 worker liveness. See _periodic_worker and handle_status.
+    "worker_heartbeat_ts":    None,    # epoch, bumped EVERY loop pass
+    "worker_restarts":        0,       # times the supervisor revived it
+    "worker_last_death":      None,    # human-readable cause of the last death
 }
 _tick_lock = threading.Lock()
 
@@ -946,7 +969,20 @@ def _periodic_worker() -> None:
     global _last_journalist  # #69 Journalist janitor: low-cadence bloat control
     while not _shutdown_event.is_set():
         now = time.time()
+        # v2.15.2: heartbeat FIRST, every pass, before any job can throw.
+        #
+        # On 2026-08-20 this thread ran one consolidate at 06:56:28 and then
+        # stopped for 12.5 hours. The daemon stayed up, kept its socket, kept
+        # answering `status` -- and CRAIID's digest, verify, ops, fatigue and
+        # context-fill jobs were all simply not running. Nothing said so.
+        # It surfaced only because someone looked at log timestamps.
+        #
+        # The staleness canary below cannot catch that: it runs INSIDE this
+        # loop, so a dead worker takes its own watchdog with it. A heartbeat
+        # written here is observable from OUTSIDE the thread -- by handle_status
+        # and by the supervisor in run_server -- which is the whole point.
         with _tick_lock:
+            _tick_state["worker_heartbeat_ts"] = now
             last_c = _tick_state["last_consolidate_ts"] or 0
             last_d = _tick_state["last_digest_ts"] or 0
             last_v = _tick_state["last_verify_ts"] or 0
@@ -1031,6 +1067,29 @@ def _periodic_worker() -> None:
                 logger.info(f"[journalist] {_job_journalist()}")
         except Exception as e:
             logger.exception(f"Periodic tick crashed: {e}")
+        except BaseException as e:
+            # v2.15.2: `except Exception` does not catch BaseException --
+            # MemoryError, SystemExit, KeyboardInterrupt, or anything a C
+            # extension raises outside the Exception hierarchy. One of those
+            # escaping here ends the thread, and a Python thread that dies
+            # from an unhandled BaseException writes to STDERR, which for a
+            # windowless child process goes nowhere at all. That is the
+            # difference between "the log records a crash" and "the log simply
+            # stops", and on 2026-08-20 what we got was the second one.
+            #
+            # Recorded and re-raised rather than swallowed: these are not
+            # conditions to keep looping through, but they must not vanish.
+            # The supervisor in run_server sees the thread die and restarts it.
+            try:
+                with _tick_lock:
+                    _tick_state["worker_last_death"] = (
+                        f"{type(e).__name__}: {e}")
+                logger.critical(
+                    f"Periodic worker hit a BaseException and is exiting: "
+                    f"{type(e).__name__}: {e}", exc_info=True)
+            except BaseException:
+                pass          # never let the reporting path mask the cause
+            raise
 
         # Wait up to 30s, breaking early on shutdown
         _shutdown_event.wait(timeout=30)
@@ -1841,12 +1900,7 @@ def run_server() -> None:
     # v2.1.5: spin up the periodic worker thread BEFORE we bind, so the
     # first tick fires while clients are warming up rather than blocking
     # them. Daemon thread => exits cleanly with the process.
-    worker = threading.Thread(
-        target=_periodic_worker,
-        name="sage_daemon_periodic_worker",
-        daemon=True,
-    )
-    worker.start()
+    worker = _spawn_periodic_worker()
 
     # Handoff hardening (#69 / F6+F3): if the overseer rotated us in after a
     # fatigue handoff, a SIGNED warm-context file is waiting in sage_data.
@@ -1902,6 +1956,29 @@ def run_server() -> None:
         logger.info("Ready to accept requests.")
 
         while not _shutdown_event.is_set():
+            # v2.15.2 worker supervision. This loop already wakes once a second
+            # for the shutdown check, so watching the worker costs nothing.
+            #
+            # Why it is needed: on 2026-08-20 the worker stopped after a single
+            # tick and the daemon carried on for 12.5 hours -- socket up,
+            # `status` answering, every CRAIID job silently not running. The
+            # daemon looked healthy from every angle except the one nobody was
+            # checking. A background thread dying should not be survivable in
+            # silence.
+            try:
+                if worker is not None and not worker.is_alive():
+                    with _tick_lock:
+                        _tick_state["worker_restarts"] += 1
+                        _n = _tick_state["worker_restarts"]
+                        _why = _tick_state.get("worker_last_death") or "unknown"
+                    logger.critical(
+                        f"Periodic worker thread is DEAD (cause: {_why}); "
+                        f"restarting it (restart #{_n}). Jobs did not run "
+                        f"while it was down.")
+                    worker = _spawn_periodic_worker()
+            except Exception:
+                logger.exception("Worker supervision check failed")
+
             try:
                 conn, addr = server_sock.accept()
             except socket.timeout:
@@ -1924,6 +2001,17 @@ def run_server() -> None:
 def _signal_handler(signum, frame):
     logger.info(f"Received signal {signum}, shutting down...")
     _shutdown_event.set()
+
+
+def _spawn_periodic_worker() -> threading.Thread:
+    """Start the periodic worker. Daemon thread -> exits with the process."""
+    t = threading.Thread(
+        target=_periodic_worker,
+        name="sage_daemon_periodic_worker",
+        daemon=True,
+    )
+    t.start()
+    return t
 
 
 if __name__ == "__main__":

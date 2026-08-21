@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "c48f39ea3f8247c1a494a6d95abd28ea",
-    "built_utc": "2026-08-20T14:14:11.233282+00:00",
+    "build_id": "4bfd405ed5914b39b940a9cc57a36958",
+    "built_utc": "2026-08-21T02:44:38.226406+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -135,7 +135,7 @@
       "backend/relay_client.py": "c49e861553ea1c6928187681211e2166ccd80167e840197becec3772e26484df",
       "backend/relay_core.py": "ebbe4277ba561f1cd6aaa66a2794c0fe72c0c88a12e2c8b36c6a697bf4ac34a2",
       "backend/request_scheduler.py": "f662779a754097c4619a214bf8d53b8ca7ad1e336f31e6dde4c9d11c5dee3e8a",
-      "backend/sage_daemon.py": "4beaee30d269d45010940cb90c37f92e0c43162b3ee439de3d28856ea13e9bdf",
+      "backend/sage_daemon.py": "7a4c19521a4b540889a95b3447564411a68b4962fbe001523ef862c66fa8ae71",
       "backend/sage_daemon_client.py": "fed83c0f91c813eddc29e705e7b555b1ab6e66d9ef791ea5c7d899c7c04e34bc",
       "backend/sage_engine.py": "019da3307a86c093504ec9ae4b6b6370e18f5c4d6ec76f46736d3ee8206cb0c7",
       "backend/sage_messaging_adapter.py": "339761c5f2e3c78bd3c5c8b9f3bf79c6789633fdf463aabbbf3a22d8c4b64617",
@@ -220,6 +220,7 @@
       "backend/test_token_wraps.py": "c2eb230a33180c45d8023c70948a2c40310a76540563e120d5da24f5854f2f9c",
       "backend/test_ui_prefs_scope.py": "55984ae5ded9f05eb9dcc5ff6dfd3a286b725147935e428ab73496efb888a4d7",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
+      "backend/test_worker_liveness.py": "38bde85c4315909fdb8f240109e7181e8bc55c014d6c127ea9c489e34018bee9",
       "backend/tier_launcher.py": "4dca24e06ecb959ac6637217b1b5c78fd0d963bf535fa4a4a478884027bca518",
       "backend/tier_lifecycle.py": "6b05cdafe12e5905903579ee476d96dedfc273252330264ccd9d651f0aa2f605",
       "backend/time_manager.py": "63427359d362e8f09e78deab5db4c9bd9629e48f29c6efbf3dd7b38e490dda6f",
@@ -240,7 +241,7 @@
       "frontend/css/hljs-github-dark-dimmed.css": "be946d7e2d8cdba5bf372e7fb5afaae10f29cec94e236f0ee04589737db5769d",
       "frontend/css/hljs-github.css": "5b43bc87ce2ed16fa3fc245b45428cb5951da801642644254674f141bfcddd1d",
       "frontend/css/styles.css": "015e7413d40c59a7d6ea077e22f6d0dc3ac9768b25e2b1960ee2160b7f130d9f",
-      "frontend/index.html": "9c44fac923bbe9703df19ff475afb6c67b7139193db92a168cafd0149ad3f027",
+      "frontend/index.html": "a8b6ea3b08246a7a03f8ffbb402854579893a766e903679e0dec3e9507a3bb71",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/api-key.js": "b898dc5a3a28eceb8ee3bf7a1453e146613912866e4c9029d4ebfff5d1b5bbbc",
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
@@ -279,5 +280,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "QFnMYsK+/5JlqXUTKyI9DgniAsH+kcRGOdTUbVSplywPc9OeyZA9tKClPH3tNhg0zYPqJW+u+koL/52fKNhCDw=="
+  "signature_b64": "p038VHUeKnYBqIawcjlDmeWTVA8bceVUsV7xfO+i2dxXyp+4vV/J+YpqAoif0NnQChmuGOh1lkW0IaXPh7a9AQ=="
 }

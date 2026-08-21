@@ -353,16 +353,16 @@
             <label
               class="setting-label"
               data-tip="Auto-Re-Prompt: how many times to auto-send the continue message before stopping (your infinite-loop guard). Only used when the Auto-Re-Prompt toggle is on."
-              >Auto-Continue Max</label
+              >Auto-Re-Prompt Max</label
             >
             <input
-              aria-label="Auto-Continue Max"
+              aria-label="Auto-Re-Prompt Max"
               class="setting-input"
               id="setting-auto-reprompt-max"
               max="50"
               min="1"
               step="1"
-              data-tip="Maximum automatic continue messages per chain."
+              data-tip="Maximum automatic reply messages per chain."
               type="number"
               value="3"
               aria-describedby="setting-auto-reprompt-max-hint"
@@ -375,10 +375,10 @@
             <label
               class="setting-label"
               data-tip="The exact message Auto-Re-Prompt sends to continue a task or debate."
-              >Auto-Continue Text</label
+              >Auto-Re-Prompt Text</label
             >
             <input
-              aria-label="Auto-Continue Text"
+              aria-label="Auto-Re-Prompt Text"
               class="setting-input"
               id="setting-auto-reprompt-text"
               data-tip="Sent automatically when Auto-Re-Prompt continues a task."
@@ -638,7 +638,7 @@
                   aria-labelledby="auto-reprompt-label"
                   id="toggle-auto-reprompt"
                   role="switch"
-                  data-tip="When ON, VeridianAI auto-sends a continue message after each reply, up to the Auto-Continue Max."
+                  data-tip="When ON, VeridianAI auto-sends a continue message after each reply, up to the Auto-Re-Prompt Max."
                   type="checkbox"
                 />
                 <span class="toggle-track"></span>
