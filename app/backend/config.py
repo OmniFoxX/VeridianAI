@@ -211,6 +211,45 @@ DAEMON_CTX_DEFAULT = int(os.environ.get("DAEMON_CTX_SIZE", 4096))
 # A larger value would allocate KV cache this tier never uses.
 EMBED_CTX_DEFAULT  = int(os.environ.get("EMBED_CTX_SIZE",  2048))
 
+# --- Reasoning budget (v2.15.2) --------------------------------------------
+# A thinking model emits its reasoning on a separate channel from its reply.
+# With no ceiling it can spend an entire generation budget in that channel and
+# produce ZERO answer tokens -- the turn ends, the user gets nothing, and
+# nothing explains why. That happened four times in a row on 2026-08-17.
+#
+# llama-server's own controls, verified against the shipped binary rather than
+# assumed (llama-server.exe --help, build 8639):
+#
+#   --reasoning-budget N          -1 unrestricted (its default), 0 end thinking
+#                                 immediately, N>0 a token budget
+#   --reasoning-budget-message M  injected before the end-of-thinking tag when
+#                                 the budget runs out
+#
+# The message matters as much as the number: without it the model is cut off
+# mid-thought and may never produce a reply at all, which is the failure we are
+# trying to remove rather than relocate. With it, the model is TOLD to wrap up
+# and gets the chance to answer.
+#
+# TIERED BY SERVER TIER, because the tiers have genuinely different jobs and
+# build_llama_server_command already branches on exactly this:
+#   sage   -- the user's conversation. Someone is waiting, but a hard question
+#             deserves real room. Generous ceiling.
+#   daemon -- background CRAIID work. Nobody is watching a cursor blink, and
+#             unbounded thinking here burns GPU that the conversation wants.
+#   embed  -- no chat surface at all; the flag would be meaningless.
+#
+# -1 restores llama.cpp's unrestricted default. That is a supported choice, not
+# a broken one -- see build_llama_server_command, which warns when it is used
+# so an unlimited setting cannot sit forgotten in a config file.
+REASONING_BUDGET_SAGE = int(os.environ.get(
+    "SAGE_REASONING_BUDGET",   8192))
+REASONING_BUDGET_DAEMON = int(os.environ.get(
+    "DAEMON_REASONING_BUDGET", 2048))
+REASONING_BUDGET_MESSAGE = os.environ.get(
+    "REASONING_BUDGET_MESSAGE",
+    "You have reached your thinking budget. Stop reasoning now and give your "
+    "best answer with what you have.")
+
 
 
 def compute_sage_ctx(global_n_ctx=None):
@@ -236,11 +275,16 @@ def compute_daemon_ctx(global_n_ctx=None):
 # start.bat (via a Python one-liner in Step 3) and the FastAPI tier restart
 # endpoints (Step 4). Returns a list suitable for subprocess.Popen().
 
-def build_llama_server_command(tier, ctx_size=None):
+def build_llama_server_command(tier, ctx_size=None, reasoning_budget=None):
     """Build argv for spawning a llama-server for a given tier.
 
     tier:     "sage" or "daemon"
     ctx_size: override context size; if None, uses the tier's current default
+    reasoning_budget: v2.15.2 thinking-token ceiling for this spawn. None uses
+              the tier default; -1 is unrestricted (llama.cpp's own default).
+              Per-SPAWN rather than per-request because --reasoning-budget is a
+              server flag: changing it takes effect when the tier restarts, and
+              the caller is told so rather than left to wonder.
 
     Returns a list of strings, ready for subprocess.Popen(..., shell=False).
     """
@@ -249,14 +293,19 @@ def build_llama_server_command(tier, ctx_size=None):
         model = MODEL_SAGE
         port  = PORT_LLAMA_SAGE
         ctx   = ctx_size if ctx_size is not None else SAGE_CTX_DEFAULT
+        budget = (reasoning_budget if reasoning_budget is not None
+                  else REASONING_BUDGET_SAGE)
     elif tier == "daemon":
         model = MODEL_DAEMON
         port  = PORT_LLAMA_DAEMON
         ctx   = ctx_size if ctx_size is not None else DAEMON_CTX_DEFAULT
+        budget = (reasoning_budget if reasoning_budget is not None
+                  else REASONING_BUDGET_DAEMON)
     elif tier == "embed":
         model = MODEL_EMBED
         port  = PORT_LLAMA_EMBED
         ctx   = ctx_size if ctx_size is not None else EMBED_CTX_DEFAULT
+        budget = None          # no chat surface; the flag is meaningless here
     else:
         raise ValueError(
             f"Unknown tier: {tier!r}. Expected 'sage', 'daemon' or 'embed'.")
@@ -285,6 +334,38 @@ def build_llama_server_command(tier, ctx_size=None):
         "-ngl",       "0",
         "--metrics",
     ]
+    # v2.15.2 thinking ceiling. Chat tiers only -- the embed tier has no chat
+    # surface, so the flag would be inert noise on its command line.
+    if budget is not None:
+        try:
+            budget = int(budget)
+        except (TypeError, ValueError):
+            print(f"[config] reasoning_budget {budget!r} is not an integer; "
+                  f"falling back to unrestricted (-1) for tier {tier!r}.")
+            budget = -1
+        if budget < -1:
+            print(f"[config] reasoning_budget {budget} is below -1, which "
+                  f"llama-server does not define; treating as unrestricted.")
+            budget = -1
+        argv += ["--reasoning-budget", str(budget)]
+        if budget > 0:
+            # Only meaningful WITH a finite budget: it is the text injected
+            # before the end-of-thinking tag when the budget runs out. Without
+            # it the model is simply cut off, which can end a turn with no
+            # answer at all -- relocating the bug rather than fixing it.
+            argv += ["--reasoning-budget-message", REASONING_BUDGET_MESSAGE]
+        elif budget == -1:
+            # Supported, but it is the setting that produced four consecutive
+            # no-answer turns on 2026-08-17. Say so at spawn, every time, so an
+            # unlimited value cannot sit forgotten in a config file and later
+            # look like a model defect.
+            print(f"[config] WARNING: tier {tier!r} is spawning with an "
+                  f"UNLIMITED thinking budget (--reasoning-budget -1). A "
+                  f"reasoning model can spend its entire generation budget "
+                  f"thinking and return no answer. Set "
+                  f"{'SAGE' if tier == 'sage' else 'DAEMON'}_REASONING_BUDGET "
+                  f"to a positive number to bound it.")
+
     if tier == "embed":
         # Embedding models vary widely in trained context (nomic v1.5: 2048,
         # v2-moe: 512). Ask the file rather than trusting one default.

@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "4bfd405ed5914b39b940a9cc57a36958",
-    "built_utc": "2026-08-21T02:44:38.226406+00:00",
+    "build_id": "1a8d694818dd460e9af08f7aceddf852",
+    "built_utc": "2026-08-21T03:09:00.899954+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -63,7 +63,7 @@
       "backend/comfyui_launcher.py": "2b88eed27670240998bdbe874a3272f4740f3f0c7c3965edc16993237d4bbf84",
       "backend/comfyui_models.py": "fe7ea01eb2ae95d8de784e86cba83d7377f457257f7612a2ee38af050912a74c",
       "backend/comfyui_setup.py": "b7dbdbd4d6b9df13588fc606358478f935baf68cbb7ca0afb3f26a478ae389bf",
-      "backend/config.py": "fcac736155d2456ee2d3e1ffdf06993a91e5ea510f654fe4199ea2ba8d773615",
+      "backend/config.py": "cc7e980d10c808747e119c804b30a8969b5e4b149fdd94dfbcc571a5b454db2e",
       "backend/config_store.py": "2f8db57a28360bd9acbd1bdcdb7b161e54760ad98d620b74d8c847820efe2cd8",
       "backend/context_fatigue_detector.py": "81f3d6495de2a367ccc3cac25c9380b7329f247aa13a527462aac38312765cd8",
       "backend/coordinator_signal.py": "397941401b0ebb76f405da832de661b83035057beada28e691a460361f2a6384",
@@ -196,6 +196,7 @@
       "backend/test_profile_key_residency.py": "e871e164c38b3c75810db1a5bddced046f906d5f301b4e64965331206a2e3238",
       "backend/test_profile_keys.py": "a776bbbc105373adef264bcc3b98f9f9c4229c351d08afe6ee6566d55d063078",
       "backend/test_prompt_cache_manager.py": "5175cd41c43adcbda8a01c01a437b9bdc11e7e5d41beeb4fb7d5bde4962340bc",
+      "backend/test_reasoning_budget.py": "a12394f9f0f1063fcae8d211e5f1b3f735b2ff28d9480f68422ec7a135ccc6ec",
       "backend/test_reasoning_capture.py": "2ce1d79452777dc2f2695913a1315cc61309eed8dbb1ec378dcddeb88d4b0c67",
       "backend/test_reasoning_surfaced.py": "a4cf0e7c37297ed79c02144dbba07270cedb82ad8156c8bf18d19cdb4ee8f870",
       "backend/test_recovery_flows.py": "5a70064fc8cd4b22cda4ac4b5020df784a07f5c5e4c84841f9f2f6320db012e4",
@@ -280,5 +281,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "p038VHUeKnYBqIawcjlDmeWTVA8bceVUsV7xfO+i2dxXyp+4vV/J+YpqAoif0NnQChmuGOh1lkW0IaXPh7a9AQ=="
+  "signature_b64": "XdAyNx+dsUtpFcLTXoLZK1nRxQdYZcI/CPk0a5QEtTh8c8W087ushi3cZgREU6ySj6bEbI8xJ2SSCAl9C/LkCw=="
 }
