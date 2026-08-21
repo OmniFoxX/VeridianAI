@@ -275,6 +275,70 @@ def compute_daemon_ctx(global_n_ctx=None):
 # start.bat (via a Python one-liner in Step 3) and the FastAPI tier restart
 # endpoints (Step 4). Returns a list suitable for subprocess.Popen().
 
+def reasoning_args(tier, budget=None):
+    """The --reasoning-budget argv fragment for a tier. [] when not applicable.
+
+    SINGLE SOURCE, because there are TWO places that spawn a llama-server and
+    they had already drifted apart:
+
+      * tier_launcher.py builds argv inline and is what start.bat and
+        store_launch.py run AT BOOT -- so it spawns the servers you are
+        actually talking to.
+      * build_llama_server_command below is used by tier_lifecycle when a ctx
+        change forces a respawn.
+
+    The first version of the thinking budget went only into the second one.
+    Every flag was correct and no tier ever received it, because a booted
+    install never takes that path -- the same "right code, wrong coverage"
+    shape as the reasoning hook that sat on the streaming path while every
+    agentic turn went around it.
+
+    So both callers now ask this function, and test_reasoning_budget asserts
+    they emit identical flags. That does not merge the two argv builders --
+    they still disagree about --metrics and about ctx defaults, which is worth
+    fixing on its own terms -- but it stops THIS pair from drifting again.
+
+    tier:   "sage" / "daemon" / "embed" (case-insensitive)
+    budget: explicit override; None uses the tier default.
+    """
+    tier = str(tier).lower().strip()
+    if tier == "embed":
+        return []                       # no chat surface; the flag is inert
+    if budget is None:
+        budget = (REASONING_BUDGET_DAEMON if tier == "daemon"
+                  else REASONING_BUDGET_SAGE)
+    try:
+        budget = int(budget)
+    except (TypeError, ValueError):
+        print(f"[config] reasoning_budget {budget!r} is not an integer; "
+              f"falling back to unrestricted (-1) for tier {tier!r}.")
+        budget = -1
+    if budget < -1:
+        print(f"[config] reasoning_budget {budget} is below -1, which "
+              f"llama-server does not define; treating as unrestricted.")
+        budget = -1
+
+    out = ["--reasoning-budget", str(budget)]
+    if budget > 0:
+        # Only meaningful WITH a finite budget: it is the text injected before
+        # the end-of-thinking tag when the budget runs out. Without it the
+        # model is simply cut off, which can end a turn with no answer at all
+        # -- relocating the bug rather than fixing it.
+        out += ["--reasoning-budget-message", REASONING_BUDGET_MESSAGE]
+    elif budget == -1:
+        # Supported, but it is the setting that produced four consecutive
+        # no-answer turns on 2026-08-17. Say so at spawn, every time, so an
+        # unlimited value cannot sit forgotten in a config file and later look
+        # like a model defect.
+        print(f"[config] WARNING: tier {tier!r} is spawning with an UNLIMITED "
+              f"thinking budget (--reasoning-budget -1). A reasoning model can "
+              f"spend its entire generation budget thinking and return no "
+              f"answer. Set "
+              f"{'DAEMON' if tier == 'daemon' else 'SAGE'}_REASONING_BUDGET "
+              f"to a positive number to bound it.")
+    return out
+
+
 def build_llama_server_command(tier, ctx_size=None, reasoning_budget=None):
     """Build argv for spawning a llama-server for a given tier.
 
@@ -336,35 +400,7 @@ def build_llama_server_command(tier, ctx_size=None, reasoning_budget=None):
     ]
     # v2.15.2 thinking ceiling. Chat tiers only -- the embed tier has no chat
     # surface, so the flag would be inert noise on its command line.
-    if budget is not None:
-        try:
-            budget = int(budget)
-        except (TypeError, ValueError):
-            print(f"[config] reasoning_budget {budget!r} is not an integer; "
-                  f"falling back to unrestricted (-1) for tier {tier!r}.")
-            budget = -1
-        if budget < -1:
-            print(f"[config] reasoning_budget {budget} is below -1, which "
-                  f"llama-server does not define; treating as unrestricted.")
-            budget = -1
-        argv += ["--reasoning-budget", str(budget)]
-        if budget > 0:
-            # Only meaningful WITH a finite budget: it is the text injected
-            # before the end-of-thinking tag when the budget runs out. Without
-            # it the model is simply cut off, which can end a turn with no
-            # answer at all -- relocating the bug rather than fixing it.
-            argv += ["--reasoning-budget-message", REASONING_BUDGET_MESSAGE]
-        elif budget == -1:
-            # Supported, but it is the setting that produced four consecutive
-            # no-answer turns on 2026-08-17. Say so at spawn, every time, so an
-            # unlimited value cannot sit forgotten in a config file and later
-            # look like a model defect.
-            print(f"[config] WARNING: tier {tier!r} is spawning with an "
-                  f"UNLIMITED thinking budget (--reasoning-budget -1). A "
-                  f"reasoning model can spend its entire generation budget "
-                  f"thinking and return no answer. Set "
-                  f"{'SAGE' if tier == 'sage' else 'DAEMON'}_REASONING_BUDGET "
-                  f"to a positive number to bound it.")
+    argv += reasoning_args(tier, budget)
 
     if tier == "embed":
         # Embedding models vary widely in trained context (nomic v1.5: 2048,

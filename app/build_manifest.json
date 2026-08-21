@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "0665cab899d248f79708dd44fa9261bf",
-    "built_utc": "2026-08-21T04:16:38.916873+00:00",
+    "build_id": "405877b840094f94bff70911534f4588",
+    "built_utc": "2026-08-21T04:44:15.455798+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -63,7 +63,7 @@
       "backend/comfyui_launcher.py": "2b88eed27670240998bdbe874a3272f4740f3f0c7c3965edc16993237d4bbf84",
       "backend/comfyui_models.py": "fe7ea01eb2ae95d8de784e86cba83d7377f457257f7612a2ee38af050912a74c",
       "backend/comfyui_setup.py": "b7dbdbd4d6b9df13588fc606358478f935baf68cbb7ca0afb3f26a478ae389bf",
-      "backend/config.py": "cc7e980d10c808747e119c804b30a8969b5e4b149fdd94dfbcc571a5b454db2e",
+      "backend/config.py": "6199d4615db395398c7709891b8f649eb418465f32cf39da7830791e4b5e0d7a",
       "backend/config_store.py": "2f8db57a28360bd9acbd1bdcdb7b161e54760ad98d620b74d8c847820efe2cd8",
       "backend/context_fatigue_detector.py": "81f3d6495de2a367ccc3cac25c9380b7329f247aa13a527462aac38312765cd8",
       "backend/coordinator_signal.py": "397941401b0ebb76f405da832de661b83035057beada28e691a460361f2a6384",
@@ -198,7 +198,7 @@
       "backend/test_profile_key_residency.py": "e871e164c38b3c75810db1a5bddced046f906d5f301b4e64965331206a2e3238",
       "backend/test_profile_keys.py": "a776bbbc105373adef264bcc3b98f9f9c4229c351d08afe6ee6566d55d063078",
       "backend/test_prompt_cache_manager.py": "5175cd41c43adcbda8a01c01a437b9bdc11e7e5d41beeb4fb7d5bde4962340bc",
-      "backend/test_reasoning_budget.py": "a12394f9f0f1063fcae8d211e5f1b3f735b2ff28d9480f68422ec7a135ccc6ec",
+      "backend/test_reasoning_budget.py": "79967fa268b4f3b7300c1c15edfeb97dc476d39b08a05ff88371ddc2ee7697eb",
       "backend/test_reasoning_capture.py": "2ce1d79452777dc2f2695913a1315cc61309eed8dbb1ec378dcddeb88d4b0c67",
       "backend/test_reasoning_surfaced.py": "a4cf0e7c37297ed79c02144dbba07270cedb82ad8156c8bf18d19cdb4ee8f870",
       "backend/test_recovery_flows.py": "5a70064fc8cd4b22cda4ac4b5020df784a07f5c5e4c84841f9f2f6320db012e4",
@@ -224,7 +224,7 @@
       "backend/test_ui_prefs_scope.py": "55984ae5ded9f05eb9dcc5ff6dfd3a286b725147935e428ab73496efb888a4d7",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
       "backend/test_worker_liveness.py": "38bde85c4315909fdb8f240109e7181e8bc55c014d6c127ea9c489e34018bee9",
-      "backend/tier_launcher.py": "4dca24e06ecb959ac6637217b1b5c78fd0d963bf535fa4a4a478884027bca518",
+      "backend/tier_launcher.py": "8f8f8b6bd7b91d859198ccc36154eae233ae883341aaa81d47b5372e19823dae",
       "backend/tier_lifecycle.py": "6b05cdafe12e5905903579ee476d96dedfc273252330264ccd9d651f0aa2f605",
       "backend/time_manager.py": "63427359d362e8f09e78deab5db4c9bd9629e48f29c6efbf3dd7b38e490dda6f",
       "backend/train_plm_daemon_v2.py": "c6abb9bc4611a61641c00a13824328cbe52532d009e5de74b1639d473bd1141a",
@@ -283,5 +283,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "CEhtSHdAb195hEgLo120i7N9Y1LuKZD2XnxQFl5B17uG5CVS3vewrJMeBcMmYkeG+G0qwJvCJUgFvaAtTrNPCw=="
+  "signature_b64": "gumMmei8GCEf/PXVI3Pz06/ieBVISh95bGJgyLYo1+PZyKkXYPNYEUi26y2Ke46BiMGusZovNJkMqCVlyuKhDQ=="
 }

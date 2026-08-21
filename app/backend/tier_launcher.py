@@ -138,6 +138,32 @@ def _eos_args(model_path) -> list:
         return []
 
 
+def _reasoning_args(tier: str) -> list:
+    """llama-server argv fragment bounding how long a model may think.
+
+    v2.15.2. THIS is the spawner that matters: start.bat and store_launch.py
+    both run tier_launcher at boot, so these are the servers the user actually
+    talks to. config.build_llama_server_command is only reached when
+    tier_lifecycle respawns a tier after a ctx change.
+
+    The thinking budget originally went into that other builder alone. The
+    flags were right and no running tier ever got one, because a booted install
+    never takes that path -- the same "right code, wrong coverage" shape as the
+    reasoning hook that sat on the streaming path while every agentic turn went
+    around it. Both callers now share config.reasoning_args, and
+    test_reasoning_budget asserts the two emit identical flags.
+
+    Never fatal, exactly like _eos_args above: a tier that cannot compute a
+    budget should still start, unbounded, the way it did before this existed.
+    """
+    try:
+        from config import reasoning_args
+        return reasoning_args(tier)
+    except Exception as e:
+        print(f"[tier_launcher] reasoning budget skipped for {tier}: {e}")
+        return []
+
+
 def _spawn(title: str, argv: list, extra_env: dict = None):
     """Start one tier. Visible -> new console; hidden -> windowless + logged.
     v2.11.12: spawns the REAL argv in both modes (no `start` shell trick)
@@ -427,7 +453,8 @@ def main():
     if llama and sage_model:
         _spawn("Llama-Toga", [llama, "-m", sage_model, "--host", "127.0.0.1",
                               "--port", p_sage, "--ctx-size", sage_ctx, "-ngl", "0", "--metrics"]
-                             + _eos_args(sage_model))
+                             + _eos_args(sage_model)
+                             + _reasoning_args("sage"))
     else:
         print("[tier_launcher] Toga tier skipped (LLAMA_SERVER/SAGE_MODEL not set)")
 
@@ -435,7 +462,8 @@ def main():
     if daemon_present and llama and daemon_model:
         _spawn("Llama-Daemon", [llama, "-m", daemon_model, "--host", "127.0.0.1",
                                 "--port", p_daemon, "--ctx-size", daemon_ctx, "-ngl", "0"]
-                               + _eos_args(daemon_model))
+                               + _eos_args(daemon_model)
+                               + _reasoning_args("daemon"))
     else:
         print("[tier_launcher] Daemon tier skipped (no model)")
 

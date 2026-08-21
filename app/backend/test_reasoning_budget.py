@@ -204,6 +204,69 @@ else:
            "unknown to llama-server: %r" % (_unknown,))
 
 
+# =============================================================================
+print("\n=== 5. BOTH spawn paths carry it (the coverage bug) ===")
+# =============================================================================
+# The first version of this feature shipped correct flags that no running tier
+# ever received. There are TWO llama-server spawners:
+#
+#   tier_launcher.py  -- what start.bat and store_launch.py run AT BOOT. These
+#                        are the servers the user actually talks to.
+#   build_llama_server_command -- reached only when tier_lifecycle respawns a
+#                        tier after a ctx change.
+#
+# The budget went into the second one alone, so a booted install never saw it.
+# Same "right code, wrong coverage" shape as the reasoning hook that sat on the
+# streaming path while every agentic turn went around it, and as the at-rest
+# guard that could not see a module making no atrest calls.
+#
+# Checking "the flag is in build_llama_server_command" would not have caught
+# it -- the flag WAS there. What was wrong was the set of callers.
+_TL = os.path.join(_HERE, "tier_launcher.py")
+ok("tier_launcher.py is present", os.path.exists(_TL))
+if os.path.exists(_TL):
+    _tl = io.open(_TL, encoding="utf-8").read()
+    ok("the boot launcher has a reasoning-args helper",
+       "def _reasoning_args" in _tl)
+    ok("...which delegates to config, rather than re-deriving the flags",
+       "from config import reasoning_args" in _tl,
+       "a second copy of the logic is how these two drifted in the first place")
+    ok("...and is never fatal, like _eos_args beside it",
+       "reasoning budget skipped for" in _tl,
+       "a tier that cannot compute a budget must still start")
+    ok("the BOOT Toga spawn carries it", '_reasoning_args("sage")' in _tl)
+    ok("the BOOT Daemon spawn carries it", '_reasoning_args("daemon")' in _tl)
+
+    # Both spawns must be llama-server ones; the embed tier is excluded by
+    # reasoning_args itself, so it needs no call site.
+    ok("the embed spawn does NOT ask for a budget",
+       _tl.count("_reasoning_args(") == 3,   # def + sage + daemon
+       "found %d occurrences" % _tl.count("_reasoning_args("))
+
+# The parity assertion: the same tier must produce the same flags whichever
+# path spawns it. This is what stops the next divergence.
+for _tier in ("sage", "daemon"):
+    _from_builder = _argv(_tier)
+    _slice = [a for a in _from_builder
+              if a.startswith("--reasoning") or _from_builder[
+                  _from_builder.index(a) - 1].startswith("--reasoning")]
+    _direct = C.reasoning_args(_tier)
+    ok("%s: build_llama_server_command uses reasoning_args verbatim" % _tier,
+       all(x in _from_builder for x in _direct) and _direct,
+       "builder=%r direct=%r" % (_from_builder, _direct))
+    # And the order/pairing survives: flag then value, contiguous.
+    _i = _from_builder.index("--reasoning-budget")
+    ok("%s: the flag and its value stay adjacent" % _tier,
+       _from_builder[_i + 1] == _direct[1], _from_builder[_i:_i + 2])
+
+ok("the embed tier gets an empty fragment, not a flag",
+   C.reasoning_args("embed") == [])
+ok("tier matching is case-insensitive",
+   C.reasoning_args("DAEMON") == C.reasoning_args("daemon"))
+ok("an explicit override still wins through the shared helper",
+   C.reasoning_args("sage", 777)[1] == "777")
+
+
 _failed = [n for n, c in _results if not c]
 print("\n  %d/%d passed." % (len(_results) - len(_failed), len(_results)))
 if _failed:
