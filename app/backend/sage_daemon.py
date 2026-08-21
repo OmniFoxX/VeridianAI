@@ -96,6 +96,17 @@ from config import (
 
 DAEMON_LOG_FILE  = DAEMON_LOG
 MEMORY_LOG_DIR   = MEMORY_DIR
+# v2.15.2: the OWNER's procedural store, and only the owner's. Since the store
+# became per-profile, each profile has its own under users/<ns>/. This daemon
+# cannot consolidate those, and the reason is the encryption working correctly:
+# a profile's store is sealed with that profile's key, which is registered only
+# while that profile is unlocked. A background process has no business holding
+# it, and could not decrypt the file if it tried.
+#
+# Accepted trade rather than a gap: consolidation prunes stale dead-ends, and
+# the profile that benefits is the one actually in use -- which is the one
+# whose key is available. A locked profile's store simply stops growing while
+# nobody is using it.
 PROCEDURAL_FILE  = PROCEDURAL_DIR / "procedural.json"
 DIGEST_FILE      = MEMORY_DIR / "chain_digest.json"  # rolling summary
                                                       # (v2.1.5 Phase B3)
@@ -692,7 +703,14 @@ def _write_encrypted_json(path, obj) -> None:
 
 
 def _read_procedural_kb():
-    """The procedural store: verbatim user_request / final_answer_preview."""
+    """The OWNER's procedural store: verbatim user_request / answer previews.
+
+    v2.15.2: the keys line up, and that is not luck. ProceduralMemory encrypts
+    with ns=self.owner_ns, and the owner's owner_ns is None, which atrest
+    resolves to the system key -- the same key _read_encrypted_json uses here.
+    A PROFILE's store is sealed with that profile's key and is deliberately not
+    reachable from this process; see the PROCEDURAL_FILE note above.
+    """
     return _read_encrypted_json(PROCEDURAL_FILE)
 
 

@@ -7436,7 +7436,7 @@ async def ws_chat(websocket: WebSocket):
             # displaying procedural context).
             _proc_block = ""
             try:
-                kb = procedural.get_all()
+                kb = procedural_for(_ws_ns).get_all()
                 succ = kb.get("successful", {})
                 unsucc = kb.get("unsuccessful", {})
 
@@ -8004,7 +8004,7 @@ async def ws_chat(websocket: WebSocket):
                                     _turn_scoped_instr = (
                                         intent_scope
                                         .scoped_instruction_names(
-                                            procedural.get_all()))
+                                            procedural_for(_ws_ns).get_all()))
                                 _int_target, _int_content = "", ""
                                 if (action_type == "save_file"
                                         and isinstance(content, tuple)):
@@ -8584,7 +8584,7 @@ async def ws_chat(websocket: WebSocket):
                                             intent_scope.classify_scope(
                                                 p_desc,
                                                 user_request_text))
-                                        is_new = procedural.add_procedure(
+                                        is_new = procedural_for(_ws_ns).add_procedure(
                                             key=p_key,
                                             value=p_desc,
                                             success=True,
@@ -8597,7 +8597,7 @@ async def ws_chat(websocket: WebSocket):
                                             },
                                         )
                                         entry = (
-                                            procedural
+                                            procedural_for(_ws_ns)
                                             .get_procedure_with_metadata(
                                                 p_key, category="successful",
                                             )
@@ -8643,7 +8643,7 @@ async def ws_chat(websocket: WebSocket):
                                             "REMEMBER_FAIL failed: empty key."
                                         )
                                     else:
-                                        procedural.add_procedure(
+                                        procedural_for(_ws_ns).add_procedure(
                                             key=p_key,
                                             value=p_reason,
                                             success=False,
@@ -8692,7 +8692,7 @@ async def ws_chat(websocket: WebSocket):
                                 try:
                                     def _recall(query=q):
                                         hits = []
-                                        succ = procedural.get_all().get(
+                                        succ = procedural_for(_ws_ns).get_all().get(
                                             "successful", {})
                                         for k, entry in succ.items():
                                             val = str(
@@ -8970,7 +8970,7 @@ async def ws_chat(websocket: WebSocket):
                                             and _looks_like_failure(
                                                 str(result or ""))):
                                         auto_failed_keys.add(attempt_key)
-                                        procedural.add_procedure(
+                                        procedural_for(_ws_ns).add_procedure(
                                             key=attempt_key,
                                             value=(
                                                 f"Auto-captured after 3 "
@@ -9086,7 +9086,7 @@ async def ws_chat(websocket: WebSocket):
                                         "final_answer_preview":
                                             clean[:300],
                                     }
-                                    procedural.add_procedure(
+                                    procedural_for(_ws_ns).add_procedure(
                                         key=proc_key,
                                         value=proc_value,
                                         success=True,
@@ -9477,10 +9477,67 @@ imperium.attach_memory_logger(memory_logger)
 # Unsuccessful procedures are stored locally only (dead-end cache, no chain
 # noise). See procedural_memory.verify_procedure_provenance() for the
 # verification path.
-procedural = ProceduralMemory(
-    storage_dir=str(PROCEDURAL_DIR),
-    memory_logger=memory_logger,
-)
+def _procedural_dir(ns=None):
+    """Where one profile's procedural store lives.
+
+    v2.15.2. Derived from sage_engine's resolver, exactly as the evidence and
+    reasoning ledgers are, so a profile's store lands beside its chat memory
+    and moves with it if that layout ever changes. The owner keeps the existing
+    install-wide path, which is what makes this a no-op migration: the file
+    already on disk IS the owner's store.
+    """
+    try:
+        import sage_engine as _se
+        _root = _se.user_data_dir(ns)          # None for the owner
+        if _root:
+            return Path(_root) / "procedural_memory"
+    except Exception as _e:
+        print(f"[PROCEDURAL] per-profile path unavailable for ns={ns!r}: {_e}")
+    return Path(PROCEDURAL_DIR)
+
+
+_PROCEDURAL_BY_NS: Dict[str, "ProceduralMemory"] = {}
+_PROCEDURAL_LOCK = threading.Lock()
+
+
+def procedural_for(ns=None):
+    """The procedural store for ONE profile. Cached per namespace.
+
+    v2.15.2 -- THE BUG THIS FIXES. ProceduralMemory has accepted owner_ns since
+    v2.14.2, and its own docstring says "the JSON store is one per namespace:
+    procedures are user DATA, and one profile's dead-end cache has no business
+    in another's." The capability was built and correct. It was never wired:
+    this module constructed ONE instance with no ns, so every profile shared a
+    single store and every profile's verbatim `user_request` text sat in a file
+    the others read.
+
+    Fourth instance of that shape this release -- right code, wrong coverage --
+    after the reasoning hook that covered only the streaming path, the at-rest
+    guard blind to a module making no atrest calls, and the thinking budget
+    that reached only the respawn path. In every one, a test asserting the code
+    EXISTED passed.
+
+    Cached because ProceduralMemory reads its file in __init__; building one per
+    turn would re-decrypt the store on every message. Locked because two turns
+    on different profiles can arrive concurrently, and two instances over one
+    file would each hold a stale half of it.
+    """
+    _key = str(ns) if ns else ""
+    with _PROCEDURAL_LOCK:
+        _inst = _PROCEDURAL_BY_NS.get(_key)
+        if _inst is None:
+            _inst = ProceduralMemory(
+                storage_dir=str(_procedural_dir(ns)),
+                memory_logger=memory_logger,
+                owner_ns=ns,
+            )
+            _PROCEDURAL_BY_NS[_key] = _inst
+        return _inst
+
+
+# The OWNER's store. Kept as a module global for the boot banner and for any
+# caller with no namespace in hand; per-profile callers use procedural_for(ns).
+procedural = procedural_for(None)
 print(f"[PROCEDURAL] Initialized at: {PROCEDURAL_DIR}")
 print(f"[PROCEDURAL] Successful: {len(procedural.list_procedures('successful'))} | "
       f"Unsuccessful: {len(procedural.list_procedures('unsuccessful'))}")

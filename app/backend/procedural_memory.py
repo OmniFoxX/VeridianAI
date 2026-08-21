@@ -64,15 +64,33 @@ v2.15.2 CHANGES (August 20, 2026) -- ENCRYPTED AT REST:
     * atrest.load_json_auto already reads legacy plaintext transparently, so
       an install upgrading into this loses nothing.
 
-  SYSTEM TIER (ns=None), and that is a decision, not a default: this store is a
-  single process-wide singleton built from one install-wide PROCEDURAL_DIR with
-  no profile context, and it is chain-witnessed alongside the audit chain.
-  Passing a profile ns here would be inventing a scope the object does not have.
+  PROFILE TIER (ns=self.owner_ns). Encrypted under the key of the profile the
+  store belongs to, because procedures are that user's data.
 
-  NOTE, unresolved and deliberately not papered over: because the store is
-  install-wide, one profile's `user_request` text sits in a file every
-  profile's session reads. Encryption closes the AT-REST gap; it does not make
-  this per-profile. That is a separate scoping decision.
+  CORRECTION (v2.15.2, same release): the first version of this block said
+  SYSTEM TIER, on the grounds that the store was "a single process-wide
+  singleton with no profile context". That described how main.py was CALLING
+  the class, not what the class is -- __init__ has taken owner_ns since
+  v2.14.2, and the docstring right below it already said "the JSON store is one
+  per namespace: procedures are user DATA, and one profile's dead-end cache has
+  no business in another's."
+
+  So the capability was built, correct, and never wired: main.py constructed
+  one global instance with no ns, and every profile shared it. The fourth
+  instance of that shape in this release, after the reasoning hook that only
+  covered the streaming path, the at-rest guard that could not see a module
+  making no atrest calls, and the thinking budget that reached only the
+  respawn path. Right code, wrong coverage, every time -- and every time a test
+  asserting the code EXISTS passed.
+
+  Migration is a no-op by construction: the owner's store keeps its existing
+  path (sage_data/procedural_memory) and owner_ns=None resolves to the system
+  key, so the file already on disk still opens. Profiles get their own store
+  under users/<ns>/ from their first write.
+
+  THE CHAIN STAYS SHARED, as __init__ explains: it is the audit log, and one
+  tamper-evident sequence covering every actor is both the point and the
+  stronger property. Entries are ATTRIBUTED via owner_ns rather than separated.
 """
 
 import json
@@ -143,14 +161,15 @@ class ProceduralMemory:
         if not os.path.exists(self.file_path):
             return {"successful": {}, "unsuccessful": {}}
         try:
-            # SYSTEM TIER (v2.15.2): install-wide singleton, no profile
-            # context, chain-witnessed with the audit chain. See the module
-            # docstring for why this is ns=None by decision, not by default.
+            # PROFILE TIER (v2.15.2): under the key of the profile this store
+            # belongs to -- procedures are that user's data. owner_ns=None is
+            # the owner and resolves to the system key, so the file an existing
+            # install already has on disk still opens.
             # load_json_auto also reads a LEGACY PLAINTEXT file, which is what
-            # makes the upgrade lossless for existing installs.
+            # makes the upgrade lossless for installs predating encryption.
             import atrest as _atrest
             with open(self.file_path, "rb") as f:
-                data = _atrest.load_json_auto(f.read())
+                data = _atrest.load_json_auto(f.read(), ns=self.owner_ns)
             if not isinstance(data, dict):
                 return {"successful": {}, "unsuccessful": {}}
             # Migrate a flat legacy structure
@@ -184,11 +203,11 @@ class ProceduralMemory:
             return
         temp_path = self.file_path + ".tmp"
         try:
-            # SYSTEM TIER (v2.15.2): install-wide singleton, no profile
-            # context. See the module docstring. Whole-file, so the slugged
-            # key names are covered too -- they carry request text.
+            # PROFILE TIER (v2.15.2): this profile's key. Whole-file, so the
+            # slugged key names are covered too -- they carry request text.
             import atrest as _atrest
-            _blob = _atrest.dump_json_encrypted(self._knowledge_base)
+            _blob = _atrest.dump_json_encrypted(self._knowledge_base,
+                                                ns=self.owner_ns)
             with open(temp_path, "wb") as f:
                 f.write(_blob)
                 f.flush()
@@ -448,13 +467,15 @@ class ProceduralMemory:
         successful procedure that has a chain_hash.
         """
         try:
-            # SYSTEM TIER (v2.15.2): must read through atrest, or this reports
-            # a healthy ENCRYPTED store as corrupt -- the plain json.load here
-            # would choke on ciphertext and return False for every install
-            # that upgraded. Same reader as _load, so the two cannot disagree.
+            # PROFILE TIER (v2.15.2): must read through atrest, or this
+            # reports a healthy ENCRYPTED store as corrupt -- a plain json.load
+            # would choke on ciphertext and return False for every upgraded
+            # install. Same reader AND same ns as _load, so the two cannot
+            # disagree about which key opens the file.
             import atrest as _atrest
             with open(self.file_path, "rb") as f:
-                if not isinstance(_atrest.load_json_auto(f.read()), dict):
+                if not isinstance(_atrest.load_json_auto(
+                        f.read(), ns=self.owner_ns), dict):
                     return False
         except Exception:
             return False
