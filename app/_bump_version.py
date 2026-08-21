@@ -108,13 +108,40 @@ class Replacement:
     required: bool = True                # if False, missing anchor is OK
     description: str = ""                # human-readable label
 
+    # v2.16.0 -- DRIFT REPAIR.
+    #
+    # A literal anchor carries the version we are bumping FROM. That makes
+    # drift SELF-SEALING: the moment one line is missed, its anchor can never
+    # match again, so every later bump misses it too and reports the same
+    # routine-looking WARN. start.bat's post-choice title sat at v2.14 through
+    # two releases exactly this way -- the window said v2.14 while the app said
+    # v2.16, and the warning that should have caught it said only "no
+    # version-like string found nearby".
+    #
+    # `build_version_pattern` is a regex (MULTILINE) for the SAME shape
+    # carrying ANY version, with the version in group 1. When set it REPLACES
+    # the literal find rather than backing it up, because a version-agnostic
+    # match is strictly better: it cannot be sealed off by drift, and it does
+    # not depend on an earlier anchor in the list having already run to stay
+    # unambiguous. The whole match is rewritten to build_replace(new_forms),
+    # and a version that was not the expected one is reported as a repair.
+    build_version_pattern: Optional[Callable[[dict], str]] = None
+
 
 def _forms(short: str, semver: str, folder: str) -> dict:
     return {"short": short, "semver": semver, "folder": folder}
 
 
 REPLACEMENTS: List[Replacement] = [
-    # ----- start.bat (Windows CRLF) -----
+    # ----- start.bat -----
+    #
+    # NOT CRLF. This header said "(Windows CRLF)" and start.bat contains ZERO
+    # CRLF pairs -- it is LF-only and has been for some time. That was not a
+    # cosmetic inaccuracy: the post-choice title anchor below required a
+    # literal "\r\n", so it could never match, and the title stayed at v2.14
+    # while everything else advanced. The engine reads bytes and decodes, so
+    # line endings are preserved either way; nothing here should assume which
+    # kind a file uses.
     Replacement(
         file="start.bat",
         build_find=lambda f: f"title VeridianAI {f['short']} - Startup",
@@ -129,21 +156,40 @@ REPLACEMENTS: List[Replacement] = [
     ),
     Replacement(
         file="start.bat",
-        build_find=lambda f: f"title VeridianAI {f['short']}\r\n",
-        build_replace=lambda f: f"title VeridianAI {f['short']}\r\n",
+        # End-of-line assertion instead of a literal newline, so this matches
+        # whether the file is LF or CRLF -- and so it stays matching if that
+        # ever changes again. The lookahead is what distinguishes this line
+        # from the startup title above, which continues with " - Startup".
+        build_find=lambda f: f"title VeridianAI {f['short']}",
+        build_replace=lambda f: f"title VeridianAI {f['short']}",
+        build_version_pattern=lambda f: (
+            r"title VeridianAI v(\d+\.\d+(?:\.\d+)?)(?=[ \t]*\r?$)"),
         description="start.bat runtime title (post-choice)",
     ),
+    # RETIRED, not drifted. These two comments used to name the versioned
+    # folder ("sage_data lives ALONGSIDE VeridianAI_v2.14, not ...") and were
+    # rewritten to say "the app folder" instead. That is strictly better: a
+    # comment that names no version cannot go stale, and needs no anchor here.
+    #
+    # Kept as required=False rather than deleted, so the two WARNs they used to
+    # produce every single bump are explained rather than merely gone. Reading
+    # a spec and finding nothing is a fine outcome; reading a warning and not
+    # knowing whether it matters is not.
     Replacement(
         file="start.bat",
         build_find=lambda f: f":: walks up one level (sage_data lives ALONGSIDE {f['folder']}, not",
         build_replace=lambda f: f":: walks up one level (sage_data lives ALONGSIDE {f['folder']}, not",
-        description="start.bat layout-description comment (line ~95)",
+        required=False,
+        description=("start.bat layout comment (line ~105) -- genericised to "
+                     "'the app folder'; no longer version-bearing"),
     ),
     Replacement(
         file="start.bat",
         build_find=lambda f: f":: intuitively create sage_data inside {f['folder']} (which would",
         build_replace=lambda f: f":: intuitively create sage_data inside {f['folder']} (which would",
-        description="start.bat layout-description comment (line ~230)",
+        required=False,
+        description=("start.bat layout comment (line ~429) -- genericised to "
+                     "'the app folder'; no longer version-bearing"),
     ),
     Replacement(
         file="start.bat",
@@ -307,6 +353,63 @@ def apply_replacements(
         for r in repls:
             find_str    = r.build_find(old_forms)
             replace_str = r.build_replace(new_forms)
+
+            # v2.16.0: version-agnostic anchors run here and skip the literal
+            # path entirely. They also skip the no-op shortcut below, because
+            # "FROM equals TO" does not mean there is nothing to do -- a line
+            # that drifted BEHIND both of them is exactly what this exists to
+            # find, and bailing early would hide it.
+            if r.build_version_pattern is not None:
+                pat = r.build_version_pattern(new_forms)
+                _seen = []
+
+                def _sub(m, _rep=replace_str, _seen=_seen):
+                    _seen.append(m.group(1))
+                    return _rep
+
+                new_text, n = re.subn(pat, _sub, text, flags=re.MULTILINE)
+                if n == 0:
+                    tag = "WARN" if r.required else "skip"
+                    print(f"  [{tag}] {rel_path}: shape NOT FOUND -- "
+                          f"{r.description}")
+                    print(f"           nothing in this file matches the shape "
+                          f"at all, at any version. This is real drift.")
+                    if verbose:
+                        print(f"           pattern: {pat!r}")
+                    if r.required:
+                        missing += 1
+                    continue
+                _stale = sorted({v for v in _seen
+                                 if v not in (old_forms["short"].lstrip("v"),
+                                              old_forms["semver"],
+                                              new_forms["short"].lstrip("v"),
+                                              new_forms["semver"])})
+                # A version-agnostic anchor MATCHES on a healthy tree too --
+                # it finds the already-correct line and rewrites it to the
+                # identical text. That is a match, not a change, and counting
+                # it reported "Total replacements: 1" for a run that touched
+                # nothing. Count the CHANGE, never the match.
+                _changed = (text != new_text)
+                if _stale:
+                    # LOUD. This line missed one or more previous bumps and has
+                    # been claiming the wrong version ever since.
+                    print(f"  [REPAIR x{n}] {rel_path}: {r.description}")
+                    print(f"           was at {', '.join('v' + v for v in _stale)}"
+                          f" -- BEHIND the version you asked to bump from "
+                          f"({old_forms['semver']}). It missed at least one "
+                          f"earlier bump. Corrected.")
+                elif _changed:
+                    print(f"  [bump x{n}] {rel_path}: {r.description}")
+                elif verbose:
+                    print(f"  [noop] {rel_path}: {r.description}")
+                text = new_text
+                if _changed:
+                    # local_success ONLY -- it is rolled into `success` once
+                    # per file at the end of this loop. Adding to both counted
+                    # every repair twice.
+                    local_success += n
+                continue
+
             if find_str == replace_str:
                 # Same version, no-op. Don't count as missing.
                 if verbose:

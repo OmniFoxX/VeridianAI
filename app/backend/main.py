@@ -1141,7 +1141,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.15.2", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.16.0", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the

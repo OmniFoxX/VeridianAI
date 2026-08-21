@@ -136,7 +136,7 @@ try:
     from branding import MCP_SERVER_NAME
 except Exception:
     MCP_SERVER_NAME = "veridianai-toga"
-MCP_SERVER_VERSION = "2.15.2"
+MCP_SERVER_VERSION = "2.16.0"
 MCP_PROTOCOL_VERSION = "2025-03-26"  # MCP spec version this implementation targets
 
 

@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title VeridianAI v2.15 - Startup
+title VeridianAI v2.16 - Startup
 
 :: ---------------------------------------------------------------
 :: Non-interactive mode for Electron (and future self-update use)
@@ -29,7 +29,7 @@ if /I "%~1"=="--mode" (
 :: --- Interactive path (human double-click) ---------------------
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.15.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.16.0          ^|
 echo  +===============================================+
 echo.
 echo  Select backend for this session:
@@ -51,10 +51,10 @@ if !errorlevel!==2 (
 )
 
 :start_tiers
-title VeridianAI v2.14
+title VeridianAI v2.16
 echo.
 echo  +===============================================+
-echo  ^|       V E R I D I A N  A I  v2.15.0          ^|
+echo  ^|       V E R I D I A N  A I  v2.16.0          ^|
 echo  +===============================================+
 echo.
 :: ============================================================================
@@ -116,7 +116,7 @@ set MODELS_DIR=%~dp0..\sage_data\models
 :: entire launch when this exact file was missing, which (a) blocked fresh
 :: installs behind one arbitrary model and (b) name-dropped a third party
 :: (All Hands / OpenHands is their real project) as if it were required.
-if "%SAGE_MODEL_FILE%"=="" set SAGE_MODEL_FILE=all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf
+if "%SAGE_MODEL_FILE%"=="" set SAGE_MODEL_FILE=qwen2.5_coder_1.5b_instruct.gguf
 :: v2.14.1: CANDIDATE LISTS, mirroring store_launch.py exactly.
 ::
 :: These were single hardcoded filenames, and both named the model that was

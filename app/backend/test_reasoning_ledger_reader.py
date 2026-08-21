@@ -57,6 +57,7 @@ import ast
 import hashlib
 import io
 import os
+import re
 import sys
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -413,10 +414,29 @@ ok("inconclusive is not painted as failure",
    "an else-branch on a boolean would collapse three states into two")
 ok("the trace is still inserted with textContent",
    "body.textContent = reasoning" in CHAT)
-ok("chat.js's cache-bust was bumped so the change actually loads",
-   'chat.js?v=2.15.2a' in HTML,
-   "same ?v= with new contents is a stale cached module -- which looks "
-   "exactly like the feature not working")
+# CACHE-BUSTS, asserted as a RELATIONSHIP rather than a literal.
+#
+# The first version of this pinned the exact string 'chat.js?v=2.15.2a' -- the
+# throwaway value used to force past a stale cache mid-development. It would
+# have gone red on the next tidy-up, which is a test defending an accident.
+#
+# The property worth holding: the three modules this feature touches were
+# bumped TOGETHER, and none is still sitting on a pre-feature value. A module
+# whose contents changed but whose ?v= did not is a stale cached module, and
+# that looks exactly like the feature not working.
+def _bust(name):
+    m = re.search(re.escape("js/" + name) + r"\?v=([0-9.]+)", HTML)
+    return tuple(int(x) for x in m.group(1).split(".")) if m else None
+
+
+_busts = {n: _bust(n) for n in
+          ("chat.js", "reasoning-log.js", "data-export.js")}
+ok("every module this feature touches has a cache-bust",
+   all(_busts.values()), _busts)
+ok("...they were bumped together",
+   len(set(_busts.values())) == 1, _busts)
+ok("...and none is on a pre-feature value",
+   all(v >= (2, 16, 0) for v in _busts.values() if v), _busts,)
 
 
 _failed = [n for n, c in _results if not c]
