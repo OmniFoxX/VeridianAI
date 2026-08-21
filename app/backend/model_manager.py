@@ -243,6 +243,36 @@ def _turn_stats(options: Dict):
     return s if isinstance(s, dict) else None
 
 
+# ---------------------------------------------------------------------------
+# v2.15.2 MINIMUM ANSWER GUARANTEE
+#
+# A reasoning model can spend an entire generation budget in its thinking
+# channel and emit zero answer tokens. _no_answer_notice made that legible --
+# the user is told what happened instead of being ghosted -- and the tiered
+# --reasoning-budget / think level makes it rarer. Neither actually produces an
+# ANSWER, which is what the user asked for.
+#
+# So when a turn is about to end with reasoning and no reply, we ask once more,
+# with thinking suppressed and an explicit instruction to answer now.
+#
+# Modelled on AIQNudge, which already solves "inject a directive mid-run and
+# show the user it landed". What is deliberately NOT copied is its HMAC: that
+# exists because a nudge arrives from OUTSIDE the process, as a file any local
+# program could drop. This directive is composed here, in this function, from a
+# constant. There is no trust boundary to cross, and signing our own string
+# would be ceremony that implies a guarantee it does not provide.
+#
+# Sent as a USER turn, not a system one. Ollama rejects any system message that
+# is not first -- the whole reason _ollama_safe_messages exists -- so appending
+# a system directive here would trade a no-answer turn for a 500.
+_ANSWER_NOW_DIRECTIVE = (
+    "Your thinking budget for this turn is spent, and you have not yet given "
+    "an answer. Do not reason any further. Reply now with your best answer "
+    "using what you already worked out. If you are genuinely unsure, say so "
+    "plainly and explain what you would need to be sure."
+)
+
+
 def _no_answer_notice(tier_label: str, reasoning_parts: List[str]) -> str:
     """What to say when the model thought and never answered.
 
@@ -1293,6 +1323,11 @@ class ModelManager:
             write=_WRITE_TIMEOUT, pool=_POOL_TIMEOUT,
         )
         max_attempts = 4
+        # v2.15.2: one-shot latch for the minimum answer guarantee. A dict, not
+        # a bool, because _attempt is a closure that must MUTATE it -- a plain
+        # local would need `nonlocal` inside a nested async generator, and this
+        # reads more obviously as shared state at the call site.
+        _answered_retry = {"done": False}
 
         async def _attempt(attempt_idx: int):
             """Single try. Yields tokens or an error string."""
@@ -1382,6 +1417,40 @@ class ModelManager:
                                     _stats["reasoning"] = "".join(
                                         _reasoning_parts)
                             if not _content_seen and _reasoning_parts:
+                                # v2.15.2 minimum answer guarantee. The model
+                                # thought and never replied. Ask once more with
+                                # thinking OFF and an explicit instruction to
+                                # answer, instead of handing back an
+                                # explanation of the failure and nothing else.
+                                #
+                                # think=False is the lever here because it is
+                                # the one value Ollama accepts from EVERY model
+                                # (verified 2026-08-20: a positive level 400s
+                                # on non-thinking models, false never does),
+                                # and on a thinking model it genuinely empties
+                                # the channel -- laguna-xs went from 383 chars
+                                # of thinking to 0, eval 101 to 9.
+                                #
+                                # ONCE. A model that answers nothing twice is
+                                # telling us something, and a loop here would
+                                # turn one bad turn into an unbounded one.
+                                if not _answered_retry["done"]:
+                                    _answered_retry["done"] = True
+                                    payload["think"] = False
+                                    payload["messages"] = list(
+                                        payload["messages"]) + [{
+                                            "role": "user",
+                                            "content": _ANSWER_NOW_DIRECTIVE,
+                                        }]
+                                    print(
+                                        f"[ANSWER GUARANTEE] {tier_label} "
+                                        f"{model_id} produced "
+                                        f"{sum(len(p) for p in _reasoning_parts)}"
+                                        f" chars of reasoning and no answer; "
+                                        f"retrying once with thinking off.")
+                                    async for _tok in _attempt(attempt_idx):
+                                        yield _tok
+                                    return
                                 yield _no_answer_notice(
                                     tier_label, _reasoning_parts)
                             return
@@ -1537,6 +1606,9 @@ class ModelManager:
             write=_WRITE_TIMEOUT, pool=_POOL_TIMEOUT,
         )
         max_attempts = 4
+        # v2.15.2: one-shot latch for the minimum answer guarantee. See the
+        # matching latch in _gen_ollama.
+        _answered_retry = {"done": False}
 
         async def _attempt(_attempt_idx: int):
             async with httpx.AsyncClient(timeout=client_timeout) as c:
@@ -1671,6 +1743,39 @@ class ModelManager:
                     # turn again" that cost four re-prompts. Tokens did arrive;
                     # they all went to the reasoning channel.
                     if _reasoning_parts:
+                        # v2.15.2 minimum answer guarantee, llama-server side.
+                        # Same contract as the Ollama path: ask once more, with
+                        # thinking suppressed and an explicit instruction to
+                        # answer, rather than returning only an explanation.
+                        #
+                        # The levers differ, and honestly so. Ollama has
+                        # think=False, which is VERIFIED to empty the channel.
+                        # Here the directive is the load-bearing part:
+                        # reasoning_budget=0 is llama.cpp's documented
+                        # per-request control and this build ACCEPTS it (200),
+                        # but the Toga tier had no thinking model loaded when
+                        # this was probed, so its effect could not be proven --
+                        # only that it is harmless to send. Sent for that
+                        # reason and not claimed as the mechanism.
+                        #
+                        # ONCE, latched. A model that answers nothing twice is
+                        # telling us something a loop would only amplify.
+                        if not _answered_retry["done"]:
+                            _answered_retry["done"] = True
+                            payload["reasoning_budget"] = 0
+                            payload["messages"] = list(payload["messages"]) + [{
+                                "role": "user",
+                                "content": _ANSWER_NOW_DIRECTIVE,
+                            }]
+                            print(
+                                f"[ANSWER GUARANTEE] {tier_label} {model_id} "
+                                f"produced "
+                                f"{sum(len(p) for p in _reasoning_parts)} "
+                                f"chars of reasoning and no answer; retrying "
+                                f"once with an answer-now directive.")
+                            async for _tok in _attempt(_attempt_idx):
+                                yield _tok
+                            return
                         yield _no_answer_notice(tier_label, _reasoning_parts)
                         return
                     # Fallback: non-streamed OpenAI JSON body.
