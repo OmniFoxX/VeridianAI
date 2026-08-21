@@ -188,9 +188,56 @@ def _fernet_for(ns):
     return _get_fernet()
 
 
+_WRITE_FALLBACK_WARNED = set()      # ns values already reported, once each
+
+
 def encrypt_bytes(data: bytes, ns=None) -> bytes:
+    """Encrypt for a namespace. Falls back to the system key -- but says so.
+
+    v2.15.2. The READ fallback in decrypt_bytes is deliberate and must stay
+    silent: it is what lets pre-migration files keep opening, and what keeps a
+    readable export working. This is the WRITE side, and it is different.
+
+    Writing under the system key for a namespace that is supposed to have its
+    own key means that profile's data lands under the same key the owner's
+    does. _hold_profile_key's docstring already names the consequence -- "the
+    profile's own key quietly protects nothing" -- so the risk was understood.
+    What was missing was any way to notice it happening: no log line, no flag,
+    and the audit hook is off by default.
+
+    A profile reaches here when it has no keywrap at all (created before
+    per-profile keys existed), or when key creation failed at profile
+    creation. Both are recoverable -- main.py now creates the key at the next
+    login, where a password exists -- but until then, this is the only signal.
+
+    ns=None is the OWNER and is not warned about: for the owner the system key
+    IS their key, by design. Warning there would be noise that teaches people
+    to ignore the real case.
+
+    Once per namespace per process. A warning on every write would be worse
+    than none -- it would scroll the reason for it off the screen.
+    """
     _audit("encrypt", ns)
+    if ns and str(ns) not in _PROFILE_FERNETS:
+        _k = str(ns)
+        if _k not in _WRITE_FALLBACK_WARNED:
+            _WRITE_FALLBACK_WARNED.add(_k)
+            print(f"[ATREST] WARNING: writing data for profile {_k!r} under "
+                  f"the SYSTEM key -- it has no profile key registered, so "
+                  f"this data is readable with the owner's key. A key is "
+                  f"created automatically at this profile's next password "
+                  f"login, and its existing files are re-encrypted then. "
+                  f"(Said once per profile per run.)", flush=True)
     return _fernet_for(ns).encrypt(data)
+
+
+def write_fallback_warned():
+    """Namespaces that have written under the system key this run.
+
+    Exposed so a status surface can show it, and so tests can assert the
+    warning fired without scraping stdout.
+    """
+    return set(_WRITE_FALLBACK_WARNED)
 
 
 def decrypt_bytes(token: bytes, ns=None) -> bytes:

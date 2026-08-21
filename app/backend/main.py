@@ -3965,7 +3965,22 @@ def _attach_profile_key(token, ns, password):
         return False
     try:
         import profile_keys as _pk
-        dek = _pk.unlock(ns, password)
+        # v2.15.2: ensure, not unlock. A profile created before per-profile
+        # keys existed has no keywrap, so unlock() returned None here forever
+        # and the profile ran on the system key for its whole life -- logging
+        # in with a password every day and never acquiring a key of its own,
+        # because nothing was ever going to make one.
+        #
+        # This is the only safe moment to create it: the password is in hand.
+        # At write time there is none, and a passwordless keywrap is either
+        # openable by anyone or unopenable by its owner.
+        #
+        # The re-encryption of that profile's EXISTING system-key files is not
+        # done here -- _migrate_profile_key_once runs immediately after this
+        # at the call site and is exactly that pass. Creating the key is what
+        # unblocks it; it has always refused with "profile key is not
+        # unlocked" for these profiles.
+        dek = _pk.ensure_for_profile(ns, password)
         if dek:
             return _hold_profile_key(token, ns, dek)
     except Exception as _e:
@@ -5526,7 +5541,11 @@ async def api_auth_login(payload: dict, request: Request):
         if r.get("ns"):
             try:
                 import profile_keys as _pk
-                _d = _pk.unlock(r["ns"], _login_password)
+                # v2.15.2: ensure, matching _attach_profile_key. This is the
+                # MFA path's ONLY sight of the password -- by the time
+                # /verify completes, it is gone -- so a keyless profile that
+                # uses MFA would otherwise never get a key at all.
+                _d = _pk.ensure_for_profile(r["ns"], _login_password)
                 if _d:
                     _mfa.stash_challenge_dek(_tok, _d)
             except Exception as _ke:

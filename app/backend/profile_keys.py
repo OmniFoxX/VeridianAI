@@ -43,7 +43,8 @@ import ns_guard
 
 __all__ = [
     "keywrap_path", "has_profile_key", "profile_key_info",
-    "create_for_profile", "unlock", "unlock_with_recovery", "unlock_with_token",
+    "create_for_profile", "ensure_for_profile", "load_dek_or_none",
+    "unlock", "unlock_with_recovery", "unlock_with_token",
     "rewrap_password", "enable_recovery", "disable_recovery",
     "add_token_wrap", "drop_token_wrap", "clear_token_wraps",
     "destroy_for_profile",
@@ -175,6 +176,67 @@ def create_for_profile(ns, password: str, *, recovery: bool = True,
     rk = machine_recovery_key() if recovery else None
     p.parent.mkdir(parents=True, exist_ok=True)
     return keywrap.create(p, password, recovery_key=rk, dek=adopt_dek)
+
+
+def ensure_for_profile(ns, password: str, *,
+                       recovery: bool = True) -> Optional[bytes]:
+    """Open this profile's key, creating one if it has never had one.
+
+    v2.15.2 -- WHY THIS EXISTS.
+
+    A profile created before per-profile keys existed has no keywrap. unlock()
+    returns None for it, key_migration.run() refuses ("profile key is not
+    unlocked"), and atrest falls back to the system key for every read AND
+    write. So that profile's data sits under the same key as the owner's,
+    permanently -- it logs in with a password every day and never acquires a
+    key of its own, because nothing was ever going to create one.
+
+    This is the only moment where creating one is safe: a password is in hand.
+    Creating a key at WRITE time cannot work -- there is no password there, and
+    create_for_profile(ns, "") would produce a keywrap openable with an empty
+    string AND unopenable with the user's real password, which turns their data
+    unreadable. Worse than the gap it closes, in two directions at once.
+
+    recovery=True by default, and deliberately. Today the owner CAN read this
+    profile's data, because it is all under the system key. A recovery wrap
+    keeps exactly that property and no more, so an automatic upgrade never
+    silently removes an ability the install already had -- and it means a
+    forgotten password does not destroy data the user never chose to gamble.
+    A profile created through the UI still gets the user's explicit choice.
+
+    Returns the DEK, or None for the owner (ns=None -- system key by design).
+    """
+    p = keywrap_path(ns)
+    if not p:
+        return None                      # owner: system key, by design
+    if keywrap.exists(p):
+        return load_dek_or_none(ns, password)
+    if not password:
+        # No password, no safe key. Say so; the caller keeps the old behaviour.
+        return None
+    try:
+        dek = create_for_profile(ns, password, recovery=recovery)
+        print(f"[KEYS] profile {ns!r} had no key of its own -- created one at "
+              f"login. Its existing files are re-encrypted by the migration "
+              f"pass that runs next.", flush=True)
+        return dek
+    except Exception as e:
+        print(f"[KEYS] could not create a key for {ns!r}: {e}", flush=True)
+        return None
+
+
+def load_dek_or_none(ns, password: str) -> Optional[bytes]:
+    """unlock(), but a wrong password is None rather than an exception.
+
+    ensure_for_profile must be able to tell "no key yet" from "key exists and
+    this password does not open it" without the second case looking like the
+    first -- creating a second key over a real one would orphan the data the
+    first one protects.
+    """
+    try:
+        return unlock(ns, password)
+    except Exception:
+        return None
 
 
 def unlock(ns, password: str) -> Optional[bytes]:
