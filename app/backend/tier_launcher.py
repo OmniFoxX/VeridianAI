@@ -138,6 +138,26 @@ def _eos_args(model_path) -> list:
         return []
 
 
+def _cfg_ctx(tier: str, fallback: int) -> int:
+    """This tier's default ctx size, from config. `fallback` if config won't load.
+
+    v2.15.2. Four files held their own copy of these numbers and three of them
+    disagreed. Reading config here means a launcher can no longer carry a
+    private answer -- and the one path that still uses a literal (config itself
+    failing to import) is an install that is already broken.
+
+    Never fatal, like _eos_args and _reasoning_args beside it.
+    """
+    try:
+        import config as _c
+        return int(getattr(_c, "DAEMON_CTX_DEFAULT" if tier == "daemon"
+                           else "SAGE_CTX_DEFAULT", fallback))
+    except Exception as e:
+        print(f"[tier_launcher] ctx default from config unavailable for "
+              f"{tier}: {e}; using {fallback}")
+        return int(fallback)
+
+
 def _reasoning_args(tier: str) -> list:
     """llama-server argv fragment bounding how long a model may think.
 
@@ -424,8 +444,15 @@ def main():
     p_oracle = os.environ.get("OLLAMA_ORACLE_PORT", "11434")
     p_sage = os.environ.get("LLAMA_SAGE_PORT", "11435")
     p_daemon = os.environ.get("LLAMA_DAEMON_PORT", "11436")
-    sage_ctx = os.environ.get("SAGE_CTX_SIZE", "16384")
-    daemon_ctx = os.environ.get("DAEMON_CTX_SIZE", "4096")
+    # v2.15.2: the FOURTH copy of these numbers, and it disagreed with the
+    # other three (start.bat said 256000, store_launch 16384, config 32768).
+    # Derived from config now, so there is one answer to "how big is Toga's
+    # context" and a launcher cannot quietly hold a different one. The literals
+    # remain only for the case where config itself will not import, which is
+    # already a broken install.
+    sage_ctx = os.environ.get("SAGE_CTX_SIZE") or str(_cfg_ctx("sage", 32768))
+    daemon_ctx = os.environ.get("DAEMON_CTX_SIZE") or str(
+        _cfg_ctx("daemon", 4096))
     embed_model = os.environ.get("EMBED_MODEL", "")
     p_embed = os.environ.get("LLAMA_EMBED_PORT", "11437")
     embed_ctx = os.environ.get("EMBED_CTX_SIZE", "2048")

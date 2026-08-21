@@ -190,13 +190,34 @@ for %%C in (%EMBED_CANDS%) do (
 :: endpoints added in Step 4 will kill and respawn the relevant server
 :: when the user clicks Refresh Models after changing values.
 ::
-:: Defaults chosen for the shipped models:
-::   Toga   : OpenHands 7B, trained on 32768. 16384 is half of trained
-::            window with room for a long document + system prompt +
-::            several turns. KV cost ~900 MB on top of the 6.2 GB model.
-::   Daemon : Qwen 1.5B. 8192 is plenty for log summarization and
-::            mechanical tasks. KV cost ~224 MB on top of 940 MB model.
-set SAGE_CTX_SIZE=256000
+:: These are FALLBACKS ONLY. _tier_config_reader.py normally overrides them
+:: from config.json a few hundred lines below (it currently returns 32768 for
+:: Toga). They take effect exactly when that helper CANNOT run -- Python not
+:: found, config.json unreadable -- which is to say, when something has already
+:: gone wrong. A fallback must therefore be the SAFEST value, not the largest.
+::
+:: v2.15.2 -- WHY THESE CHANGED. This block said:
+::
+::     Toga : OpenHands 7B, trained on 32768. 16384 is half of trained
+::            window ... KV cost ~900 MB on top of the 6.2 GB model.
+::     Daemon : Qwen 1.5B. 8192 is plenty ...
+::
+:: while the line under it read `set SAGE_CTX_SIZE=256000`. The reasoning was
+:: sound and the number did not match it -- the same comment-vs-value drift
+:: that left a 15.5-hour timeout sitting under a comment saying "5 min".
+::
+:: 256000 was not merely inconsistent, it was the known-bad value. See
+:: config.SAGE_CTX_MAX: an unclamped ctx of this magnitude "made the CPU Toga
+:: tier try a ~30 GB KV-cache allocation at every boot (intermittent boot
+:: failure + system-wide thrash)", which is why the 65536 clamp exists at all.
+:: This fallback would have reproduced that incident on the one path where the
+:: clamp is not consulted.
+::
+:: Now matched to config.SAGE_CTX_DEFAULT / DAEMON_CTX_DEFAULT, which is also
+:: what the helper returns -- so a helper failure changes WHERE the number came
+:: from, not what it is. OpenHands 7B is trained on 32768, so this is its full
+:: trained window and asking for more buys nothing but RAM.
+set SAGE_CTX_SIZE=32768
 set DAEMON_CTX_SIZE=4096
 set EMBED_CTX_SIZE=2048
 

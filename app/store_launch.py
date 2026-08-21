@@ -191,7 +191,13 @@ def build_env() -> dict:
         "OLLAMA_ORACLE_PORT":   os.environ.get("OLLAMA_ORACLE_PORT", "11434"),
         "LLAMA_SAGE_PORT":      os.environ.get("LLAMA_SAGE_PORT", "11435"),
         "LLAMA_DAEMON_PORT":    os.environ.get("LLAMA_DAEMON_PORT", "11436"),
-        "SAGE_CTX_SIZE":        os.environ.get("SAGE_CTX_SIZE", "16384"),
+        # v2.15.2: was "16384" while start.bat's fallback said 256000 and
+        # config.SAGE_CTX_DEFAULT said 32768 -- three launch paths, three
+        # different answers to "how big is Toga's context". The Store package
+        # and the portable build would size the same tier differently on the
+        # same machine. All three now say 32768, which is OpenHands 7B's full
+        # trained window and what _tier_config_reader.py returns.
+        "SAGE_CTX_SIZE":        os.environ.get("SAGE_CTX_SIZE", "32768"),
         "DAEMON_CTX_SIZE":      os.environ.get("DAEMON_CTX_SIZE", "4096"),
         "LLAMA_EMBED_PORT":     os.environ.get("LLAMA_EMBED_PORT", "11437"),
         "EMBED_CTX_SIZE":       os.environ.get("EMBED_CTX_SIZE", "2048"),
