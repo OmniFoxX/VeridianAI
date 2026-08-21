@@ -267,6 +267,83 @@ def _no_answer_notice(tier_label: str, reasoning_parts: List[str]) -> str:
             f"with reasoning_budget, and ask again.]")
 
 
+# ---------------------------------------------------------------------------
+# v2.15.2: the Ollama half of the thinking budget.
+#
+# llama-server takes a NUMBER (--reasoning-budget N, in thinking tokens).
+# Ollama takes a LEVEL. Probed against the live server (0.32.13,
+# laguna-xs-2.1) rather than assumed, because the field is validated strictly:
+#
+#     think="banana"  -> HTTP 400  invalid think value: must be
+#                                  "high", "medium", "low", "max", true, false
+#     think="low" on llama3.2:3b   -> HTTP 400  does not support thinking
+#     think=false on llama3.2:3b   -> 200       (accepted by everything)
+#     think=false on laguna-xs     -> 200, thinking 0 chars, eval 9 (vs 101)
+#
+# Two lessons in those four lines. A positive level is NOT safe to send
+# blindly -- it hard-fails the turn on any non-thinking model, which is most of
+# them. And `false` IS safe everywhere, because suppressing thinking is
+# meaningful even for a model that never thinks.
+#
+# That is the same shape as the mid-array system message that 500'd every
+# Ollama turn earlier in this release: a field some models accept and others
+# reject outright. So this one is guarded by capability detection rather than a
+# hardcoded model list, which would rot the first time a model is added.
+_THINK_UNSUPPORTED: set = set()          # model_ids that answered "no thinking"
+
+
+def _ollama_think_value(budget):
+    """Map a thinking-token budget onto Ollama's levels.
+
+    A MAPPING, not an equivalence -- deliberately. Ollama's levels are
+    qualitative and it does not accept a token count, so a number cannot be
+    honoured exactly here the way llama-server honours it. The numeric budget
+    stays authoritative on the llama tiers; this is the nearest faithful
+    expression of the same intent on Ollama.
+
+    Returns None to mean "send no field at all", which is how -1 (unrestricted)
+    is expressed: Ollama's own default already is unrestricted, and omitting
+    the key keeps a turn byte-identical to what it was before this feature.
+    """
+    try:
+        b = int(budget)
+    except (TypeError, ValueError):
+        return None
+    if b < 0:
+        return None          # unrestricted -> leave Ollama's default alone
+    if b == 0:
+        return False         # no thinking at all; accepted by every model
+    if b <= 2048:
+        return "low"
+    if b <= 8192:
+        return "medium"
+    return "high"
+
+
+def _ollama_budget_for_tier(cfg, tier_label: str):
+    """The configured thinking budget for an Ollama tier.
+
+    Ollama tiers are not spawned by build_llama_server_command, so they cannot
+    inherit its per-tier flag. The tier NAMES still line up: Oracle is the
+    user's conversation (the sage budget), Daemon is background work.
+    """
+    try:
+        import config as _cfg_mod
+        _sage = getattr(_cfg_mod, "REASONING_BUDGET_SAGE", -1)
+        _daemon = getattr(_cfg_mod, "REASONING_BUDGET_DAEMON", -1)
+    except Exception:
+        return None
+    # A per-install override wins over the tier default, matching how every
+    # other generation option in this file resolves.
+    try:
+        _override = cfg.get("reasoning_budget") if cfg else None
+    except Exception:
+        _override = None
+    if _override is not None:
+        return _override
+    return _daemon if str(tier_label).lower() == "daemon" else _sage
+
+
 def _ollama_safe_messages(messages: List[Dict]) -> List[Dict]:
     """Ollama refuses a system message anywhere except index 0.
 
@@ -1149,6 +1226,18 @@ class ModelManager:
             },
         }
 
+        # v2.15.2 thinking budget. See _ollama_think_value for why this is a
+        # level rather than a number, and _THINK_UNSUPPORTED for why it is
+        # capability-gated instead of model-listed.
+        _think = _ollama_think_value(
+            _ollama_budget_for_tier(self.config, tier_label))
+        # A positive level 400s on a model that cannot think. `false` never
+        # does, so it stays even for a model we have already learned about --
+        # suppressing thinking is a meaningful instruction to any model.
+        if _think is not None and not (
+                _think is not False and model_id in _THINK_UNSUPPORTED):
+            payload["think"] = _think
+
         # v2.1.7 diagnostic logging: capture model + prompt size + ctx
         # decision on every call. The [CTX SIZE] line tells postmortems
         # exactly what was allocated and why.
@@ -1220,6 +1309,31 @@ class ModelManager:
                                 "utf-8", "replace")[:300]
                         except Exception:
                             body = ""
+                        # v2.15.2: a `think` rejection is RECOVERABLE, and must
+                        # be recovered rather than shown to the user.
+                        #
+                        # Ollama 400s with "does not support thinking" for any
+                        # model without a thinking channel -- which is most of
+                        # them. Turning that into a failed turn would mean this
+                        # feature broke every non-reasoning model, which is the
+                        # exact blast radius the mid-array system message had
+                        # before _ollama_safe_messages.
+                        #
+                        # So: drop the field, remember it for this model, and
+                        # retry once. The memo means one model pays this cost
+                        # once, not on every turn. Nothing is listed in advance,
+                        # so a model added tomorrow is handled the same way.
+                        if (resp.status_code == 400
+                                and "think" in body.lower()
+                                and "think" in payload):
+                            _bad = payload.pop("think")
+                            _THINK_UNSUPPORTED.add(model_id)
+                            print(f"[OLLAMA] {model_id} rejected think="
+                                  f"{_bad!r} ({body[:90]!r}); retrying without "
+                                  f"it and not sending it to this model again.")
+                            async for _tok in _attempt(attempt_idx):
+                                yield _tok
+                            return
                         print(
                             f"[OLLAMA ERROR {resp.status_code}] "
                             f"tier={tier_label} model={model_id} "

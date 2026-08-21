@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.15.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "1a8d694818dd460e9af08f7aceddf852",
-    "built_utc": "2026-08-21T03:09:00.899954+00:00",
+    "build_id": "27b18752189e4b6389a2d0d0db275efc",
+    "built_utc": "2026-08-21T03:57:16.888556+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -117,7 +117,7 @@
       "backend/migrate_config.py": "727f69194d577dabd93855b1c55b7831ca30b2c2b70be874da39f37ea93b3e53",
       "backend/migrate_procedural_at_rest.py": "3e9c5338489976aae6261fb11916181c9ee5b9b3a485d83962954678d7d00d14",
       "backend/migrate_v216_timestamps.py": "4f1b66f2a54ddcdb510104b144fef293cfac2eb5d4c14c834827f1d32b343b0d",
-      "backend/model_manager.py": "5bff80ec17e460c5895c551962b23d2f5838c46bf019b27a943f89d913cb590b",
+      "backend/model_manager.py": "cbd639a8e8077375b479056828a2a519ef6e85ea936c4d0a359c4fe65cc6012f",
       "backend/net_guard.py": "45b9c206433d1d64f84aaee348ca8c2efdfafaf2851731fc4fd7931100d3cce7",
       "backend/node_client.py": "d2edb3bbdc83cc9dedc4728161be5e3db5389d23db1f569066d397ffd0f517d2",
       "backend/node_server.py": "1e56d4a81b0d028514de3318d190518a911c05612b374789a844dabf546cfa6d",
@@ -191,6 +191,7 @@
       "backend/test_mfa.py": "5c64e4e93ed4acdaa61affcbbc05a61fbb9cc6862c41366e1bcb6bdc33003d18",
       "backend/test_ns_guard.py": "c90a198e7ec4507d99860b1e680053d8ff2172862785b1c7700e3d8cd75b4958",
       "backend/test_ollama_message_shape.py": "d0c770c1c8a61c67cdfab137a95a933d8bd9672dd6aca3c07afbdc8ce2f2f269",
+      "backend/test_ollama_think.py": "9d717e643b66059f0a34633fef03782d00afe97eb920f104cc0e6b7ebafb11ab",
       "backend/test_password_policy.py": "add77bfa9fd64d06bc926cd60c93c788a302980e41e37da5d023e21d2bbcb668",
       "backend/test_procedural_at_rest.py": "fe1bfca6c567841fa4c60ff79e14c61c1dddda2479ebc8a8007463ddcd9a951d",
       "backend/test_profile_key_residency.py": "e871e164c38b3c75810db1a5bddced046f906d5f301b4e64965331206a2e3238",
@@ -281,5 +282,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "XdAyNx+dsUtpFcLTXoLZK1nRxQdYZcI/CPk0a5QEtTh8c8W087ushi3cZgREU6ySj6bEbI8xJ2SSCAl9C/LkCw=="
+  "signature_b64": "S+sPOTB1+x4Frl+x00SrO92Q7Ti/MGAGrT07Qvl5lr7ybS/d77XonHqyrSIB5jssGqbKiMWgMtEIQVDVhRNCDg=="
 }
