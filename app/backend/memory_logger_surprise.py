@@ -68,8 +68,22 @@ _FERNET_PREFIX = "gAAAAA"
 # by whom" is a one-field filter over the chain. Audit controls exist
 # to answer who-did-what; a record you have to grep is a record that
 # does not answer it.
+# v2.15.2: "reasoning" -- a tamper-evident witness for a model's thinking
+# trace. Like "procedure", the chain holds only a SHA-256; the authoritative
+# copy stays in the (encrypted) chat memory beside the message it belongs to.
+# Its own role, not "system", so "show me every reasoning witness" is a
+# one-field filter, exactly as "audit" earned its own for who-did-what.
+#
+# Note what the imperium line above records: role="imperium" was passed for a
+# whole release while every write raised ValueError and was swallowed, so zero
+# entries ever reached the chain. This role was added because that happened
+# again -- _witness_reasoning caught the ValueError and returned None, so every
+# trace would have been stored with no witness and verification would have
+# reported "unverifiable" forever, with all static tests passing. It was caught
+# by a test that actually wrote to a real chain. Any FUTURE role must be added
+# here first, and exercised against a live logger, or it fails the same way.
 VALID_ROLES = ("user", "assistant", "system", "procedure", "imperium",
-               "audit")
+               "audit", "reasoning")
 
 
 # -----------------------------------------------------------------------------

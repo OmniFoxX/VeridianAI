@@ -525,6 +525,97 @@ async def _record_context_fill(stats: dict):
         })
 
 
+def _reasoning_hash(trace: str) -> str:
+    """Canonical SHA-256 of a reasoning trace. One definition, two callers.
+
+    v2.15.2. Written once because a witness and its verifier that hash even
+    slightly differently produce a mismatch on healthy data -- and a provenance
+    check that cries wolf gets switched off, which is worse than not having one.
+    """
+    import hashlib as _hl
+    return _hl.sha256(str(trace or "").encode("utf-8")).hexdigest()
+
+
+def _witness_reasoning(trace: str, ns=None):
+    """Commit a tamper-evident witness for a reasoning trace. Hash, not text.
+
+    Mirrors procedural_memory._witness_to_chain, which is the proven shape in
+    this codebase: the authoritative copy lives in its own (encrypted) store
+    and the chain holds only a hash, so the chain never accumulates
+    conversation text it can never re-encrypt.
+
+    Returns the chain hash, or None when there is no logger or the write fails.
+    None is a legitimate answer -- a turn must never fail because provenance
+    could not be recorded -- so a verifier must treat "no witness" as
+    unverifiable rather than as tampering.
+    """
+    try:
+        if memory_logger is None:
+            return None
+        _h = _reasoning_hash(trace)
+        return memory_logger.log(
+            content=f"reasoning:{_h}",
+            temperature=0.0,
+            token_prob=None,
+            metadata={
+                "reasoning_sha256": _h,
+                "reasoning_chars": len(str(trace or "")),
+                # Attribution, so the shared chain answers WHO as well as WHAT.
+                "owner_ns": str(ns) if ns else "(owner)",
+            },
+            role="reasoning",
+        )
+    except Exception as _e:
+        print(f"[REASONING WITNESS] not recorded: {type(_e).__name__}: {_e}")
+        return None
+
+
+def verify_reasoning_provenance(entry: dict) -> dict:
+    """Has this message's reasoning trace changed since it was witnessed?
+
+    Deliberately explicit about the difference between "fails verification" and
+    "cannot be verified". A trace recorded before this feature existed, or one
+    whose witness write failed, has no chain hash -- reporting that as tampering
+    would train the reader to ignore the check.
+    """
+    out = {"has_reasoning": False, "witnessed": False,
+           "hash_matches": None, "message": ""}
+    try:
+        if not isinstance(entry, dict) or not entry.get("reasoning"):
+            out["message"] = "no reasoning trace on this message"
+            return out
+        out["has_reasoning"] = True
+        _stored = entry.get("reasoning_chain_hash")
+        if not _stored:
+            out["message"] = ("no witness recorded -- predates the feature or "
+                              "the chain write failed. Unverifiable, not "
+                              "tampered.")
+            return out
+        out["witnessed"] = True
+        _expect = _reasoning_hash(entry["reasoning"])
+        out["reasoning_sha256"] = _expect
+        if memory_logger is None:
+            out["message"] = "no memory_logger attached; cannot walk the chain"
+            return out
+        _found = False
+        try:
+            for _e in memory_logger.get_recent(n=2000):
+                if str(_e.get("content", "")) == f"reasoning:{_expect}":
+                    _found = True
+                    break
+        except Exception as _walk_err:
+            out["message"] = f"chain walk failed: {_walk_err}"
+            return out
+        out["hash_matches"] = _found
+        out["message"] = ("witness found; the stored trace matches what was "
+                          "committed" if _found else
+                          "NO witness matches this trace -- it differs from "
+                          "what was recorded at the time")
+    except Exception as _e:
+        out["message"] = f"{type(_e).__name__}: {_e}"
+    return out
+
+
 _ALLOWED_MESSAGE_KEYS = ("role", "content", "images")
 
 
@@ -2962,6 +3053,13 @@ async def api_burn(payload: dict, request: Request):
             # the person most likely to have used research tools -- was the one
             # left with residue.
             _rm_file(str(Path(BASE_DIR) / ".evidence_ledger.dat"))
+            # v2.15.2: the reasoning ledger sits beside it and holds the
+            # model's full thinking traces -- the user's own conversation
+            # content, in plain text inside its encrypted file. It is the same
+            # omission the note above describes, one file over: the non-owner
+            # branch wipes the whole namespace directory and covers it, while
+            # this explicit list would have left the OWNER's traces behind.
+            _rm_file(str(Path(BASE_DIR) / ".reasoning_ledger.dat"))
             _rm_tree_contents(str(Path(BASE_DIR) / "archives"))
             _rm_tree_contents(str(Path(BASE_DIR) / "downloads"))
             _rm_tree_contents(str(MEMORY_DIR))
@@ -4431,6 +4529,15 @@ async def api_save_memory(payload: dict, request: Request):
         try:
             from craiid import evidence_ledger as _el
             _el.clear(_ns)
+        except Exception:
+            pass
+        # v2.15.2: and the reasoning ledger, for exactly the same reason. It
+        # holds the model's full thinking for this thread -- keeping that after
+        # the user erased the conversation would be the larger leak of the two,
+        # since a trace is usually longer than the reply it produced.
+        try:
+            import reasoning_ledger as _rl
+            _rl.clear(_ns)
         except Exception:
             pass
     return {"success": True}
@@ -9195,6 +9302,49 @@ async def ws_chat(websocket: WebSocket):
                                 _reasoning = ""
                             if _reasoning:
                                 _entry["reasoning"] = _reasoning
+                                # v2.15.2: witness the trace in the memory
+                                # chain, exactly as procedural memory is
+                                # witnessed (_witness_to_chain). Commit the
+                                # HASH, never the text -- the chat memory is
+                                # the authoritative encrypted copy, and the
+                                # chain is only the tamper-evident proof that
+                                # the copy has not been altered since.
+                                #
+                                # Deliberately NOT the evidence ledger, and the
+                                # reason matters: that ledger is replayed at a
+                                # fatigue handoff under CITATION_RULE, which
+                                # tells the model the entries are "VERBATIM
+                                # extracts from material actually retrieved"
+                                # and to cite ONLY from them. A reasoning trace
+                                # is not retrieved, not external, and includes
+                                # the model's discarded and wrong steps.
+                                # Putting it there would hand a model its own
+                                # earlier guesses labelled as sources -- which
+                                # is precisely the fabrication the ledger
+                                # exists to prevent, wearing its authority.
+                                #
+                                # Keeping the hash out of the ledger also keeps
+                                # the chain free of conversation text, which
+                                # matters for the at-rest posture: the chain is
+                                # append-only and never re-encrypted.
+                                _entry["reasoning_chain_hash"] = (
+                                    _witness_reasoning(_reasoning, _ws_ns))
+                                # v2.15.2: and into the user's own reasoning
+                                # ledger -- per namespace, encrypted under
+                                # THEIR key, read by nobody but them. See
+                                # reasoning_ledger's docstring for why it is a
+                                # separate store from the evidence ledger
+                                # rather than a section inside it.
+                                try:
+                                    import reasoning_ledger as _rl
+                                    _rl.record(_reasoning, ns=_ws_ns, meta={
+                                        "model": model_id or "",
+                                        "chain_hash": _entry.get(
+                                            "reasoning_chain_hash") or "",
+                                    })
+                                except Exception as _rl_err:
+                                    print(f"[REASONING LEDGER] not recorded: "
+                                          f"{type(_rl_err).__name__}: {_rl_err}")
                             history.append(_entry)
                         # Chat memory window cap removed per project policy:
                         # local system, hardware-limited, no arbitrary turn count.
