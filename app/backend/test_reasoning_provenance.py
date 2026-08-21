@@ -133,7 +133,18 @@ ok("the reason is written down where the decision lives",
 # =============================================================================
 print("\n=== 4. Verification tells apart 'unverifiable' and 'tampered' ===")
 # =============================================================================
-_v = MAIN[MAIN.index("def verify_reasoning_provenance"):]
+# v2.15.2: the slice starts at the WINDOW CONSTANT, not at the verifier.
+#
+# The chain walk moved out of verify_reasoning_provenance into
+# _chain_has_reasoning so that the ledger reader could share one definition of
+# it -- and it grew a third answer while it was there: "not found in the window
+# I searched" is now distinct from "not in the chain". The walk is defined
+# ABOVE the verifier, so a slice that began at the verifier stopped covering
+# the very failure handling this section checks.
+#
+# Widened rather than deleted: these assertions are about the verifier GROUP,
+# and the group is what has to keep the property.
+_v = MAIN[MAIN.index("_CHAIN_SEARCH_WINDOW ="):]
 _v = _v[:_v.index("\n_ALLOWED_MESSAGE_KEYS")]
 ok("a message with no trace is reported plainly", "no reasoning trace" in _v)
 ok("a trace with no witness is UNVERIFIABLE, not tampered",

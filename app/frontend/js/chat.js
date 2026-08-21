@@ -443,7 +443,7 @@ function handleStreamToken(token) {
  * <details> rather than a hand-rolled toggle: native disclosure semantics,
  * keyboard operable and announced correctly by screen readers for free.
  */
-function attachReasoningPanel(target, reasoning) {
+function attachReasoningPanel(target, reasoning, chainHash) {
   if (!target || !reasoning) return;
   // Never double-attach (a reload or a second `done` for the same bubble).
   const existing = target.querySelector(".reasoning-panel");
@@ -473,6 +473,81 @@ function attachReasoningPanel(target, reasoning) {
     "margin:0;padding:8px 10px;white-space:pre-wrap;word-break:break-word;" +
     "max-height:340px;overflow:auto;opacity:0.85;font-size:12px;line-height:1.45";
   box.appendChild(body);
+
+  // v2.15.2: prove it, on request.
+  //
+  // Every trace is committed to the memory chain as a hash when it is stored,
+  // and until now nothing could ask the chain about it -- the verifier existed
+  // and had no caller, which made "auditable" a property of the code rather
+  // than of the app.
+  //
+  // ONLY when this message carries a chain hash, which in practice means a
+  // RELOADED or ARCHIVED message. A freshly streamed reply does not carry one
+  // (the witness is written as the turn is persisted, after the payload that
+  // draws this panel has already gone out), and a button that answered "cannot
+  // verify" every time you asked would teach people the check is broken. It
+  // appears on the next reload, where the answer is real.
+  //
+  // This is also the ONE place an archived conversation can be checked: the
+  // reasoning ledger is bounded and is erased with the chat, while an archive
+  // keeps its traces for as long as it exists.
+  if (chainHash) {
+    const bar = document.createElement("div");
+    bar.style.cssText = "padding:0 9px 7px 9px;display:flex;gap:8px;" +
+      "align-items:center;flex-wrap:wrap";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = "Verify";
+    btn.title = "Check this trace against the tamper-evident memory chain";
+    btn.style.cssText =
+      "font-size:11px;padding:2px 8px;cursor:pointer;border-radius:4px;" +
+      "border:1px solid rgba(127,127,127,0.45);background:transparent;" +
+      "color:inherit";
+    const out = document.createElement("span");
+    out.style.cssText = "font-size:11px;opacity:0.85";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      out.textContent = "Checking...";
+      let d;
+      try {
+        d = await (
+          await fetch("/api/reasoning/verify-message", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              reasoning: reasoning,
+              reasoning_chain_hash: chainHash,
+            }),
+          })
+        ).json();
+      } catch (e) {
+        d = null;
+      }
+      btn.disabled = false;
+      const p = d && d.ok ? d.provenance : null;
+      if (!p) {
+        out.textContent = "Could not reach the verifier.";
+        out.style.color = "";
+        return;
+      }
+      // Three states, and the third is why this is worth having. "Not found in
+      // the window searched" is inconclusive, not tampering -- painting it red
+      // would train people to ignore red.
+      if (p.hash_matches === true) {
+        out.textContent = "Verified - unchanged since it was recorded.";
+        out.style.color = "var(--ok, #2e7d32)";
+      } else if (p.hash_matches === false) {
+        out.textContent = p.message || "Does not match the chain.";
+        out.style.color = "var(--danger, #c62828)";
+      } else {
+        out.textContent = p.message || "Cannot be verified.";
+        out.style.color = "";
+      }
+    });
+    bar.appendChild(btn);
+    bar.appendChild(out);
+    box.appendChild(bar);
+  }
 
   target.appendChild(box);
 }
@@ -596,7 +671,8 @@ function handleStreamDone(fullContent, meta) {
     // v2.15.2: after the footer, so the reading order is
     // answer -> model/time -> (collapsed) reasoning.
     if (meta && meta.reasoning) {
-      attachReasoningPanel(target, meta.reasoning);
+      // No chain hash on a live turn -- see attachReasoningPanel.
+      attachReasoningPanel(target, meta.reasoning, meta.reasoning_chain_hash);
     }
   }
 
@@ -1038,7 +1114,7 @@ function appendMessage(msg, isStreaming = false) {
   // the next reload -- which is worse than not showing it at all, because it
   // looks like the trace was lost rather than merely not re-rendered.
   if (!isStreaming && msg.role === "assistant" && msg.reasoning) {
-    attachReasoningPanel(wrap, msg.reasoning);
+    attachReasoningPanel(wrap, msg.reasoning, msg.reasoning_chain_hash);
   }
 
   container.appendChild(wrap);

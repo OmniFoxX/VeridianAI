@@ -226,10 +226,18 @@ else:
     ok("it will not double-attach",
        'querySelector(".reasoning-panel")' in _panel)
 
-    ok("the live turn renders it", "attachReasoningPanel(target, meta.reasoning)"
-       in CHAT)
+    # v2.15.2: matched as a call PREFIX, not as an exact string. The panel
+    # gained a third argument (the chain hash, so a reloaded message can be
+    # verified against the chain) and both exact matches went red on a change
+    # that added a feature and broke nothing. Still discriminating: the target
+    # element and the source of the trace are what these assert, and both are
+    # still pinned.
+    ok("the live turn renders it",
+       re.search(r"attachReasoningPanel\(target,\s*meta\.reasoning\b", CHAT)
+       is not None)
     ok("a reloaded/archived message renders it too",
-       "attachReasoningPanel(wrap, msg.reasoning)" in CHAT,
+       re.search(r"attachReasoningPanel\(wrap,\s*msg\.reasoning\b", CHAT)
+       is not None,
        "otherwise the panel appears once and vanishes on reload, which reads "
        "as data loss rather than a missing re-render")
     ok("the trace is kept on the message object for the archive",

@@ -196,11 +196,68 @@ ok("the reason is documented in the module itself",
    "a decision recorded nowhere becomes an accident later")
 
 # And nothing in main.py routes it into a message array.
-_reads = [l.strip() for l in MAIN.splitlines()
-          if "reasoning_ledger" in l and (".entries(" in l or "for_handoff" in l)]
-ok("main.py never reads the ledger into a turn", not _reads, _reads)
-ok("main.py only WRITES to it",
-   "_rl.record(" in MAIN and "_rl.entries(" not in MAIN)
+#
+# v2.15.2 REWRITE. This used to be two line-based text checks, the second of
+# which was "_rl.entries(" not in MAIN -- correct only while the ledger had no
+# reader at all. It went red the moment the ledger became readable, which was
+# the intended feature, and if it had simply been deleted the real rule would
+# have gone with it.
+#
+# The rule was never "nobody reads it". It is "nothing that builds a PROMPT
+# reads it" -- see the module docstring: read BY THE USER, and by nothing else.
+# So it is now enforced on the AST by ENCLOSING FUNCTION: every call to
+# entries() must sit in a known user-facing reader.
+#
+# The line-based version was weak in the other direction too. It only saw lines
+# containing the literal "reasoning_ledger", so a call written as `_rl.entries(`
+# on its own line -- exactly how the reader endpoint writes it -- was invisible
+# to it. Sixth time this release that an assertion keyed on text layout instead
+# of structure.
+import ast as _ast                                              # noqa: E402
+
+_tree = _ast.parse(MAIN)
+_fns = [n for n in _ast.walk(_tree)
+        if isinstance(n, (_ast.FunctionDef, _ast.AsyncFunctionDef))]
+
+
+def _enclosing(line):
+    best = None
+    for n in _fns:
+        if n.lineno <= line <= (n.end_lineno or n.lineno):
+            if best is None or n.lineno > best.lineno:
+                best = n
+    return best
+
+
+# Every reader of the ledger, wherever it is called and however it is aliased.
+_READER_CALLS = ("entries", "for_handoff")
+_readers = []
+for _n in _ast.walk(_tree):
+    if not isinstance(_n, _ast.Call):
+        continue
+    _f = _n.func
+    if not (isinstance(_f, _ast.Attribute) and _f.attr in _READER_CALLS):
+        continue
+    if not (isinstance(_f.value, _ast.Name)
+            and _f.value.id in ("_rl", "reasoning_ledger")):
+        continue
+    _fn = _enclosing(_n.lineno)
+    _readers.append((_n.lineno, _fn.name if _fn else "(module level)", _f.attr))
+
+# The allow-list IS the claim: these are user-facing HTTP handlers, and every
+# one of them returns to the browser rather than into a message array.
+_ALLOWED_READERS = {"api_reasoning_ledger", "api_reasoning_ledger_entry"}
+_bad = [r for r in _readers if r[1] not in _ALLOWED_READERS]
+ok("the ledger is read ONLY by the user-facing reader endpoints", not _bad,
+   "%r -- anything else is a path where the model could be handed its own "
+   "earlier guesses" % (_bad,))
+ok("...and it IS read by them now (it used to be unreadable)",
+   bool(_readers),
+   "a per-user log nobody can open is not a feature, it is disk usage")
+ok("nothing calls for_handoff on it", not any(r[2] == "for_handoff"
+                                              for r in _readers),
+   "that is the evidence ledger's replay path")
+ok("main.py still writes to it", "_rl.record(" in MAIN)
 
 
 # =============================================================================

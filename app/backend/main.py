@@ -570,8 +570,58 @@ def _witness_reasoning(trace: str, ns=None):
         return None
 
 
+_CHAIN_SEARCH_WINDOW = 2000
+
+
+def _chain_has_reasoning(sha: str):
+    """Look for a reasoning witness in the chain. -> (found, note).
+
+    `found` is True, False, or None -- and the None is the whole point.
+
+    v2.15.2 fix. This walk used to be inline in verify_reasoning_provenance and
+    read the most recent 2000 entries, then reported anything it did not find
+    as "it differs from what was recorded at the time". The chain is GLOBAL and
+    append-only across every profile and every kind of entry, so on a busy
+    install a perfectly honest witness from 3000 entries ago falls outside the
+    window and gets reported as tampering.
+
+    That is the exact failure _reasoning_hash's docstring warns about: a
+    provenance check that cries wolf gets switched off, and then it protects
+    nothing. So "not in the window I searched" is now its own answer, distinct
+    from "not in the chain", and only the latter is a red flag.
+
+    One definition, three callers, for the same reason the hash has one.
+    """
+    if memory_logger is None:
+        return None, "no memory_logger attached; cannot walk the chain"
+    try:
+        needle = "reasoning:%s" % sha
+        seen = 0
+        for _e in memory_logger.get_recent(n=_CHAIN_SEARCH_WINDOW):
+            seen += 1
+            if str(_e.get("content", "")) == needle:
+                return True, "witness found in the memory chain"
+    except Exception as _walk_err:
+        return None, "chain walk failed: %s" % (_walk_err,)
+    # Not found. Was the whole chain actually searched?
+    try:
+        total = int(memory_logger.count_entries())
+    except Exception:
+        total = seen
+    if total > seen:
+        return None, ("not found in the %d most recent chain entries, and the "
+                      "chain holds %d -- the witness may simply be older than "
+                      "the window searched. Inconclusive, not tampered."
+                      % (seen, total))
+    return False, ("NO witness in the chain matches this trace -- it differs "
+                   "from what was recorded at the time")
+
+
 def verify_reasoning_provenance(entry: dict) -> dict:
-    """Has this message's reasoning trace changed since it was witnessed?
+    """Has this CHAT MESSAGE's reasoning trace changed since it was witnessed?
+
+    Takes a stored history entry: {"reasoning": ..., "reasoning_chain_hash": ...}.
+    For a reasoning LEDGER entry, use verify_reasoning_ledger_entry.
 
     Deliberately explicit about the difference between "fails verification" and
     "cannot be verified". A trace recorded before this feature existed, or one
@@ -594,23 +644,67 @@ def verify_reasoning_provenance(entry: dict) -> dict:
         out["witnessed"] = True
         _expect = _reasoning_hash(entry["reasoning"])
         out["reasoning_sha256"] = _expect
-        if memory_logger is None:
-            out["message"] = "no memory_logger attached; cannot walk the chain"
+        out["hash_matches"], out["message"] = _chain_has_reasoning(_expect)
+    except Exception as _e:
+        out["message"] = f"{type(_e).__name__}: {_e}"
+    return out
+
+
+def verify_reasoning_ledger_entry(entry: dict) -> dict:
+    """Verify one reasoning LEDGER entry. Two independent checks.
+
+    A ledger entry is a different shape from a chat message and carries more to
+    check, so it gets its own front door onto the same chain walk:
+
+      text_intact   the stored trace still hashes to the sha256 recorded
+                    beside it. This catches edits to the ledger FILE itself,
+                    which the chat-message check cannot see.
+      hash_matches  that sha256 has a witness in the tamper-evident chain.
+
+    TRUNCATION IS NOT TAMPERING, and getting this wrong would break the whole
+    surface. record() stores at most MAX_TRACE_CHARS of text but hashes the
+    ORIGINAL, so a truncated entry's stored text deliberately does NOT hash to
+    its own sha256. Re-hashing it and calling the mismatch tampering would flag
+    every long trace on a healthy install. So for a truncated entry the text
+    check is skipped and reported as not applicable, and the recorded hash --
+    which is the original's -- is still checked against the chain.
+    """
+    out = {"has_reasoning": False, "witnessed": False, "hash_matches": None,
+           "text_intact": None, "truncated": False, "message": ""}
+    try:
+        if not isinstance(entry, dict) or not entry.get("trace"):
+            out["message"] = "no reasoning trace on this entry"
             return out
-        _found = False
-        try:
-            for _e in memory_logger.get_recent(n=2000):
-                if str(_e.get("content", "")) == f"reasoning:{_expect}":
-                    _found = True
-                    break
-        except Exception as _walk_err:
-            out["message"] = f"chain walk failed: {_walk_err}"
+        out["has_reasoning"] = True
+        out["truncated"] = bool(entry.get("truncated"))
+        _recorded = str(entry.get("sha256") or "")
+        if not _recorded:
+            out["message"] = "entry carries no hash; nothing to verify against"
             return out
-        out["hash_matches"] = _found
-        out["message"] = ("witness found; the stored trace matches what was "
-                          "committed" if _found else
-                          "NO witness matches this trace -- it differs from "
-                          "what was recorded at the time")
+        out["reasoning_sha256"] = _recorded
+
+        if out["truncated"]:
+            out["text_intact"] = None       # not applicable -- see docstring
+        else:
+            out["text_intact"] = (_reasoning_hash(entry["trace"]) == _recorded)
+
+        if not (entry.get("meta") or {}).get("chain_hash"):
+            out["message"] = ("no witness recorded -- predates the feature or "
+                              "the chain write failed. Unverifiable, not "
+                              "tampered.")
+            return out
+        out["witnessed"] = True
+        out["hash_matches"], _note = _chain_has_reasoning(_recorded)
+        if out["text_intact"] is False:
+            out["message"] = ("the stored text does NOT match the hash saved "
+                              "beside it -- this ledger entry was altered "
+                              "after it was written. (%s)" % _note)
+        elif out["truncated"]:
+            out["message"] = ("trace stored truncated, so its text cannot be "
+                              "self-checked; its recorded hash was checked "
+                              "instead. %s" % _note)
+        else:
+            out["message"] = _note
     except Exception as _e:
         out["message"] = f"{type(_e).__name__}: {_e}"
     return out
@@ -1047,7 +1141,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.15.1", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.15.2", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -4556,6 +4650,170 @@ async def api_save_memory(payload: dict, request: Request):
         except Exception:
             pass
     return {"success": True}
+
+
+# --- Reasoning ledger: the reader ------------------------------------------
+#
+# v2.15.2. The ledger has been written on every reasoning turn since it was
+# added and there was NO way to read it: no endpoint, no button, nothing but a
+# Python session against an encrypted file. A per-user log nobody can open is
+# not a feature, it is disk usage -- and this was asked for so the USER could
+# consult it.
+#
+# verify_reasoning_ledger_entry had the same problem in a worse form: the
+# provenance verifier was the only dead function in this entire module. The
+# audit half of "reasoning is captured and auditable" existed and was
+# unreachable, which made the claim true only of the code and not of the app.
+#
+# Localhost-only and namespace-scoped, exactly like the export surface below
+# it. A profile sees its own ledger; the owner sees the owner's.
+_LEDGER_PREVIEW_CHARS = 400
+_LEDGER_LIST_MAX = 200
+
+
+@app.get("/api/reasoning-ledger")
+async def api_reasoning_ledger(request: Request, limit: int = 50,
+                               verify: bool = False):
+    """List this profile's stored reasoning traces. Summaries, not full text.
+
+    Previews only, by default. A single trace runs to 200,000 characters and a
+    full ledger to two megabytes; sending all of it to render a LIST would make
+    opening the viewer the most expensive thing in the app. The full text of one
+    entry comes from /api/reasoning-ledger/entry.
+
+    `verify` is opt-in for the same reason in a different currency: each entry
+    verified walks the memory chain, so verifying fifty of them on every list
+    render would be fifty walks nobody asked for.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import reasoning_ledger as _rl
+        _ns = _safe_ns(_session_ns(request))
+        _lim = max(1, min(int(limit or 50), _LEDGER_LIST_MAX))
+        _st = _rl.stats(_ns)
+        # The on-disk path is the owner's business, not every caller's: it
+        # names the profile directory. Counts are safe; the path is not.
+        _st.pop("path", None)
+        out = []
+        for _e in _rl.entries(_ns, limit=_lim, newest_first=True):
+            _trace = str(_e.get("trace") or "")
+            _row = {
+                "ts": _e.get("ts"),
+                "sha256": _e.get("sha256"),
+                "chars": _e.get("chars"),
+                "truncated": bool(_e.get("truncated")),
+                "model": (_e.get("meta") or {}).get("model") or "",
+                "chain_hash": (_e.get("meta") or {}).get("chain_hash") or "",
+                "preview": _trace[:_LEDGER_PREVIEW_CHARS],
+                "preview_truncated": len(_trace) > _LEDGER_PREVIEW_CHARS,
+            }
+            if verify:
+                _row["provenance"] = verify_reasoning_ledger_entry(_e)
+            out.append(_row)
+        return {"ok": True, "stats": _st, "entries": out,
+                "limit": _lim, "verified": bool(verify)}
+    except Exception as e:
+        return {"ok": False, "entries": [], "stats": {},
+                "error": _safe_detail(e, "reasoning ledger")}
+
+
+@app.get("/api/reasoning-ledger/entry")
+async def api_reasoning_ledger_entry(request: Request, sha: str = "",
+                                     verify: bool = True):
+    """One full trace, selected by its sha256.
+
+    ADDRESSED BY HASH, NOT BY INDEX, and deliberately. The ledger prunes oldest
+    first, so entry #7 is a different entry after a prune -- a viewer holding an
+    index would silently show the wrong trace. A content hash cannot drift.
+
+    If two entries share a hash the model thought the same thing twice; the
+    newest is returned, and `duplicates` says so rather than hiding it.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        _sha = str(sha or "").strip().lower()
+        if not _sha or len(_sha) != 64 or any(
+                c not in "0123456789abcdef" for c in _sha):
+            return {"ok": False, "error": "a 64-character sha256 is required"}
+        import reasoning_ledger as _rl
+        _ns = _safe_ns(_session_ns(request))
+        _all = _rl.entries(_ns, limit=_rl.MAX_ENTRIES, newest_first=True)
+        _hits = [e for e in _all if str(e.get("sha256") or "") == _sha]
+        if not _hits:
+            return {"ok": False, "error": "no entry with that hash"}
+        _e = _hits[0]
+        _out = {
+            "ok": True,
+            "ts": _e.get("ts"),
+            "sha256": _e.get("sha256"),
+            "chars": _e.get("chars"),
+            "truncated": bool(_e.get("truncated")),
+            "meta": _e.get("meta") or {},
+            "trace": str(_e.get("trace") or ""),
+            "duplicates": len(_hits),
+        }
+        if verify:
+            _out["provenance"] = verify_reasoning_ledger_entry(_e)
+        return _out
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reasoning ledger")}
+
+
+@app.post("/api/reasoning/verify-message")
+async def api_reasoning_verify_message(payload: dict, request: Request):
+    """Is the thinking shown under THIS reply what was recorded at the time?
+
+    The ledger viewer answers this for ledger entries. This answers it for a
+    chat message, and the two are not redundant: the ledger is bounded at
+    MAX_ENTRIES and is erased with the conversation, while an ARCHIVED chat
+    keeps its reasoning for as long as the archive exists. For an old
+    conversation reloaded from disk, this is the only way to ask.
+
+    The caller sends back the copy it is displaying, which is the point -- what
+    gets verified is the trace the user is actually looking at, not a second
+    copy fetched from somewhere else that might differ from it.
+
+    Nothing is stored and nothing is logged: this reads the chain and answers.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        _trace = str((payload or {}).get("reasoning") or "")
+        if not _trace.strip():
+            return {"ok": False, "error": "no reasoning trace supplied"}
+        return {"ok": True, "provenance": verify_reasoning_provenance({
+            "reasoning": _trace,
+            "reasoning_chain_hash": (payload or {}).get(
+                "reasoning_chain_hash") or "",
+        })}
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reasoning verify")}
+
+
+@app.post("/api/reasoning-ledger/clear")
+async def api_reasoning_ledger_clear(request: Request):
+    """Erase this profile's thinking log. Explicit action only.
+
+    Audited, because deleting an audit trail is itself worth a record. The
+    audit entry holds the counts that were destroyed, never the traces.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import reasoning_ledger as _rl
+        _ns = _safe_ns(_session_ns(request))
+        _before = _rl.stats(_ns)
+        _audit_api_action(request, "reasoning_ledger.clear", {
+            "profile": _ns or "(owner)",
+            "entries": _before.get("entries", 0),
+            "total_chars": _before.get("total_chars", 0),
+        })
+        return {"ok": bool(_rl.clear(_ns)),
+                "cleared": _before.get("entries", 0)}
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reasoning ledger")}
 
 
 # --- Complexity Routing -------------------------------------------------------

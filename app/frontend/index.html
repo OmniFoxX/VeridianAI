@@ -1606,6 +1606,18 @@
           >
             🖨️ Print
           </button>
+          <!-- v2.15.2: the reasoning ledger's reader. Beside Export rather
+               than in Settings, with the other things you do WITH your
+               conversation: reading back what the model thought is the same
+               kind of act as loading or printing it. -->
+          <button
+            class="toolbar-btn"
+            id="thinking-toolbar-btn"
+            onclick="openReasoningLog()"
+            data-tip="Read the model's stored reasoning, and verify it"
+          >
+            🧠 Thinking
+          </button>
           <button
             class="toolbar-btn"
             id="export-toolbar-btn"
@@ -2052,7 +2064,7 @@
     <script src="/static/js/socials.js?v=2.11.15"></script>
     <script src="/static/js/hardware.js?v=2.11.13"></script>
     <script src="/static/js/settings.js?v=2.15.1"></script>
-    <script src="/static/js/chat.js?v=2.15.2"></script>
+    <script src="/static/js/chat.js?v=2.15.2a"></script>
     <script src="/static/js/app.js?v=2.9.10"></script>
     <script src="/static/js/auth.js?v=2.15.1"></script>
     <script src="/static/js/skills.js?v=2.11.15"></script>
@@ -2060,7 +2072,8 @@
     <script src="/static/js/boot-status.js?v=2.14.0"></script>
     <script src="/static/js/data-folder.js?v=2.14.0"></script>
     <script src="/static/js/modal-a11y.js?v=2.14.0"></script>
-    <script src="/static/js/data-export.js?v=2.15.0"></script>
+    <script src="/static/js/data-export.js?v=2.15.2"></script>
+    <script src="/static/js/reasoning-log.js?v=2.15.2"></script>
     <script src="/static/js/api-key.js?v=2.14.0"></script>
     <!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
      during the WCAG-pass edit. Without this line, the IIFE in

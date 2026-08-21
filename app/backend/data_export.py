@@ -80,6 +80,14 @@ def _roots(ns=None) -> Dict[str, Tuple[str, Path]]:
         out["chat"] = ("Current conversation", mem)
         out["archives"] = ("Saved conversations", Path(sage_engine._archive_folder(ns)))
         out["evidence"] = ("Research sources (CRAIID)", mem.parent / ".evidence_ledger.dat")
+        # v2.15.2. The user's own thinking log. It sits beside the evidence
+        # ledger and is exported the same way -- but it is emphatically NOT the
+        # same kind of thing, and the label says so: evidence is material the
+        # model retrieved, a reasoning trace is the model's own working, wrong
+        # turns included. Exporting it matters precisely because it is the one
+        # record of HOW an answer was reached.
+        out["reasoning"] = ("Model reasoning traces",
+                            mem.parent / ".reasoning_ledger.dat")
         base = Path(STATE_DIR)
     except Exception:
         return out
