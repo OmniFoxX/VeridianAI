@@ -62,6 +62,14 @@
       box.textContent = "Could not read your data folder.";
       return;
     }
+    // v2.16.1: a locked inventory comes back empty BY DESIGN -- the counts and
+    // sizes are the thing being withheld. Say so, rather than letting it read
+    // as "Nothing stored yet", which would be a plain lie about the user's
+    // own data.
+    if (inv && inv.needs_reauth) {
+      box.textContent = "Locked. Unlock to see what can be exported.";
+      return;
+    }
     var present = (inv.sections || []).filter(function (s) { return s.present; });
     if (!present.length) {
       box.textContent = "Nothing stored yet.";
@@ -150,6 +158,20 @@
         body: JSON.stringify(payload),
       });
       var d = await r.json();
+      // v2.16.1: the unlock can expire between opening the panel and pressing
+      // the button -- five minutes is short on purpose. Ask again and retry
+      // once, rather than reporting the user's own timeout as "Export failed",
+      // which describes the wrong problem.
+      if (d && d.needs_reauth && window.requireUnlock) {
+        if (await window.requireUnlock("Your unlock expired. Confirm again to export.")) {
+          r = await fetch("/api/export", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          d = await r.json();
+        }
+      }
       if (!d.ok) {
         if (window.setStatusError) window.setStatusError("Export failed: " + (d.error || "unknown"));
         return;
@@ -560,7 +582,25 @@
     if (_release) { _release(); _release = null; }
   }
 
-  function openPanel(tab) {
+  async function openPanel(tab) {
+    // v2.16.1: UNLOCK BEFORE THE PANEL EXISTS.
+    //
+    // Not inside it, and not on the toolbar button. This panel lists every
+    // section with file counts and sizes -- that is a map of the target, and
+    // someone who reads it has learned what is worth taking even if the
+    // export is refused a moment later. So nothing is built and nothing is
+    // fetched until the password is in.
+    //
+    // Inside openPanel rather than on each window.* wrapper, so Export and
+    // Import are both covered by one check and a third entry point added
+    // later cannot arrive ungated.
+    if (window.requireUnlock) {
+      var allowed = await window.requireUnlock(
+        "Export copies your stored data out of the app, and the list of what " +
+        "is stored is itself worth protecting."
+      );
+      if (!allowed) return;
+    }
     if (!document.getElementById("export-modal-backdrop")) {
       buildModal();
       // Inventory is fetched on OPEN, not at page load: it stats every file in

@@ -1141,7 +1141,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.16.0", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.15.2", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -3051,6 +3051,14 @@ async def api_burn(payload: dict, request: Request):
     """
     if payload.get("confirm") != "BURN":
         raise HTTPException(400, "burn requires explicit confirmation")
+    # v2.16.1: typing BURN proves intent, not identity. It stops an accident;
+    # it does nothing about someone else at an unlocked session. Burn destroys
+    # the profile's data AND its key, so it is the least recoverable action in
+    # the app -- if anything here is worth a password, this is.
+    _gate = _require_elevated(request)
+    if _gate:
+        raise HTTPException(
+            401, "Burn needs your password. Unlock and try again.")
     import shutil as _shutil
     ns = _safe_ns(_session_ns(request))
     # Recorded BEFORE the wipe: this destroys the chain it would be written to.
@@ -3565,6 +3573,229 @@ async def api_keys_revoke(payload: dict, request: Request):
         return {"ok": False, "error": _safe_detail(e, "key revoke")}
 
 
+# --- Step-up elevation: getting data OUT, and destroying it -----------------
+#
+# v2.16.1. Print, Export and Burn were reachable by anyone sitting at an
+# unlocked, signed-in app. Being SIGNED IN is not the same as being allowed to
+# copy everything out of the building, or to destroy it -- a lent laptop, a
+# borrowed account, a curious child. The account holder proves it is them,
+# just now, and that proof lasts five minutes.
+#
+# THE GATE IS ON THE BUTTON, NOT THE PANEL. The export panel shows file counts
+# and sizes before you choose anything, which is a map of the target. So the
+# UI asks before it fetches, and these endpoints refuse without elevation --
+# the second half is what makes it true against curl rather than only against
+# the UI.
+#
+# SECOND FACTOR ONLY IF THERE IS ONE. mfa.enabled_methods() decides. An
+# account that never set up 2FA is not asked for a code it cannot produce;
+# an account that did cannot skip it. Nobody is punished for the choice they
+# already made.
+#
+# API TOKENS ARE NOT GATED HERE, deliberately. A bearer token is a credential
+# somebody deliberately minted and scoped, and minting one already requires
+# being signed in. Requiring a cookie-session elevation from a headless client
+# would break every integration while protecting nothing -- the attacker at
+# the keyboard has a cookie, not a token.
+_REAUTH_MAX_DELAY = 60          # seconds; a ceiling, never a lockout
+_REAUTH_FAILS: dict = {}        # username -> {"n": int, "next": unix ts}
+
+
+def _session_token(request: Request):
+    try:
+        return request.cookies.get(_AUTH_COOKIE)
+    except Exception:
+        return None
+
+
+def _elevation_applies(request: Request) -> bool:
+    """Is there an account to re-verify against at all?
+
+    With multi-user off there is no login and no password, so there is nothing
+    to ask for -- the gate must skip rather than lock the owner out of their
+    own data. Consistent with the owner's profile key: on a single-user
+    install the protection is control of the machine, and pretending otherwise
+    here would be theatre with a cost.
+    """
+    if not config.get("multiuser_enabled", False):
+        return False
+    # A request arriving on an API token carries no session cookie; scopes
+    # govern it. See the note above.
+    try:
+        if _api_principal(request) is not None:
+            return False
+    except Exception:
+        pass
+    return True
+
+
+def _require_elevated(request: Request):
+    """None when the caller may proceed; a refusal payload otherwise.
+
+    Returns rather than raises so each endpoint keeps its own response shape,
+    and so `needs_reauth` can reach the UI as data it can act on instead of an
+    error it has to parse.
+    """
+    if not _elevation_applies(request):
+        return None
+    try:
+        import session as _session
+        if _session.is_elevated(_session_token(request)):
+            return None
+    except Exception:
+        pass
+    return {"ok": False, "needs_reauth": True,
+            "error": "This action needs your password. Unlock and try again."}
+
+
+def _reauth_delay_left(username: str) -> int:
+    rec = _REAUTH_FAILS.get((username or "").lower())
+    if not rec:
+        return 0
+    return max(0, int(rec.get("next", 0) - time.time()))
+
+
+def _reauth_note_failure(username: str) -> int:
+    """Record a failure and return the seconds to wait. Never a lockout.
+
+    A GROWING DELAY rather than a ban, and the difference matters: the abuse
+    guard on /api/auth/login bans an IP for 15 minutes after 6 failures, which
+    is right for the front door of a network service. This is a person at
+    their own machine re-typing their own password to print their own notes.
+    Locking them out of their own data because they fat-fingered it five times
+    would be the app working against its owner. The delay is capped, so
+    scripted guessing is throttled to nothing while a human just waits a
+    moment.
+    """
+    k = (username or "").lower()
+    rec = _REAUTH_FAILS.setdefault(k, {"n": 0, "next": 0})
+    rec["n"] = int(rec.get("n", 0)) + 1
+    wait = min(2 ** rec["n"], _REAUTH_MAX_DELAY)
+    rec["next"] = time.time() + wait
+    return wait
+
+
+def _reauth_clear(username: str):
+    _REAUTH_FAILS.pop((username or "").lower(), None)
+
+
+@app.get("/api/reauth/status")
+async def api_reauth_status(request: Request):
+    """Does this action need a password, and does it need a code as well?
+
+    `needs_code` is about the CALLER'S OWN account, which they already know
+    the answer for, so it discloses nothing -- and without it the prompt would
+    either show a 2FA box to people who have none, or hide it from people who
+    need it.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import session as _session
+        _tok = _session_token(request)
+        _applies = _elevation_applies(request)
+        _left = _session.elevation_remaining(_tok) if _applies else 0
+        _needs_code = False
+        _user = ""
+        if _applies:
+            s = _session.get_session(_tok) or {}
+            _user = s.get("username") or ""
+            if _user:
+                try:
+                    import mfa as _mfa
+                    _needs_code = bool(_mfa.enabled_methods(_user))
+                except Exception:
+                    _needs_code = False
+        return {"ok": True, "required": _applies, "elevated": bool(_left),
+                "expires_in": _left, "needs_code": _needs_code,
+                "delay": _reauth_delay_left(_user),
+                "ttl": _session.ELEVATION_TTL}
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reauth status")}
+
+
+@app.post("/api/reauth")
+async def api_reauth(payload: dict, request: Request):
+    """Re-verify the signed-in user and grant a short elevation."""
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import session as _session
+        if not _elevation_applies(request):
+            return {"ok": True, "elevated": True, "expires_in": 0,
+                    "note": "no account is configured; nothing to verify"}
+        _tok = _session_token(request)
+        s = _session.get_session(_tok)
+        if not s:
+            return {"ok": False, "error": "your session has expired; sign in again"}
+        _user = s.get("username") or ""
+
+        _wait = _reauth_delay_left(_user)
+        if _wait:
+            return {"ok": False, "retry_in": _wait,
+                    "error": f"Too many attempts. Try again in {_wait}s."}
+
+        import users as _users
+        _r = _users.verify_user(_user, payload.get("password", "") or "")
+        if not _r.get("success"):
+            _w = _reauth_note_failure(_user)
+            _audit_api_action(request, "reauth.failed",
+                              {"profile": s.get("ns") or "(owner)",
+                               "reason": "password"})
+            return {"ok": False, "retry_in": _w,
+                    "error": "That password did not match."}
+
+        # Second factor, but only for accounts that have one.
+        try:
+            import mfa as _mfa
+            _methods = _mfa.enabled_methods(_user)
+        except Exception:
+            _methods = []
+        if _methods:
+            _code = str(payload.get("code", "") or "").strip()
+            if not _code:
+                # NOT a failure -- the client simply has not been asked yet.
+                # Counting it would let a user throttle themselves by opening
+                # the dialog.
+                return {"ok": False, "needs_code": True,
+                        "error": "Enter your authentication code."}
+            _method = (payload.get("method") or "totp").strip().lower()
+            _good = (_mfa.verify_recovery(_user, _code) if _method == "recovery"
+                     else _mfa.verify_totp(_user, _code))
+            if not _good:
+                _w = _reauth_note_failure(_user)
+                _audit_api_action(request, "reauth.failed",
+                                  {"profile": s.get("ns") or "(owner)",
+                                   "reason": "second factor"})
+                return {"ok": False, "needs_code": True, "retry_in": _w,
+                        "error": "That code did not verify."}
+
+        _reauth_clear(_user)
+        _session.elevate(_tok)
+        _audit_api_action(request, "reauth.granted",
+                          {"profile": s.get("ns") or "(owner)",
+                           "second_factor": bool(_methods),
+                           "seconds": _session.ELEVATION_TTL})
+        return {"ok": True, "elevated": True,
+                "expires_in": _session.elevation_remaining(_tok)}
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reauth")}
+
+
+@app.post("/api/reauth/drop")
+async def api_reauth_drop(request: Request):
+    """Hand the elevation back early. Needs no proof -- giving up a privilege
+    is unilateral, the same way disable_recovery is."""
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import session as _session
+        return {"ok": True,
+                "dropped": _session.drop_elevation(_session_token(request))}
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "reauth")}
+
+
 # --- Data export ------------------------------------------------------------
 # Everything is Fernet-encrypted at rest, which is right for a memory tool and
 # meant there was no way to get your own data OUT. Printing produced a blob;
@@ -3583,6 +3814,13 @@ async def api_export_inventory(request: Request):
     """
     if not _is_local_client(request):
         return _cloak_not_found()
+    # v2.16.1: BEFORE the inventory is read, not after. This response is a map
+    # of the target -- what exists, how much of it, where the bulk is. An
+    # attacker who learns that has learned something even if the export itself
+    # is refused a moment later.
+    _gate = _require_elevated(request)
+    if _gate:
+        return dict(_gate, sections=[], total_bytes=0)
     try:
         import data_export
         _ns = _safe_ns(_session_ns(request))
@@ -3602,6 +3840,9 @@ async def api_export_build(payload: dict, request: Request):
     """Build an export zip. Explicit user action only -- never automatic."""
     if not _is_local_client(request):
         return _cloak_not_found()
+    _gate = _require_elevated(request)
+    if _gate:
+        return _gate
     try:
         import data_export
         ns = _safe_ns(_session_ns(request))

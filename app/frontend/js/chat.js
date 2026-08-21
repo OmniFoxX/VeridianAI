@@ -1877,6 +1877,23 @@ async function burnAllData() {
     return;
   }
 
+  // v2.16.1: typing BURN proves INTENT. It does not prove IDENTITY, and this
+  // is the least recoverable action in the app -- it destroys the profile's
+  // data and its key. Asked here, after the confirmation, so somebody who was
+  // never going to go through with it is not asked for a password first. The
+  // backend refuses without this too; prompting keeps that refusal from
+  // arriving as an unexplained failure.
+  if (window.requireUnlock) {
+    const okToBurn = await window.requireUnlock(
+      "Burn permanently destroys this profile's data and its encryption key. " +
+        "There is no undo.",
+    );
+    if (!okToBurn) {
+      setStatus("Burn cancelled");
+      return;
+    }
+  }
+
   setStatus("🔥 Burning all data…");
   try {
     const resp = await fetch("/api/burn", {
@@ -2004,7 +2021,26 @@ function togglePrivacy() {
 }
 
 /* --- Print Chat ----------------------------------------------- */
-function printChat() {
+/*
+ * v2.16.1: gated INSIDE the function, not on the toolbar button.
+ *
+ * printChat is reachable from the toolbar AND from the command palette
+ * (command-palette.js: { label: 'Print', action: () => safeCall('printChat') }),
+ * so a check hung on the onclick would be walked straight around with Ctrl-K.
+ * Everything that prints already comes through here.
+ *
+ * HONEST ABOUT WHAT THIS IS. Unlike Export, print cannot be enforced by the
+ * backend -- window.print() never touches it, and the conversation is already
+ * rendered in the DOM. This raises the bar on the obvious path; it is not a
+ * boundary, and it should not be described as one.
+ */
+async function printChat() {
+  if (window.requireUnlock) {
+    const okToPrint = await window.requireUnlock(
+      "Printing produces a copy of this conversation that leaves the app.",
+    );
+    if (!okToPrint) return;
+  }
   window.print();
 }
 

@@ -433,10 +433,15 @@ _busts = {n: _bust(n) for n in
           ("chat.js", "reasoning-log.js", "data-export.js")}
 ok("every module this feature touches has a cache-bust",
    all(_busts.values()), _busts)
-ok("...they were bumped together",
-   len(set(_busts.values())) == 1, _busts)
+# NO "bumped together" CHECK, deliberately -- there used to be one and it was
+# wrong. A cache-bust means "this FILE changed", not "the app changed": bumping
+# every module on every release forces browsers to re-download code that did
+# not change. The next round proved it, when chat.js and data-export.js moved
+# to 2.16.1 for the export gate and reasoning-log.js correctly stayed at
+# 2.16.0 because nothing in it had changed. The old assertion pinned a
+# coincidence of a single release and called it a rule.
 ok("...and none is on a pre-feature value",
-   all(v >= (2, 16, 0) for v in _busts.values() if v), _busts,)
+   all(v >= (2, 16, 0) for v in _busts.values() if v), _busts)
 
 
 _failed = [n for n, c in _results if not c]

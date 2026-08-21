@@ -62,8 +62,79 @@ def has_session_dek(token) -> bool:
         return token in _DEKS
 
 
+# v2.16.1 -- STEP-UP ELEVATION for getting data OUT.
+#
+# Print, Export and Burn were reachable by anyone sitting at an unlocked,
+# signed-in app. Being signed in should not be the same as being allowed to
+# copy everything out of the building, or to destroy it.
+#
+# An elevation is a short-lived "this really is the account holder, just now"
+# grant, minted by re-entering the password (plus a second factor, but ONLY
+# for accounts that actually have one configured -- an account with no 2FA is
+# not asked for a code it cannot produce).
+#
+# KEPT HERE, IN session.py, ON PURPOSE. It could have lived in its own module
+# with its own expiry loop, and then there would be two lifecycles to keep in
+# step -- and one of them would eventually miss logout. _forget_locked below
+# is the single choke point every session removal already passes through:
+# logout, expiry, password change. Hanging elevation off it means "expires on
+# logout" is structural rather than remembered. Same reason _hold_profile_key
+# exists: one function, every caller.
+#
+# In memory, like _SESSIONS and _DEKS. An elevation that survived a restart
+# would be an elevation nobody consciously granted.
+_ELEVATED = {}                      # token -> unix expiry
+ELEVATION_TTL = 300                 # 5 minutes
+
+
+def elevate(token, ttl: int = ELEVATION_TTL) -> bool:
+    """Mark a live session as re-verified. False if the token is not live."""
+    if not token:
+        return False
+    with _LOCK:
+        if token not in _SESSIONS:
+            return False
+        _ELEVATED[token] = _now() + int(ttl)
+    return True
+
+
+def elevation_remaining(token) -> int:
+    """Seconds of elevation left; 0 when there is none.
+
+    Returns the number rather than a bare bool so the UI can show the time
+    left honestly instead of a lock that appears to open forever.
+    """
+    if not token:
+        return 0
+    with _LOCK:
+        exp = _ELEVATED.get(token)
+        if not exp:
+            return 0
+        left = exp - _now()
+        if left <= 0:
+            _ELEVATED.pop(token, None)
+            return 0
+        # An elevation must never outlive its session, even by a second.
+        s = _SESSIONS.get(token)
+        if not s or s["expires"] < _now():
+            _ELEVATED.pop(token, None)
+            return 0
+        return int(left)
+
+
+def is_elevated(token) -> bool:
+    return elevation_remaining(token) > 0
+
+
+def drop_elevation(token) -> bool:
+    """Give the elevation back early. Always allowed -- surrendering a
+    privilege needs no proof, the same way disable_recovery does not."""
+    with _LOCK:
+        return _ELEVATED.pop(token, None) is not None
+
+
 def _forget_locked(token):
-    """Pop one token from BOTH maps. The caller must hold _LOCK.
+    """Pop one token from ALL THREE maps. The caller must hold _LOCK.
 
     Returns the namespace that token belonged to, so the caller can decide
     whether that profile's key may now leave the process entirely. Every path
@@ -72,6 +143,7 @@ def _forget_locked(token):
     """
     s = _SESSIONS.pop(token, None)
     _DEKS.pop(token, None)
+    _ELEVATED.pop(token, None)      # v2.16.1: elevation dies with the session
     return (s or {}).get("ns")
 
 
