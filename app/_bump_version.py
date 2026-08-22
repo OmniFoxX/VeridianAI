@@ -132,6 +132,15 @@ def _forms(short: str, semver: str, folder: str) -> dict:
     return {"short": short, "semver": semver, "folder": folder}
 
 
+# v2.16.1: DRIFT REPAIR EXTENDED TO EVERY VERSION-BEARING ANCHOR.
+#
+# Only start.bat's title had a version_pattern, which fixed the one instance
+# that had been noticed. The flaw it exists for is general: a literal anchor
+# carries the version you are bumping FROM, so any line that misses one bump
+# can never match again. The git clone proved it within a day -- main.py sat at
+# 2.15.2 while mcp_handlers.py and package.json were at 2.16.0 in the same
+# tree, and a 2.16.0 -> 2.16.1 bump would have WARNED about main.py and moved
+# on, leaving it two releases behind for good.
 REPLACEMENTS: List[Replacement] = [
     # ----- start.bat -----
     #
@@ -205,6 +214,9 @@ REPLACEMENTS: List[Replacement] = [
         file="backend/main.py",
         build_find=lambda f: f'app = FastAPI(title="VeridianAI", version="{f["semver"]}", docs_url=None, redoc_url=None)',
         build_replace=lambda f: f'app = FastAPI(title="VeridianAI", version="{f["semver"]}", docs_url=None, redoc_url=None)',
+        build_version_pattern=lambda f: (
+            r'app = FastAPI\(title="VeridianAI", version="'
+            r'(\d+\.\d+(?:\.\d+)?)", docs_url=None, redoc_url=None\)'),
         description="main.py FastAPI app version=",
     ),
 
@@ -213,6 +225,8 @@ REPLACEMENTS: List[Replacement] = [
         file="backend/mcp_handlers.py",
         build_find=lambda f: f'MCP_SERVER_VERSION = "{f["semver"]}"',
         build_replace=lambda f: f'MCP_SERVER_VERSION = "{f["semver"]}"',
+        build_version_pattern=lambda f: (
+            r'MCP_SERVER_VERSION = "(\d+\.\d+(?:\.\d+)?)"'),
         description="mcp_handlers.py MCP_SERVER_VERSION",
     ),
 
@@ -252,6 +266,8 @@ REPLACEMENTS: List[Replacement] = [
         file="electron/package.json",
         build_find=lambda f: f'"version": "{f["semver"]}"',
         build_replace=lambda f: f'"version": "{f["semver"]}"',
+        build_version_pattern=lambda f: (
+            r'"version": "(\d+\.\d+(?:\.\d+)?)"'),
         description="electron/package.json version (drives the MSIX package version)",
     ),
 
@@ -273,6 +289,8 @@ REPLACEMENTS: List[Replacement] = [
         file="BEFORE_RUNNING.txt",
         build_find=lambda f: f'VeridianAI-{f["semver"]}-portable',
         build_replace=lambda f: f'VeridianAI-{f["semver"]}-portable',
+        build_version_pattern=lambda f: (
+            r'VeridianAI-(\d+\.\d+(?:\.\d+)?)-portable'),
         description="BEFORE_RUNNING.txt portable zip name (all occurrences)",
     ),
 ]
@@ -361,6 +379,33 @@ def apply_replacements(
             # find, and bailing early would hide it.
             if r.build_version_pattern is not None:
                 pat = r.build_version_pattern(new_forms)
+
+                # THE INVARIANT THAT MAKES THIS SAFE.
+                #
+                # The whole match is replaced by build_replace(new_forms), so
+                # the pattern must span EXACTLY what the replacement provides.
+                # main.py's first version matched only as far as the closing
+                # quote of the version while its replacement was the entire
+                # FastAPI(...) line -- substituting would have duplicated the
+                # tail:
+                #
+                #   ..., docs_url=None, redoc_url=None), docs_url=None, ...)
+                #
+                # A dry run caught it. This makes catching it not depend on
+                # anyone running one: if the pattern does not fullmatch its own
+                # replacement, the anchor is misconfigured and nothing is
+                # written.
+                if not re.fullmatch(pat, replace_str):
+                    print(f"  [BUG] {rel_path}: {r.description}")
+                    print(f"           its version pattern does not span its "
+                          f"own replacement, so substituting would corrupt "
+                          f"the line. Anchor refused; nothing written.")
+                    if verbose:
+                        print(f"           pattern:     {pat!r}")
+                        print(f"           replacement: {replace_str!r}")
+                    missing += 1
+                    continue
+
                 _seen = []
 
                 def _sub(m, _rep=replace_str, _seen=_seen):

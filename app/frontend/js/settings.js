@@ -732,8 +732,8 @@ function toggleTheme() {
   if (hlTheme) {
     hlTheme.href =
       next === "light"
-        ? "/static/css/hljs-github.css?v=11.9.0"
-        : "/static/css/hljs-github-dark-dimmed.css?v=11.9.0";
+        ? "/static/css/hljs-github.css?v=5b43bc87ce"
+        : "/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d";
   }
   Haptic.vibrate(Haptic.PATTERNS.toggle);
 }
