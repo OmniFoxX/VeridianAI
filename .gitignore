@@ -54,3 +54,5 @@ build.log
 chat_memory.json
 .oracle_pids.json
 **/frontend/SAFE/
+_bump_version.py
+bump_version.bat
