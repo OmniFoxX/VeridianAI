@@ -278,9 +278,26 @@ class MemoryLogger:
                 "[Error: ",
             )
             stripped = content_str.strip()
-            if any(stripped.startswith(p) for p in _ERROR_PREFIXES):
-                print(f"[MEMORY LOGGER] skipping error-shaped content "
-                      f"from chain: {stripped[:80]}")
+            _hit = next((p for p in _ERROR_PREFIXES
+                         if stripped.startswith(p)), None)
+            if _hit is not None:
+                # v2.16.1 (CodeQL py/clear-text-logging-sensitive-data): print
+                # WHICH prefix matched, never the content itself.
+                #
+                # This used to log stripped[:80]. The guard above proves the
+                # string starts with an error prefix -- it does not prove the
+                # rest of it is free of conversation. An inference backend that
+                # echoes part of the prompt back inside its error text puts that
+                # prompt on stdout, in the clear, in an app whose whole posture
+                # is that conversation content stays encrypted at rest. The
+                # terminal is the one place none of that protection reaches.
+                #
+                # Nothing diagnostic is lost: the prefix is what identifies
+                # which tier failed, and that is the reason this line exists.
+                # The full text is still available -- it was already printed by
+                # whichever layer produced it.
+                print(f"[MEMORY LOGGER] skipping error-shaped content from "
+                      f"chain ({len(stripped)} chars, matched {_hit!r})")
                 return None
 
         # Calculate surprise score: (1 - token_prob) weighted + temp deviation

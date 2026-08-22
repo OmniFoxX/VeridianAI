@@ -154,8 +154,28 @@ ok("a trace with no witness is UNVERIFIABLE, not tampered",
 ok("hash_matches starts as None, not False",
    '"hash_matches": None' in _v,
    "False would assert a negative finding before anything was checked")
-ok("a chain-walk failure is reported, not swallowed",
-   "chain walk failed" in _v)
+# v2.16.1: asserted as a PROPERTY, not a sentence.
+#
+# This was '"chain walk failed" in _v' and went red when that exact wording
+# changed -- and the wording changed for a good reason: CodeQL
+# py/stack-trace-exposure found that the message was interpolating the raw
+# exception, which reached the browser through /api/reasoning-ledger. The
+# behaviour under test never changed; only the string did.
+#
+# What actually matters is unchanged and is what is checked now: the walk still
+# HANDLES the failure (does not let it escape), still SAYS something about it
+# (does not swallow it), and now routes the detail through _safe_detail so the
+# reason reaches the server log instead of the client.
+ok("a chain-walk failure is caught, not allowed to escape",
+   "except Exception" in _v and "_walk_err" in _v)
+ok("...and is reported rather than swallowed",
+   "return None, (" in _v,
+   "returning None with no message would make a broken chain look identical "
+   "to an unwitnessed trace")
+ok("...with the reason logged, not returned",
+   "_safe_detail(_walk_err" in _v,
+   "the exception text carries file paths; the caller gets a correlation ref "
+   "and the server log gets the rest")
 
 
 # =============================================================================

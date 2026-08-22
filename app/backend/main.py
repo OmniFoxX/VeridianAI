@@ -602,7 +602,11 @@ def _chain_has_reasoning(sha: str):
             if str(_e.get("content", "")) == needle:
                 return True, "witness found in the memory chain"
     except Exception as _walk_err:
-        return None, "chain walk failed: %s" % (_walk_err,)
+        # v2.16.1 (CodeQL py/stack-trace-exposure): the reason is LOGGED, not
+        # returned. This string ends up in a verdict that /api/reasoning-ledger
+        # hands to the browser, and a chain-walk failure carries file paths.
+        return None, ("the chain could not be read -- %s"
+                      % _safe_detail(_walk_err, "reasoning chain walk"))
     # Not found. Was the whole chain actually searched?
     try:
         total = int(memory_logger.count_entries())
@@ -646,7 +650,13 @@ def verify_reasoning_provenance(entry: dict) -> dict:
         out["reasoning_sha256"] = _expect
         out["hash_matches"], out["message"] = _chain_has_reasoning(_expect)
     except Exception as _e:
-        out["message"] = f"{type(_e).__name__}: {_e}"
+        # v2.16.1 (CodeQL py/stack-trace-exposure): this dict is returned to
+        # the browser by the reasoning endpoints, so the exception TEXT must
+        # not ride along -- it carries paths and internals. _safe_detail logs
+        # the real thing server-side and hands back a correlation ref, which
+        # is the same trade every other endpoint here already makes.
+        out["message"] = ("the check could not be completed -- %s"
+                          % _safe_detail(_e, "reasoning provenance"))
     return out
 
 
@@ -706,7 +716,13 @@ def verify_reasoning_ledger_entry(entry: dict) -> dict:
         else:
             out["message"] = _note
     except Exception as _e:
-        out["message"] = f"{type(_e).__name__}: {_e}"
+        # v2.16.1 (CodeQL py/stack-trace-exposure): this dict is returned to
+        # the browser by the reasoning endpoints, so the exception TEXT must
+        # not ride along -- it carries paths and internals. _safe_detail logs
+        # the real thing server-side and hands back a correlation ref, which
+        # is the same trade every other endpoint here already makes.
+        out["message"] = ("the check could not be completed -- %s"
+                          % _safe_detail(_e, "reasoning provenance"))
     return out
 
 
