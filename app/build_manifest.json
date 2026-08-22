@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.16.1",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "7dc03dbeb64348a2ab225a2fd4922e4f",
-    "built_utc": "2026-08-22T01:27:57.177512+00:00",
+    "build_id": "0113686aad3c4d03a34291720fe17057",
+    "built_utc": "2026-08-22T01:45:31.371487+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -282,7 +282,7 @@
       "frontend/manifest.webmanifest": "d6e2a017c08dbf7f5b4dda36943810d19828fe0680bdcb9c5d14149961cfefce",
       "frontend/offline.html": "ac88e9cb27c56234a57b7240de73b3e326d4d54b8dd4f18d3a7a16340d68fee6",
       "frontend/sw.js": "6231f99d9f1e54eb7d8028a0c14aa83b9ba02590d3792e4aac9672f29631d25c",
-      "start.bat": "2bef1876154183238491e3debf8cef56adb61c552d352e95af4c730c4229de38",
+      "start.bat": "7978fa5ab54cebe473fd6a327097a5b2404c1dd714fa75c9455405e43bdd1d61",
       "start.py": "be844de43aff5219e6fb347313b61267d3a161ca4938d3fecbe450d1cea1d7d2",
       "store_launch.py": "5ae651dee33e5fcf4b9b1e66cfbc194630f8c963f8d008ae925ca4df85ddbf01",
       "tools/aiq_nudge_send.py": "9e6daa3e6dd997f3a3523298bf20ce7f2e82eadce950d166a4d673a49e5691d5",
@@ -296,5 +296,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "3yQZ3Dc15VDBd2XPiDsaxngkLE++Zt6epsoQKX+iql0msCKEz0Se+ELQUUDrMRuHQoSdmOw0Brn9xUMYF+NeAg=="
+  "signature_b64": "LasrHF82KbfEh1BBfKE+lpd9mxQy3owHA4eN+pC3Va0Oqr18STxy9A6/IQUBSuq8HG77iNAJ8NTKYS/NQY/+CA=="
 }
