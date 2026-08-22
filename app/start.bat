@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-title VeridianAI v2.16.1 - Startup
+title VeridianAI v2.16 - Startup
 
 :: ---------------------------------------------------------------
 :: Non-interactive mode for Electron (and future self-update use)
