@@ -134,8 +134,32 @@ def build_env() -> dict:
     else:
         llama_server_str = str(llama_server)
 
-    sage_file = os.environ.get("SAGE_MODEL_FILE",
-                               "all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf")
+    # v2.16.1: AN ORDERED LIST, like the daemon and embed slots below.
+    #
+    # This was a single default -- "all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf"
+    # -- and that file is NOT bundled. On a fresh Store install with nothing in
+    # sage_data/models, _resolve_model found neither a user copy nor a bundled
+    # one, returned "", and tier_launcher skipped the Toga tier. The result is
+    # the worst possible first impression: the app opens with an empty primary
+    # model slot and no explanation.
+    #
+    # start.bat hit the mirror image of this and records it at line ~125: "the
+    # MSIX found bundled_models\qwen2.5_coder_1.5b_instruct.gguf and the
+    # portable looked for ..._base.gguf, found nothing, skipped the tier". The
+    # portable launcher was given a candidate list then. This one was not, so
+    # the same class of bug sat in the launcher that serves the Store reviewer.
+    #
+    # Order matters and preserves the old intent: the 7B is still preferred
+    # when it is present, and _resolve_model checks the USER's models directory
+    # for every candidate before falling back to any bundled one -- so someone
+    # who supplied the 7B still gets it. What changed is that running out of
+    # candidates now lands on the model that is actually in the package.
+    _sage_env = os.environ.get("SAGE_MODEL_FILE", "").strip()
+    sage_file = [_sage_env] if _sage_env else [
+        "all_hands_openhands_lm_7b_v0_1_Q6_K_L.gguf",
+        "qwen2.5_coder_1.5b_instruct.gguf",
+        "qwen2.5_coder_1.5b_base.gguf",
+    ]
     # Ordered preference, best first. The INSTRUCT build is preferred: the base
     # checkpoint carries an instruct chat template but the base eos_token_id, so
     # it closes each turn with a token llama-server does not stop on and then

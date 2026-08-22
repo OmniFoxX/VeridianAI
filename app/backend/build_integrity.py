@@ -161,6 +161,15 @@ EXCLUDE_FILES = {"build_manifest.json", "config.json", "chat_memory.json",
                  # amount of re-running genmanifest fixes it.
                  "bundle_playwright.ps1",
                  "_bump_version.py", "bump_version.bat",
+                 # v2.16.1: and again, exactly as the note above predicted.
+                 # _bust_cache.py derives every ?v= cache-bust from file
+                 # contents. It is build tooling, so extraFiles does not carry
+                 # it -- but it sits at the project root, so genmanifest hashed
+                 # it, and the packaged app reported the whole build "modified"
+                 # over a file it could never contain. Uninstall, genmanifest,
+                 # rebuild and reinstall all failed to clear it, which is the
+                 # signature of this bug: the manifest is not the broken half.
+                 "_bust_cache.py",
                  # NOTE: the first-run key banner tells the user to "run
                  # rotate_api_key.bat in the project folder" -- and the package
                  # does not contain it. That instruction needs a Store-aware
