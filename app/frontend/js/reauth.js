@@ -223,4 +223,55 @@
       await fetch("/api/reauth/drop", { method: "POST" });
     } catch (e) { /* nothing to do; it expires on its own */ }
   };
+
+  /* ------------------------------------------------------------------------
+   * v2.16.1: one interception point for every gated endpoint.
+   *
+   * Eleven auth endpoints now refuse without an unlock -- turning a second
+   * factor off, minting an API token, resetting somebody else's password, and
+   * so on. Wiring a prompt into each of their callers by hand would be eleven
+   * chances to miss one, and the twelfth endpoint added next year would arrive
+   * unwired. That is the same "right code, wrong coverage" shape that has
+   * bitten this project six times; the lesson each time was to put the check
+   * where every path already goes.
+   *
+   * DELIBERATELY NARROW. It acts only on a 401 whose JSON says needs_reauth,
+   * and only when the request body is replayable. It never touches streaming
+   * responses, never inspects a body it does not have to, and skips
+   * /api/reauth itself so a refusal cannot recurse.
+   *
+   * Retries ONCE. If the second attempt also refuses, that is a real answer
+   * and the caller should see it rather than being asked again in a loop.
+   * ---------------------------------------------------------------------- */
+  var _native = window.fetch.bind(window);
+
+  window.fetch = async function (input, init) {
+    var res = await _native(input, init);
+    try {
+      if (res.status !== 401) return res;
+      var url = (typeof input === "string" ? input : (input && input.url) || "");
+      if (url.indexOf("/api/") === -1 || url.indexOf("/api/reauth") !== -1) {
+        return res;
+      }
+      // Body must be replayable. A string is; a stream or FormData is not,
+      // and silently re-sending something else would be worse than the error.
+      var body = init && init.body;
+      if (body != null && typeof body !== "string") return res;
+
+      var data = null;
+      try { data = await res.clone().json(); } catch (e) { return res; }
+      var needs = data && (data.needs_reauth ||
+                           (data.detail && data.detail.needs_reauth));
+      if (!needs) return res;
+
+      var msg = (data.detail && data.detail.error) || data.error ||
+                "This action needs your password.";
+      if (!window.requireUnlock) return res;
+      var okNow = await window.requireUnlock(msg);
+      if (!okNow) return res;
+      return await _native(input, init);
+    } catch (e) {
+      return res;               // never let the guard break the request
+    }
+  };
 })();

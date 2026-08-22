@@ -3402,6 +3402,8 @@ async def api_rotate_api_key(payload: dict, request: Request):
         return _cloak_not_found()
     if payload.get("confirm") != "ROTATE":
         raise HTTPException(400, "rotation requires explicit confirmation")
+    # v2.16.1: rotating the API key -- see _require_elevated.
+    _demand_elevation(request)
 
     # v2.14: rotation is now PER PROFILE, so it is no longer owner-only.
     # It had to be owner-gated while one shared key served everyone --
@@ -3490,6 +3492,8 @@ async def api_keys_create(payload: dict, request: Request):
     """Mint a scoped key for the caller's profile. Returned ONCE."""
     if not _is_local_client(request):
         return _cloak_not_found()
+    # v2.16.1: minting an API token -- see _require_elevated.
+    _demand_elevation(request)
     label = str(payload.get("label") or "").strip()[:60]
     preset = str(payload.get("preset") or "").strip()
     if not label:
@@ -3646,6 +3650,35 @@ def _require_elevated(request: Request):
         pass
     return {"ok": False, "needs_reauth": True,
             "error": "This action needs your password. Unlock and try again."}
+
+
+def _demand_elevation(request: Request):
+    """_require_elevated, for endpoints that RAISE rather than return.
+
+    v2.16.1. The data surface returns a refusal payload; the auth surface
+    raises HTTPException, and mixing the two styles inside one endpoint is how
+    a guard ends up ignored. So this raises -- with a STRUCTURED detail, not a
+    sentence, so the browser can recognise "unlock and retry" as data instead
+    of pattern-matching an error string that will be reworded one day.
+
+    WHAT THIS PROTECTS, AND WHY IT IS NOT THE SAME LIST AS EXPORT.
+    Print/Export/Burn are about data LEAVING or being destroyed. These are
+    about the locks themselves: turning a second factor off, minting a token,
+    resetting somebody else's password. The principle is the same one Todd
+    put plainly -- a second factor that guards the front door and not the
+    lock on the front door is only half a factor.
+
+    Note what is deliberately NOT here: ADDING a second factor (totp/begin,
+    totp/confirm, fido2/register) and REVOKING a token. Making yourself safer
+    should never need a ceremony, and giving up a privilege is unilateral --
+    the same reasoning as profile_keys.disable_recovery.
+    """
+    _gate = _require_elevated(request)
+    if _gate:
+        raise HTTPException(401, detail={
+            "needs_reauth": True,
+            "error": _gate.get("error") or "This action needs your password.",
+        })
 
 
 def _reauth_delay_left(username: str) -> int:
@@ -6233,6 +6266,8 @@ async def api_auth_totp_confirm(payload: dict, request: Request):
 @app.post("/api/auth/mfa/totp/disable")
 async def api_auth_totp_disable(payload: dict, request: Request):
     s = _require_session(request)
+    # v2.16.1: turning a second factor OFF -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import mfa as _mfa
     # Destructive MFA ops re-verify the password (session alone isn't enough).
@@ -6244,6 +6279,8 @@ async def api_auth_totp_disable(payload: dict, request: Request):
 @app.post("/api/auth/mfa/recovery/regenerate")
 async def api_auth_recovery_regenerate(payload: dict, request: Request):
     s = _require_session(request)
+    # v2.16.1: reissuing recovery codes -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import mfa as _mfa
     if not _users.verify_user(s["username"], payload.get("password", "")).get("success"):
@@ -6299,6 +6336,8 @@ async def api_auth_fido2_register(payload: dict, request: Request):
 @app.post("/api/auth/fido2/remove")
 async def api_auth_fido2_remove(payload: dict, request: Request):
     s = _require_session(request)
+    # v2.16.1: removing a security key -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import mfa as _mfa
     if not _users.verify_user(s["username"], payload.get("password", "")).get("success"):
@@ -6355,6 +6394,8 @@ async def api_auth_users_list(request: Request):
 @app.post("/api/auth/users")
 async def api_auth_users_create(request: Request, payload: dict):
     _require_owner(request)
+    # v2.16.1: creating an account -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     r = _users.create_user((payload.get("username") or ""), (payload.get("password") or ""))
     if not r.get("success"):
@@ -6399,6 +6440,8 @@ async def api_auth_users_create(request: Request, payload: dict):
 @app.post("/api/auth/users/delete")
 async def api_auth_users_delete(request: Request, payload: dict):
     s = _require_owner(request)
+    # v2.16.1: deleting an account -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import session as _session
     target = (payload.get("username") or "").strip()
@@ -6496,6 +6539,8 @@ async def api_profile_recovery_set(username: str, payload: dict, request: Reques
     The asymmetry is arithmetic, not a rule enforced here -- an owner cannot
     quietly re-acquire access they gave up, because they have nothing to wrap.
     """
+    # v2.16.1: changing who can recover a profile -- see _require_elevated.
+    _demand_elevation(request)
     import session as _session, users as _users
     s = _session.get_session(request.cookies.get(_AUTH_COOKIE))
     if not s:
@@ -6565,6 +6610,8 @@ async def api_owner_reset_password(payload: dict, request: Request):
     be reachable by a mis-click on a dialog somebody stopped reading.
     """
     _require_owner(request)
+    # v2.16.1: resetting another account's password -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     target = (payload.get("username") or "").strip()
     new = payload.get("new_password") or ""
@@ -6643,6 +6690,8 @@ async def api_auth_users_mfa_reset(request: Request, payload: dict):
     they can sign in and re-enroll. The OWNER's own escape hatch is their
     recovery codes -- or, with physical access, tools/reset_mfa.py."""
     s = _require_owner(request)
+    # v2.16.1: clearing another account's second factors -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import mfa as _mfa
     target = (payload.get("username") or "").strip()
@@ -6711,6 +6760,8 @@ async def api_auth_users_access_get(request: Request, username: str = ""):
 @app.post("/api/auth/users/access")
 async def api_auth_users_access_set(request: Request, payload: dict):
     s = _require_owner(request)
+    # v2.16.1: changing another account's access policy -- see _require_elevated.
+    _demand_elevation(request)
     import users as _users
     import session as _session
     import access_policy as _ap
