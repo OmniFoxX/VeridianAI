@@ -1157,7 +1157,7 @@ def _customs_run(tool, args, fn, origin="prioritise"):
         return _c.correction
     return fn(_c.args if _c.verdict in ("pass", "repaired") else args)
 
-app = FastAPI(title="VeridianAI", version="2.16.2", docs_url=None, redoc_url=None)
+app = FastAPI(title="VeridianAI", version="2.16.1", docs_url=None, redoc_url=None)
 # CORS restricted to loopback origins. The app's own UI is served same-origin by
 # this backend (StaticFiles + index.html), so same-origin requests are unaffected;
 # this only stops an external website from making *credentialed* requests to the
@@ -3335,12 +3335,43 @@ async def api_get_devmode():
 
 @app.post("/api/devmode")
 async def api_set_devmode(payload: dict, request: Request):
-    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
+    """Show or hide the log consoles. Available to every profile (v2.16.2).
+
+    THIS WAS _owner_gate(request), AND THE FAILURE WAS SILENT. A non-owner
+    got the uniform 404 cloak, settings.js caught it into a console.error
+    nobody reads, and the checkbox stayed where the browser had already put
+    it. Todd found it the only way it could be found -- by using it:
+
+        "toggling it off in a Non-Owner account does NOT actually turn it
+         off if the Owner account has developer mode toggled on"
+
+    A control that shows a state it does not have is the same defect as the
+    unlock prompt that rendered behind its own dialog and the plugin toggle
+    that reported ok for a write that failed. Three shapes of one bug in one
+    release: the UI asserting something the system never agreed to.
+
+    IT REMAINS MACHINE-WIDE, and that is not a compromise -- it is what the
+    setting IS. There is one desktop and one set of console windows;
+    tier_launcher reads this flag in a daemon with no signed-in user to ask,
+    which is why ui_prefs declares it a MACHINE key. A per-profile answer
+    there is not merely wrong, it is unanswerable. So the honest fix is not to
+    fake per-person state: it is to let everyone's toggle actually work, and
+    to say plainly in the UI that it applies to the whole machine.
+
+    Localhost-only and audited. Turning it ON reveals daemon and model-server
+    terminals, whose output is a legitimate thing to record who asked for.
+    """
+    if not _is_local_client(request):
+        return _cloak_not_found()
     import devmode
     enabled = bool(payload.get("enabled"))
     devmode.set_enabled(enabled)
     result = devmode.set_consoles_visible(enabled)
-    return {"enabled": enabled, "result": result}
+    _audit_api_action(request, "devmode.set", {"enabled": enabled})
+    # The value read back from the store, not the value we were asked for --
+    # so a write that did not land cannot be reported as one that did.
+    return {"enabled": devmode.is_enabled(), "requested": enabled,
+            "result": result}
 
 
 @app.get("/api/devmode/diag")
@@ -6944,9 +6975,21 @@ async def api_toggle_plugin_v2(plugin_id: str, request: Request):
         "task-prioritiser": "task_prioritiser",
         "browser-plugin": "browser",
     }
-    if plugin_id in feature_map:
+    # v2.16.2: only mirror the flag into sage_engine when the toggle actually
+    # took. On a failed save the plugin is still in its old state, and setting
+    # the feature anyway would leave the engine disagreeing with both the
+    # plugin manager and the file on disk -- the same split that made this
+    # look like it worked in the first place.
+    if result.get("status") == "ok" and plugin_id in feature_map:
         sage_engine.set_feature(
             feature_map[plugin_id], result.get("enabled", True))
+    if result.get("status") != "ok":
+        # A real status code, so the UI can put the switch back. This used to
+        # return 200 with a body nobody read.
+        raise HTTPException(
+            500, result.get("message") or "Could not save the plugin setting.")
+    _audit_api_action(request, "plugin.toggle",
+                      {"plugin": plugin_id, "enabled": result.get("enabled")})
     return result
 
 

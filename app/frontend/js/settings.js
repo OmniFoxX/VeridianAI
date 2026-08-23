@@ -244,14 +244,40 @@ function renderBuildStatus(d) {
   el.style.color = pair[1];
 }
 
+/* The switch shows what the SERVER says, never what we asked for.
+ *
+ * This used to fire and forget. A non-owner was refused by the owner gate, the
+ * refusal landed in console.error, and the checkbox sat there showing OFF while
+ * the consoles stayed open -- which is exactly how Todd found it. The gate is
+ * gone now, but the reporting bug was the worse half and would have outlived
+ * it: any future refusal, any failed write, would have gone the same way.
+ *
+ * So: read the authoritative value out of the response and render THAT. On any
+ * failure, put the switch back where it was and say so where a person can
+ * actually see it. */
 async function setDevMode(enabled) {
+  const box = document.getElementById("toggle-devmode");
   try {
-    await fetch("/api/devmode", {
+    const r = await fetch("/api/devmode", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ enabled: !!enabled }),
     });
+    const d = r.ok ? await r.json() : null;
+    if (!r.ok || !d || typeof d.enabled !== "boolean") {
+      throw new Error("HTTP " + r.status);
+    }
+    if (box) box.checked = d.enabled;
+    if (d.enabled !== !!enabled && window.setStatusError) {
+      // The store disagreed with the request. Rare, but silence here is how
+      // the original bug felt from the outside.
+      window.setStatusError("Developer Mode could not be changed.");
+    }
   } catch (e) {
+    if (box) box.checked = !enabled;          // put it back
+    if (window.setStatusError) {
+      window.setStatusError("Developer Mode could not be changed.");
+    }
     console.error("[Settings] devmode save failed", e);
   }
 }
@@ -711,12 +737,29 @@ async function loadPlugins() {
   }
 }
 
+/* Same rule as setDevMode: the switch shows what the server confirmed.
+ *
+ * The catch here only ever caught a NETWORK failure. A 403, a 404 cloak or the
+ * 500 the backend now returns when the setting cannot be saved are all
+ * perfectly good responses as far as fetch is concerned, so none of them
+ * reverted anything -- the switch stayed flipped and the plugin did not
+ * change. On a Store install, where the old code wrote into a read-only
+ * install directory, that was every single toggle. */
 async function togglePlugin(pluginId, checkbox) {
   try {
-    await fetch(`/api/plugins/${pluginId}/toggle`, { method: "POST" });
+    const r = await fetch(`/api/plugins/${pluginId}/toggle`, { method: "POST" });
+    const d = r.ok ? await r.json().catch(() => null) : null;
+    if (!r.ok || !d || d.status !== "ok") {
+      throw new Error((d && (d.message || d.detail)) || "HTTP " + r.status);
+    }
+    if (typeof d.enabled === "boolean") checkbox.checked = d.enabled;
     Haptic.vibrate(Haptic.PATTERNS.toggle);
-  } catch {
+  } catch (e) {
     checkbox.checked = !checkbox.checked;
+    if (window.setStatusError) {
+      window.setStatusError(
+        "Could not change that plugin: " + (e && e.message ? e.message : "failed"));
+    }
   }
 }
 
