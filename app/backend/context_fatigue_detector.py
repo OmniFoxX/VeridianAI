@@ -176,6 +176,29 @@ def compute_metrics(texts, window_turns):
     return token_ratio, repetition_ratio, entropy_norm
 
 
+def _default_archives_dir() -> Path:
+    """sage_data/archives, asked of the app rather than computed from here.
+
+    v2.16.1: this was `Path(__file__).parent.parent / "archives"` -- the
+    install directory, which is where archives lived until the 2026-08-13 move
+    into sage_data. Run standalone against the default after that move and it
+    reads an empty folder and reports no fatigue, which is indistinguishable
+    from a healthy conversation.
+
+    Falls back to the historical path only when state_paths cannot be imported
+    at all, which is the genuinely-standalone case this default exists for.
+    """
+    try:
+        import sys as _sys
+        _backend = str(Path(__file__).resolve().parent)
+        if _backend not in _sys.path:
+            _sys.path.insert(0, _backend)
+        from state_paths import ARCHIVES_DIR
+        return Path(ARCHIVES_DIR)
+    except Exception:
+        return Path(__file__).resolve().parent.parent / "archives"
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Detect context fatigue from recent user messages in archive files."
@@ -183,9 +206,9 @@ def main():
     parser.add_argument(
         "--archives-dir",
         type=Path,
-        default=Path(__file__).resolve().parent.parent / "archives",
+        default=_default_archives_dir(),
         help="Directory containing archive JSON files "
-             "(default: the archives/ folder beside this project)",
+             "(default: the archives/ folder in sage_data)",
     )
     parser.add_argument(
         "--window-turns",

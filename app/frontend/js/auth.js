@@ -664,6 +664,14 @@
       V("--text-muted", "#7890b8") + '"></div>' +
       '<label style="' + chk + '"><input id="ac-socials" type="checkbox" style="accent-color:' +
       V("--gold", "#f0a500") + '">Allow socials (Discord, Mastodon, Bluesky, Argo-Net)</label>' +
+      // v2.16.1: AI QNudge, revocable per profile.
+      //
+      // Grouped with socials rather than with Delegated admin, and that is the
+      // whole point: this is not an owner power handed down, it is an ability
+      // every profile has by default and the owner can take away. Steering the
+      // assistant you are already talking to is not administration.
+      '<label style="' + chk + '"><input id="ac-nudge" type="checkbox" style="accent-color:' +
+      V("--gold", "#f0a500") + '">Allow AI QNudge (steer Toga mid-task)</label>' +
       // v2.12.9 delegated admin: grant an assistant-manager profile specific
       // owner-level controls. Maps to access_policy.admin_grants; enforced
       // server-side by _owner_gate(cap) / _owner_guard -- these checkboxes
@@ -761,6 +769,7 @@
       el("ac-to").value = w.length === 2 ? w[1] : "";
       acWindowNote();
       el("ac-socials").checked = a.socials_allowed !== false;
+      el("ac-nudge").checked = a.nudge_allowed !== false;
       var g = a.admin_grants || [];
       el("ac-cap-models").checked = g.indexOf("models") !== -1;
       el("ac-cap-integrations").checked = g.indexOf("integrations") !== -1;
@@ -789,6 +798,7 @@
       daily_minutes: parseInt(el("ac-daily").value, 10) || 0,
       allowed_hours: (from && to) ? (from + "-" + to) : "",
       socials_allowed: !!el("ac-socials").checked,
+      nudge_allowed: !!el("ac-nudge").checked,
       admin_grants: ["models", "integrations", "imagegen", "skills"].filter(
         function (c) { return !!el("ac-cap-" + c).checked; }),
       locked: !!el("ac-locked").checked,

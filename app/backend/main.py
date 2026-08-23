@@ -5129,7 +5129,34 @@ async def api_aiq_nudge(payload: dict, request: Request):
     and Toga consumes it on her next agentic step. Uses the shared
     AIQNudge.send() and the same sage_data-resolved key as the consumer, so
     UI nudges verify identically to terminal ones."""
-    _owner_gate(request)  # v2.12.8 owner-only (semgrep)
+    # v2.16.1: NOT owner-only any more.
+    #
+    # This was _owner_gate(request), which made "steer the assistant you are
+    # talking to" a power the owner held over everyone else's conversation.
+    # Redirecting your own session mid-run is not an owner-level control; it is
+    # the most basic one there is, and a profile without it can only watch a
+    # run go the wrong way.
+    #
+    # Allowed by default and revocable per profile in Access Controls, the same
+    # shape as socials_allowed and mcp_allowed -- never a grant list, which
+    # would leave every new profile unable to say "no, not like that" until
+    # somebody noticed.
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    _nudge_ns = _safe_ns(_session_ns(request))
+    if _nudge_ns:
+        try:
+            import session as _sess
+            import access_policy as _ap
+            _s = _sess.get_session(_session_token(request)) or {}
+            _uname = _s.get("username") or ""
+            if _uname and not _ap.nudge_allowed(_uname):
+                raise HTTPException(
+                    403, "AIQNudge is turned off for this profile")
+        except HTTPException:
+            raise
+        except Exception:
+            pass          # fail-open, like its two siblings
     message = (payload.get("message") or "").strip()
     if not message:
         raise HTTPException(400, "empty nudge")
@@ -5138,9 +5165,14 @@ async def api_aiq_nudge(payload: dict, request: Request):
     if aiq_nudge is None:
         raise HTTPException(503, "AIQNudge channel unavailable (key/setup error)")
     try:
-        target = aiq_nudge.send(message)
+        # The namespace is SIGNED into the nudge, so the reader can tell whose
+        # session it was meant for and refuse to hand it to anyone else.
+        target = aiq_nudge.send(message, ns=_nudge_ns)
     except Exception as e:
         raise HTTPException(500, _safe_detail(e, "nudge"))
+    _audit_api_action(request, "aiq_nudge.send",
+                      {"profile": _nudge_ns or "(owner)",
+                       "length": len(message)})
     return {"success": True, "file": target.name, "length": len(message)}
 
 
@@ -6119,6 +6151,22 @@ async def api_auth_login(payload: dict, request: Request):
 @app.post("/api/auth/logout")
 async def api_auth_logout(request: Request):
     import session as _session
+    # v2.16.1: take this profile's pending nudges with the session.
+    #
+    # BEFORE destroying it, because the namespace comes from the session and
+    # afterwards there is nothing left to ask. Todd's scenario is precisely
+    # this gap: queue a nudge, sign out before it fires, and it waits in a
+    # directory shared by everyone on the machine for whoever sits down next.
+    #
+    # Namespace scoping in read_pending already stops it being DELIVERED to
+    # the wrong person. This stops it loitering at all, rather than waiting
+    # out its expiry.
+    try:
+        if aiq_nudge is not None:
+            _s = _session.get_session(request.cookies.get(_AUTH_COOKIE)) or {}
+            aiq_nudge.flush(ns=_safe_ns(_s.get("ns")))
+    except Exception as _e:
+        print(f"[AIQ_NUDGE] logout flush skipped: {type(_e).__name__}: {_e}")
     _session.destroy_session(request.cookies.get(_AUTH_COOKIE))
     resp = JSONResponse({"success": True})
     resp.delete_cookie(_AUTH_COOKIE, httponly=True, samesite="lax",
@@ -7086,6 +7134,12 @@ async def _handle_symposium(websocket, data):
                 "type": "token", "content": _emsg, "done": False})
         except Exception:
             pass
+    # v2.16.1: post-hooks run here too. A symposium transcript is three models
+    # talking; if the AI-disclosure footer only reached the agentic loop, the
+    # most obviously model-generated screen in the app would be the one screen
+    # that never said so. "Right code, wrong coverage" -- the shape this
+    # project keeps hitting -- and for a disclosure, coverage IS the feature.
+    full = plugin_manager.postprocess(full)
     await websocket.send_json({
         "type": "done", "content": full, "done": True,
         "model": "Symposium", "ts": TimeManager.iso_z()})
@@ -7558,9 +7612,11 @@ async def _handle_build_battle(websocket, data):
         except Exception:
             pass
 
+    # v2.16.1: and here -- same reason as the symposium path above.
+    full = plugin_manager.postprocess(full)
     await websocket.send_json({
         "type": "done", "content": full, "done": True,
-        "model": "Build Battle", "ts": TimeManager.iso_z()})        
+        "model": "Build Battle", "ts": TimeManager.iso_z()})
 
 
 # --- Prompt-cache live diagnostic helpers ---------------------------------
@@ -8259,11 +8315,17 @@ async def ws_chat(websocket: WebSocket):
                         if (aiq_nudge is not None
                                 and config.get("aiq_nudge_enabled", False)):
                             try:
+                                # v2.16.1: scoped to THIS turn's profile.
+                                # Unscoped, a nudge queued by whoever used the
+                                # machine last was injected into whoever is
+                                # talking now -- and read by the model as that
+                                # person's own instruction.
                                 _pending = aiq_nudge.read_pending(
                                     config.get(
                                         "aiq_nudge_watch_pattern",
                                         "nudge_*.txt",
-                                    )
+                                    ),
+                                    ns=_ws_ns,
                                 )
                                 for _entry in _pending:
                                     _body = _entry.get("content", "").strip()
@@ -8272,8 +8334,16 @@ async def ws_chat(websocket: WebSocket):
                                     messages.append({
                                         "role": "system",
                                         "content": (
+                                            # v2.16.1: no name. This said
+                                            # "from Todd" for every profile,
+                                            # so a nudge sent by anyone was
+                                            # announced to the model as the
+                                            # owner's instruction -- telling
+                                            # it something untrue about who
+                                            # it is taking direction from.
                                             "[VERIFIED USER NUDGE — mid-run "
-                                            "directive from Todd, HMAC-"
+                                            "directive from the signed-in "
+                                            "user of this session, HMAC-"
                                             "checked] "
                                         ) + _body,
                                     })

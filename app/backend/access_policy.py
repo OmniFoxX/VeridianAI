@@ -93,6 +93,7 @@ DEFAULTS = {
     "lock_until": None,
     "socials_allowed": True,
     "mcp_allowed": True,
+    "nudge_allowed": True,
     "admin_grants": [],
 }
 
@@ -182,6 +183,10 @@ def validate_patch(patch: dict) -> Tuple[dict, Optional[str]]:
         elif k == "mcp_allowed":
             if not isinstance(v, bool):
                 return {}, "mcp_allowed must be a boolean"
+            clean[k] = v
+        elif k == "nudge_allowed":
+            if not isinstance(v, bool):
+                return {}, "nudge_allowed must be a boolean"
             clean[k] = v
         elif k == "admin_grants":
             if v is None:
@@ -411,6 +416,30 @@ def admin_granted(username: str, cap: str) -> bool:
         return cap in ADMIN_CAPS and cap in (get_policy(username)["admin_grants"] or [])
     except Exception:
         return False
+
+
+def nudge_allowed(username: str) -> bool:
+    """False only when an explicit policy turns AIQNudge off for this profile.
+
+    v2.16.1. Sending a mid-run nudge was owner-only, which made "steer the
+    assistant you are talking to" a power the owner held over everybody else's
+    conversation. Redirecting your own session is not an owner-level control;
+    it is the most basic control there is.
+
+    Modelled on mcp_allowed and socials_allowed, deliberately NOT on
+    admin_grants: default TRUE and the owner switches it OFF, rather than every
+    profile starting without the ability to say "no, not like that". A grant
+    list would have meant a new profile cannot redirect its own assistant until
+    somebody notices and grants it.
+
+    Fail-OPEN, like its two siblings: a transient error reading the policy store
+    should not silently take away a live control. The nudge is still HMAC-signed
+    and still scoped to the sending profile regardless of what this returns.
+    """
+    try:
+        return bool(get_policy(username).get("nudge_allowed", True))
+    except Exception:
+        return True
 
 
 def mcp_allowed(username: str) -> bool:

@@ -1124,8 +1124,59 @@ def _periodic_worker() -> None:
 #   - Atomic writes for any file output
 #   - Return a human-readable summary string for the logger
 
-# CRAIID path constants (set at module init in Block B)
-_ARCHIVES_DIR = Path(__file__).resolve().parent.parent / "archives"
+# CRAIID path constants.
+#
+# v2.16.1 -- THIS POINTED AT THE PROJECT ROOT, AND THE COMMENT SAID OTHERWISE.
+#
+# It read `Path(__file__).parent.parent / "archives"` -- backend/ up to the
+# install directory -- which is where archives lived until the 2026-08-13 move
+# into sage_data. It was assigned exactly once, here, and never reassigned,
+# while the comment claimed "set at module init in Block B". There is no Block
+# B anywhere in this file. Nobody looked closer because the comment said
+# somebody else had already handled it.
+#
+# WHAT IT COST, which is not what it looks like. The ops snapshot is not
+# cosmetic: _job_ops_snapshot returns "archives dir not found -- skipping" and
+# ops_mode never goes active, so the anticipatory pre-warm margin below
+# (_CRAIID_PREWARM_MARGIN, see the note at its definition) never lowers the
+# fatigue threshold, so CRAIID never starts the warm handoff BEFORE the
+# context cliff. Context then runs to the cliff and handoffs fire back to
+# back, each one slower than the last.
+#
+# It only showed up away from the machine that predates the move: an install
+# directory still holding a legacy archives/ folder makes this line work by
+# accident, and a clean machine does not.
+#
+# OWNER SCOPE, DELIBERATELY. This is a background worker with no session and
+# no profile key, so a non-owner's archives are unreadable to it by design --
+# the same accepted trade already written down for the procedural store. It
+# reads the owner's corpus to compute one aggregate behavioural signal; it
+# does not read, mix, or surface any profile's conversation content.
+def _resolve_archives_dir() -> Path:
+    """sage_data/archives, via the app's own resolver -- never rebuilt here."""
+    try:
+        from state_paths import ARCHIVES_DIR
+        return Path(ARCHIVES_DIR)
+    except Exception:
+        pass
+    try:
+        # Second opinion, and the one that knows about the half-finished-move
+        # case. require_content=False: "where should this live", not "where is
+        # there something to read" -- a fresh install has nowhere yet and still
+        # needs the right answer.
+        from craiid.craiid_paths import archives_dir as _craiid_archives_dir
+        _p = _craiid_archives_dir(require_content=False)
+        if _p:
+            return Path(_p)
+    except Exception:
+        pass
+    # Historical location. Reached only if both resolvers are unavailable,
+    # which in the app means something is very wrong -- but returning a path
+    # keeps the worker alive, and the job reports the miss rather than raising.
+    return Path(__file__).resolve().parent.parent / "archives"
+
+
+_ARCHIVES_DIR = _resolve_archives_dir()
 
 # Fatigue thresholds — match context_fatigue_detector.py defaults.
 # Overridable via env vars so they can be tuned without code changes.

@@ -47,8 +47,19 @@
     return new Promise(function (resolve) {
       var release = null;
 
+      // ABOVE EVERY DIALOG THAT CAN TRIGGER IT. This was z-index 10000, which
+      // is BELOW the profile overlays in auth.js (99999, 100000, 100002 and
+      // 100003). So "Password required for this action", raised by clicking
+      // Create in the profile submenu, rendered BEHIND the submenu that raised
+      // it. From the person's side the button simply did nothing -- so they
+      // clicked it again, and again. Todd made three accounts that way.
+      //
+      // A prompt that gates an action must outrank whatever surface the action
+      // was started from, and the number has to leave room: pick one clearly
+      // above the highest overlay rather than one greater than it, or the next
+      // dialog added at 100004 quietly puts this back underneath.
       var back = el("div",
-        "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;" +
+        "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:100050;" +
         "display:flex;align-items:center;justify-content:center;padding:20px");
 
       var box = el("div",
@@ -191,14 +202,18 @@
     });
   }
 
-  /* The only entry point. Resolves true when the caller may proceed.
+  /* Returns {ok, joined}. `joined` is true only when this caller piggybacked
+   * on a prompt somebody else had already raised -- which is the one case an
+   * automatic retry must NOT treat as its own authorisation. See the fetch
+   * interceptor below.
    *
-   * Resolves TRUE without prompting when no account is configured -- with
-   * multi-user off there is no password to ask for, and locking someone out
-   * of their own data on a single-user install would be a cost with no
-   * security to show for it. */
-  window.requireUnlock = async function (reason) {
-    if (_open) return _open;                 // never stack two prompts
+   * The second `_open` test is not redundant. `await status()` yields, so two
+   * clicks a few milliseconds apart can BOTH pass the first test, and then
+   * both open a prompt and both replay. Re-testing after the await, with no
+   * await between the test and the assignment, makes claiming the prompt
+   * atomic: exactly one caller owns it and the rest join. */
+  async function unlockInternal(reason) {
+    if (_open) return { ok: await _open, joined: true };
     var st = await status();
     if (!st || !st.ok) {
       // Fail OPEN, deliberately. This gate protects against someone at the
@@ -207,15 +222,31 @@
       // would mean a hiccup in a status call locks a person out of printing
       // their own notes, while adding nothing -- the real boundary is the
       // endpoint, and it is still there.
-      return true;
+      return { ok: true, joined: false };
     }
-    if (!st.required || st.elevated) return true;
+    if (!st.required || st.elevated) return { ok: true, joined: false };
+    if (_open) return { ok: await _open, joined: true };   // lost the race
     _open = prompt({
       reason: reason || "This action needs your password.",
       needsCode: !!st.needs_code,
       ttl: st.ttl,
     });
-    return _open;
+    return { ok: await _open, joined: false };
+  }
+
+  /* The only entry point for callers outside this file. Resolves true when the
+   * caller may proceed.
+   *
+   * Resolves TRUE without prompting when no account is configured -- with
+   * multi-user off there is no password to ask for, and locking someone out
+   * of their own data on a single-user install would be a cost with no
+   * security to show for it.
+   *
+   * Deliberately keeps the plain-boolean contract. `joined` is a fact about
+   * the AUTOMATIC retry, not about whether the person is allowed to act, and
+   * an explicit caller who asked for an unlock and got one should proceed. */
+  window.requireUnlock = async function (reason) {
+    return (await unlockInternal(reason)).ok;
   };
 
   window.reauthDrop = async function () {
@@ -267,8 +298,25 @@
       var msg = (data.detail && data.detail.error) || data.error ||
                 "This action needs your password.";
       if (!window.requireUnlock) return res;
-      var okNow = await window.requireUnlock(msg);
-      if (!okNow) return res;
+
+      // ONE UNLOCK REPLAYS ONE REQUEST -- the one that asked for it.
+      //
+      // requireUnlock already refuses to stack two prompts: a second call
+      // joins the first one's promise. But EVERY joiner was then replayed on
+      // the single unlock, so three clicks on a Create button became three
+      // real accounts -- which is exactly what happened to Todd, because the
+      // prompt was rendering behind the submenu (fixed above) and the button
+      // looked dead. The z-index was why he clicked three times; this is why
+      // three clicks became three accounts, and both had to be fixed. Only the
+      // first is a UI bug; a gated request replaying on somebody else's
+      // authorisation is a correctness one, and it would have survived.
+      //
+      // So: only the request that RAISED the prompt is replayed. Anything that
+      // arrived while a prompt was already up gets its 401 back and its caller
+      // reports the refusal. Fails CLOSED -- the failure mode is an action the
+      // person has to click again once, never one that happens twice.
+      var r = await unlockInternal(msg);
+      if (!r.ok || r.joined) return res;
       return await _native(input, init);
     } catch (e) {
       return res;               // never let the guard break the request

@@ -141,6 +141,22 @@ class ArchivistCompressionWorker:
             if resolved is not None:
                 logger.info(f"Archive root resolved via craiid_paths: {resolved}")
                 return Path(resolved)
+            # v2.16.1: ask again for the CANONICAL location before falling back
+            # to walking the tree.
+            #
+            # The call above defaults to require_content=True -- "a folder with
+            # archives in it" -- so on a machine that has not archived anything
+            # yet it correctly returns None. The traversal below then runs, finds
+            # nothing either, and the last resort CREATES <install>/archives.
+            # That is worse than a wrong answer: craiid_paths' own walk-up looks
+            # for a directory literally named "archives", so once this has made
+            # one in the install directory, every later resolution finds it and
+            # prefers it. A fresh machine talks itself into the pre-migration
+            # layout and stays there.
+            resolved = _archives_dir(require_content=False)
+            if resolved is not None:
+                logger.info(f"Archive root (canonical, empty for now): {resolved}")
+                return Path(resolved)
         except Exception as e:
             logger.warning(f"craiid_paths unavailable ({e}); falling back to traversal")
 
@@ -164,8 +180,10 @@ class ArchivistCompressionWorker:
                 logger.info(f"Found archive root via traversal: {parent}")
                 return parent / "archives"
                 
-        # Last resort - the conventional <root>/archives, COMPUTED (never a
-        # hardcoded drive/version path). Created so downstream globs are safe.
+        # Last resort. COMPUTED, never a hardcoded drive/version path, and
+        # since v2.16.1 no longer the install directory: creating
+        # <install>/archives here is what taught later resolutions to look
+        # there. Only reached when state_paths is unreachable entirely.
         default_path = current.parent.parent.parent / "archives"
         default_path.mkdir(parents=True, exist_ok=True)
         logger.warning(f"Archives not found; using computed default: {default_path}")
