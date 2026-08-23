@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.16.2",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "4fb84291a8dd448687a599be5fb013b9",
-    "built_utc": "2026-08-23T21:43:24.420899+00:00",
+    "build_id": "8a2c0feee3ea41b0b124ab322e3eb5d9",
+    "built_utc": "2026-08-23T22:01:08.794015+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -92,7 +92,7 @@
       "backend/data_export.py": "f23642cbc8dd427ecf384733b786a8a449e421792e80cc5c39b04f2f2095cfee",
       "backend/data_import.py": "a20bdf0d8dba147e427d22ca96848fdf66297d55b9239454532e46f0f32ae0f4",
       "backend/dependency_checker.py": "d7aa8b528e3c448d47a68f59658395685e88ce1ebe07c8a447cce1c97c6d3d36",
-      "backend/devmode.py": "78713b9bae477775f52ec71abedbba74d1ce8a8234e18120af85694b02909470",
+      "backend/devmode.py": "fafd0d14ce599d6390b78c94f6c458c31078eb53d3ff569c94021ea8778b4c09",
       "backend/embeddings.py": "3fc8d7d8edcd9f07e45bcadb92ea03a5149d0f76688ef7450a3d53ece7e00ac0",
       "backend/expression_engine.py": "2214ee8b749cb67ef11f9009d9278de4562e4be053c158a30f69f4c6d5953255",
       "backend/fatigue_injector.py": "cdb3a5443e5526e2bfde9d75dff4015366993b4693f66545756d204947849c5b",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "f9116812813a296f110a8b4ac1c51bec5350205892f1331e5a8209c6fd65d54e",
+      "backend/main.py": "986224adecc94145a6d6a89facd123a435935fca173dd82264ffc01628935567",
       "backend/mcp_handlers.py": "e6175100c5d982aab4931eb8e17f63f8d1a516dc3ddfc1187a8495a312ffdf2a",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "ad11d18057ce37a438ebe5d76ef6523c5652089555ac244eae505bcbbd01ff35",
@@ -238,7 +238,7 @@
       "backend/test_tag_parser_v213.py": "2984de9a3e4cab988d9d36583024d6157a2bba6fd73b6f21e0d9de71bbfc74a2",
       "backend/test_task_prioritiser.py": "e7a87688fe56ba8a4d7955ae1f97326a1261692a74e3b17deb8505584798165f",
       "backend/test_timeout_policy.py": "3c006be4e0e6a363bfe4da32cd60cc47e0adb43791445c5a77db70bdc21ded14",
-      "backend/test_toggle_truthfulness.py": "cb9f7440d50cc4f08adea8628f34f7157446c92feffe8e0e7ed33aacb3f04ffb",
+      "backend/test_toggle_truthfulness.py": "0c49e3896847bd7ac515f3ca0787e438137d9681807f81831473b12112fe50ec",
       "backend/test_token_wraps.py": "c2eb230a33180c45d8023c70948a2c40310a76540563e120d5da24f5854f2f9c",
       "backend/test_ui_prefs_scope.py": "55984ae5ded9f05eb9dcc5ff6dfd3a286b725147935e428ab73496efb888a4d7",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
@@ -263,7 +263,7 @@
       "frontend/css/hljs-github-dark-dimmed.css": "be946d7e2d8cdba5bf372e7fb5afaae10f29cec94e236f0ee04589737db5769d",
       "frontend/css/hljs-github.css": "5b43bc87ce2ed16fa3fc245b45428cb5951da801642644254674f141bfcddd1d",
       "frontend/css/styles.css": "1bed8424c298cb13241809851ec4e7e37638748ef299b87e504b969a38290e58",
-      "frontend/index.html": "a746b4b2423955df1f89b1f26b32542d309f9815b41ee824ea52156ef183379f",
+      "frontend/index.html": "c58c4fee51ae6291302cf3c6fcd2e3de8e7b96d47009c075267eba64d27d094e",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/api-key.js": "3406357babd680e4844a746a11a3ccd88dc080332ade90421101b06ddfc709b1",
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
@@ -304,5 +304,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "R3i/b2KBREr+1+QCSTMUdTLJ2coTSO2jJGdS21kDx/aYTF0pR+c7x8iTje9Vic0P8nSnczOD/TnVXwFIHP0PCQ=="
+  "signature_b64": "nNyJ35KgqHOC2QyB0cYdSzWf2cXK+/FNihdcol4vbTBQDu4OCbJckb9gv9G/HW5FQF65Q4xWAIicOpaJivkHAA=="
 }

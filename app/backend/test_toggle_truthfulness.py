@@ -72,6 +72,7 @@ PM_SRC = _read(_HERE, "plugin_manager.py")
 SETTINGS = _read(os.path.join(_ROOT, "frontend", "js"), "settings.js")
 HTML = _read(os.path.join(_ROOT, "frontend"), "index.html")
 UIP = _read(_HERE, "ui_prefs.py")
+DEV = _read(_HERE, "devmode.py")
 
 
 def _code_only(src, comment="#"):
@@ -232,9 +233,49 @@ ok("...and audited",
    "turning it ON reveals daemon and model-server terminals; who asked is "
    "worth recording")
 ok("...and it answers with the STORED value, not the requested one",
-   "devmode.is_enabled()" in _code_only(_devbody),
+   "devmode.is_enabled(" in _code_only(_devbody),
    "echoing the request back is how a write that did not land gets reported "
    "as one that did")
+ok("...and it writes the preference against the signed-in profile",
+   "ns=_ns" in _code_only(_devbody),
+   "without an ns the choice lands on the machine and the next person "
+   "inherits it -- which is the report")
+
+_get = _body_src(_func("api_get_devmode"))
+ok("the devmode GET reports THIS profile's own setting",
+   "_session_ns(request)" in _code_only(_get),
+   "otherwise the switch shows what the last person to use the machine chose")
+
+
+# =============================================================================
+print("\n=== 3b. Every sign-in path re-points the desktop ===")
+# =============================================================================
+# Sessions are minted at four separate call sites. Hooking them individually is
+# four chances to miss one, and the likeliest miss is the MFA path -- the
+# accounts most likely to care. So it is done once, in the middleware every
+# request already passes through.
+_mints = len(re.findall(r"_session\.create_session\(", _code_only(MAIN)))
+_gate = _body_src(_func("_session_gate"))
+ok("the session gate was found", bool(_gate))
+ok("...and it applies the arriving profile's preference",
+   "apply_for(" in _code_only(_gate),
+   "found %d create_session call sites; wiring them one by one is how a path "
+   "gets missed" % _mints)
+ok("...only when the profile actually changed",
+   "_DEVMODE_APPLIED" in _code_only(_gate),
+   "this runs on every request; re-applying each time would enumerate every "
+   "window in the OS on every call")
+
+_out = _body_src(_func("api_auth_logout"))
+ok("signing out hides the terminals",
+   "set_consoles_visible(False)" in _code_only(_out),
+   "one person's daemon and model-server logs must not be left on the login "
+   "screen for whoever sits down next")
+ok("...without erasing what that profile chose",
+   "developer_mode" in _code_only(_out)
+   and "developer_mode_pref" not in _code_only(_out),
+   "the mirror is what is applied; the preference is theirs and must survive "
+   "so signing back in restores it")
 
 
 # =============================================================================
@@ -265,23 +306,115 @@ ok("...and reports the failure visibly", "setStatusError" in _dm)
 # =============================================================================
 print("\n=== 5. What was deliberate stayed deliberate ===")
 # =============================================================================
-# ui_prefs' two-scope split was itself a fix for a bug Todd found the same way
-# (a browser-cookie setting leaking between profiles). Making Developer Mode
-# per-profile to satisfy this report would have re-broken it -- and could not
-# work anyway, since a daemon reads the flag with nobody signed in.
-ok("developer_mode is still declared a MACHINE key",
+# Developer Mode is per profile as of v2.16.2, WITHOUT breaking the thing that
+# made it machine-scoped in the first place. Two values, two questions:
+# developer_mode_pref is whose choice it is; developer_mode is what is applied
+# to the desktop right now, which is what a daemon reads at spawn time with
+# nobody signed in. The machine key must therefore SURVIVE -- dropping it to
+# make the preference per-user is the change that would look like a fix and
+# leave tier_launcher asking an unanswerable question.
+ok("the applied state is still a MACHINE key",
    '"developer_mode"' in UIP and "MACHINE_KEYS" in UIP,
-   "one desktop, one set of console windows, and a daemon with no user to ask")
-ok("...and the UI says the setting is machine-wide",
-   "whole computer" in HTML,
-   "without this, turning it off and watching someone else's windows come "
-   "back is inexplicable rather than merely shared")
+   "tier_launcher reads this in a daemon where there is no user to ask")
+ok("...and the per-profile preference is NOT one",
+   "developer_mode_pref" not in UIP,
+   "a machine key ignores ns by design, so a preference listed there would "
+   "silently go on being shared -- the bug wearing the fix's clothes")
+ok("devmode stores the preference per profile",
+   "_PREF_KEY" in DEV and "ns=ns" in DEV)
+# Asked of the CODE, not of the docstring.
+#
+# The first version of this searched devmode.py for the sentence "Deliberately
+# does not fall back" and went red on correct code, because the sentence wraps
+# across a line. It deserved to fail for a better reason than that: a comment
+# saying a thing is not the thing. What matters is that the ns branch reads the
+# preference and never consults the machine key -- and section 6 then proves
+# the behaviour by running it, which is the assertion that actually holds.
+_ie = ""
+for _n in ast.walk(ast.parse(DEV)):
+    if isinstance(_n, ast.FunctionDef) and _n.name == "is_enabled":
+        _ie = ast.get_source_segment(DEV, _n) or ""
+# Bounded by INDENTATION, not by a line count. A fixed three-line window
+# swallowed the statement after the branch -- the machine-value fallback, which
+# reads _KEY for exactly the right reason -- and reported the correct code as
+# wrong. "The next few lines" is not the same as "this branch".
+_nsbranch = ""
+_lines = _code_only(_ie).splitlines()
+for _i, _l in enumerate(_lines):
+    if _l.strip() == "if ns:":
+        _ind = len(_l) - len(_l.lstrip())
+        _body = []
+        for _nxt in _lines[_i + 1:]:
+            if _nxt.strip() and (len(_nxt) - len(_nxt.lstrip())) <= _ind:
+                break
+            _body.append(_nxt)
+        _nsbranch = "\n".join(_body)
+ok("the per-profile branch reads the preference", "_PREF_KEY" in _nsbranch,
+   _nsbranch or "no `if ns:` branch found in is_enabled")
+ok("...and never consults the machine value for a profile",
+   bool(_nsbranch) and "_KEY" not in _nsbranch.replace("_PREF_KEY", ""),
+   "inheriting whatever the owner last chose is the precise bug being fixed, "
+   "and ui_prefs refuses the same fallback for the same reason")
+ok("...and the UI now describes it as the person's own",
+   "follows your profile" in HTML and "whole computer" not in HTML,
+   "the machine-wide wording was true for about an hour and is now false")
 ok("the plugin overlay sits beside ui_prefs, not in the install dir",
    "plugin_state.json" in PM_SRC and "DATA_DIR" in PM_SRC)
 ok("...and the reason is written next to it",
    "STATE_DIR" in PM_SRC,
    "the rule config.json was moved under in v2.13; losing the reason is how "
    "this got missed the first time")
+
+
+# =============================================================================
+print("\n=== 6. Two profiles keep two answers, exercised ===")
+# =============================================================================
+# Read off the source everything above is asserting ABOUT. This part runs it.
+_T2 = Path(tempfile.mkdtemp(prefix="vai_dev_"))
+try:
+    import ui_prefs as _uip
+    import devmode as _dev
+    _orig = _uip._data_dir
+    _uip._data_dir = lambda: _T2                      # redirect the store
+
+    _dev.set_enabled(True, ns="alice")
+    _dev.set_enabled(False, ns="bob")
+
+    ok("alice keeps her own answer", _dev.is_enabled("alice") is True)
+    ok("bob keeps his, unaffected by hers", _dev.is_enabled("bob") is False,
+       "this is the report: one profile's choice overriding another's")
+
+    # Order matters -- bob wrote last, so the MIRROR is his. The preference
+    # must not be.
+    ok("...and the machine mirror holds what was last APPLIED",
+       _dev.is_enabled() is False,
+       "the daemon reads this with nobody signed in and needs a real answer")
+    ok("...while alice's preference is still hers",
+       _dev.is_enabled("alice") is True,
+       "if the mirror overwrote her preference, per-profile would be a "
+       "relabelling of the same shared value")
+
+    # A profile that has never touched it gets the DEFAULT, not an inheritance.
+    ok("a new profile does not inherit anyone's setting",
+       _dev.is_enabled("carol") is False,
+       "ui_prefs refuses this fallback for the same reason: inheriting the "
+       "owner's choice on first sign-in is the leak the split exists to close")
+
+    # Where the files actually landed. A per-profile key that quietly went to
+    # the shared file would pass every check above by accident.
+    _shared = json.loads((_T2 / "ui_prefs.json").read_text(encoding="utf-8"))
+    ok("the shared file holds ONLY the applied mirror",
+       set(_shared) == {"developer_mode"}, _shared)
+    _alice = json.loads(
+        (_T2 / "users" / "alice" / "ui_prefs.json").read_text(encoding="utf-8"))
+    ok("...and the preference is under the profile's own directory",
+       _alice.get("developer_mode_pref") is True, _alice)
+finally:
+    try:
+        _uip._data_dir = _orig
+    except Exception:
+        pass
+    shutil.rmtree(_T2, ignore_errors=True)
 
 
 _failed = [n for n, c in _results if not c]

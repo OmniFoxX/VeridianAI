@@ -18,7 +18,46 @@ try:
 except Exception:  # pragma: no cover
     _prefs = None
 
-_KEY = "developer_mode"
+# PER PROFILE, WITH A MACHINE-LEVEL MIRROR (v2.16.2)
+# ---------------------------------------------------
+# Todd: "toggling it off in a Non-Owner account does NOT actually turn it off
+# if the Owner account has developer mode toggled on... I would like it per
+# profile please."
+#
+# The obstacle was real and is worth keeping written down, because the answer
+# is not to ignore it. Console windows are ONE set of windows on ONE desktop,
+# and console_creationflags() is read by tier_launcher inside a daemon where
+# there is no signed-in user to ask. ui_prefs' note is right: a per-user answer
+# THERE is not merely wrong, it is unanswerable.
+#
+# So there are two values, and they are different questions:
+#
+#   developer_mode_pref   PER PROFILE. What this person wants. Stored under
+#                         their own profile directory, untouched by anyone
+#                         else's choice.
+#
+#   developer_mode        MACHINE. What is currently APPLIED to the desktop --
+#                         the mirror the daemons read at spawn time. Always
+#                         answerable, because it is a fact about the machine
+#                         right now rather than a question about a person.
+#
+# The mirror is re-pointed at whoever is signed in: the session gate applies
+# that profile's preference when they arrive, and sign-out returns it to hidden
+# so one person's terminals are not left up for the next. Nothing outside this
+# module changes -- console_creationflags() and every daemon still read
+# developer_mode and still get a straight answer with nobody signed in.
+#
+# WHAT THIS HONESTLY CANNOT DO. If two profiles are signed in at once (two
+# windows onto localhost) they share one desktop, and the last to sign in or
+# toggle wins. No arrangement of software gives two people different views of
+# the same window, and pretending otherwise would put this back where it
+# started: a switch showing a state it does not have. Sequential profile use --
+# how this app is actually used -- is exactly per profile.
+#
+# Single-user installs are unaffected: with multiuser off there is no ns, every
+# read and write goes to the machine value, and the behaviour is what it was.
+_KEY = "developer_mode"            # machine mirror: what is applied right now
+_PREF_KEY = "developer_mode_pref"  # per profile: what this person wants
 
 # Console-window titles VeridianAI's launchers set (start.bat) plus substrings of
 # the Python-spawned consoles' default (command-line) titles. Matched lowercased.
@@ -28,24 +67,61 @@ _TITLE_HINTS = (
 )
 
 
-def is_enabled() -> bool:
-    """True = show terminals (developer). Default False = hidden (clean UI)."""
+def is_enabled(ns=None) -> bool:
+    """True = show terminals (developer). Default False = hidden (clean UI).
+
+    With a profile: THAT profile's own preference. Deliberately does not fall
+    back to the machine value -- inheriting whatever the owner last chose is
+    the precise bug this is fixing, and ui_prefs' two-scope note refuses the
+    same fallback for the same reason.
+
+    Without one (a daemon, the login screen, a single-user install): the
+    machine mirror, which is what is actually applied right now.
+    """
     if _prefs is None:
         return False
     try:
+        if ns:
+            return bool(_prefs.get(_PREF_KEY, False, ns=ns))
         return bool(_prefs.get(_KEY, False))
     except Exception:
         return False
 
 
-def set_enabled(enabled: bool) -> bool:
+def set_enabled(enabled: bool, ns=None) -> bool:
+    """Record the choice, and point the machine mirror at it.
+
+    Both writes, always. The preference is whose choice it is; the mirror is
+    what the daemons will read when they next spawn a console, and leaving it
+    behind would mean a respawn during this session reverted to the previous
+    profile's answer.
+    """
     enabled = bool(enabled)
     if _prefs is not None:
         try:
+            if ns:
+                _prefs.set(_PREF_KEY, enabled, ns=ns)
             _prefs.set(_KEY, enabled)
         except Exception:
             pass
     return enabled
+
+
+def apply_for(ns=None) -> dict:
+    """Make the desktop match this profile, and re-point the mirror at them.
+
+    Called when a session arrives and when one ends. Returns the same summary
+    as set_consoles_visible, plus the state it settled on.
+    """
+    want = is_enabled(ns)
+    if _prefs is not None:
+        try:
+            _prefs.set(_KEY, want)      # the mirror follows whoever is here
+        except Exception:
+            pass
+    result = set_consoles_visible(want)
+    result["enabled"] = want
+    return result
 
 
 def console_creationflags() -> int:
@@ -138,7 +214,14 @@ def set_consoles_visible(visible: bool) -> dict:
 
 
 def apply_saved_state() -> dict:
-    """Apply the persisted dev-mode flag to the consoles that are open now."""
+    """Apply the persisted dev-mode flag to the consoles that are open now.
+
+    No ns: at startup nobody is signed in yet. On a single-user install that
+    machine value IS the owner's choice and this is exactly right. With
+    multiuser on, main.py starts from hidden instead and lets the session gate
+    apply the arriving profile's preference -- otherwise the last person's
+    terminals would be sitting on the login screen.
+    """
     return set_consoles_visible(is_enabled())
 
 
