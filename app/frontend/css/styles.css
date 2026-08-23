@@ -2247,12 +2247,135 @@ pre:hover .copy-btn {
   line-height: 1.35;
 }
 
+/* ── Scoped API keys (Settings) ---------------------------------- */
+/* The list is a native <details>: one key per integration and no upper bound,
+   so left open it pushes the rest of Settings off the panel. */
+.apikeys-details {
+  margin: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* display:flex on a <summary> REMOVES its default list-item marker, so the
+   browser's disclosure triangle disappears and the row reads as a plain box
+   with nothing to say it opens. Found by rendering it and looking, after the
+   assertions all passed -- a marker that is gone is still a valid <details>,
+   still keyboard-operable, still announced correctly. Only the eye catches it.
+
+   So the triangle is drawn here instead, from borders rather than a glyph:
+   no font dependency, no character that could render as a box, and it takes
+   the text colour automatically. */
+.apikeys-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-family: var(--font-body);
+  color: var(--text);
+  list-style: none;            /* Firefox: drop the marker it still shows */
+}
+
+.apikeys-summary::-webkit-details-marker {
+  display: none;               /* Chromium/Electron: the same */
+}
+
+.apikeys-summary::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 6px solid currentColor;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  transition: transform 120ms ease;
+}
+
+.apikeys-details[open] > .apikeys-summary::before {
+  transform: rotate(90deg);
+}
+
+/* The label takes the slack so the count is pushed to the right edge. Doing it
+   here rather than with justify-content:space-between keeps the triangle,
+   label and count as three items in one predictable order. */
+.apikeys-summary > span:first-of-type {
+  flex: 1 1 auto;
+}
+
+.apikeys-summary:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* The count is what makes collapsing safe: these are live credentials, and
+   hiding them must not make an unexpected key easier to miss. */
+.apikeys-count {
+  min-width: 1.6em;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 0.85em;
+  text-align: center;
+}
+
+.apikeys-details[open] > #apikeys-list {
+  padding: 0 8px 6px;
+}
+
+/* Create Key + Refresh: their own full-width row, split evenly. Sized by
+   their labels they were unequal and hugged the left edge under a full-width
+   select. flex-basis 0 divides the SPACE rather than the content, so the
+   longer label does not claim the larger half. */
+.apikeys-actions {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+}
+
+.apikeys-actions > .voice-extras-btn {
+  flex: 1 1 0;
+  min-width: 0;          /* or the longer label sets an implicit floor */
+  text-align: center;
+  justify-content: center;
+}
+
 /* ── Accessible tooltip (a11y-tooltip.js) ------------------------ */
 /* Replaces native title= tooltips: keyboard-reachable, dismissible (Esc),
    persistent while hovered. Hidden state is fully click-through. */
+
+/* THE APP'S LAYER LADDER, top last. Written down here because it is the only
+   thing in the UI that MUST sit above everything, so this is where a reader
+   comes looking:
+
+       <= 100003   dialogs and overlays (auth.js profile submenus, chat.js
+                   confirm/prompt, index.html, api-key.js, data-export.js)
+        100050   the step-up unlock prompt (reauth.js) -- above any dialog
+                 that can raise it. It rendered at 10000 until v2.16.2 and so
+                 appeared BEHIND the profile submenu that raised it; the
+                 button looked dead and got clicked three times.
+        100100   this tooltip -- topmost, always.
+
+   v2.16.2: this was 100000, which is BELOW the profile overlays at 100002 and
+   100003 and below the unlock prompt. a11y-tooltip.js appends ONE shared tip
+   to document.body, so inside those dialogs the tooltip was painted and then
+   covered: present in the DOM, announced by a screen reader, invisible to the
+   person looking at it.
+
+   That is not a cosmetic miss. The whole point of this module is WCAG 1.4.13
+   -- content on hover or focus that is dismissible, hoverable and persistent.
+   A tip that cannot be seen satisfies none of those for a sighted keyboard or
+   mouse user, and it fails in the way STANDARDS_ALIGNMENT.md warns about
+   loudest: it passes every check that looks at the DOM, because the element
+   really is there and really does have the right text. Only looking at the
+   screen finds it.
+
+   A tooltip must outrank every surface it can be summoned from. Since it is
+   never interactive and never blocks (hidden state is visibility:hidden +
+   pointer-events:none), there is nothing it can be wrong to sit above. */
 .a11y-tip {
   position: fixed;
-  z-index: 100000;
+  z-index: 100100;
   max-width: 280px;
   padding: 6px 10px;
   background: var(--surface);

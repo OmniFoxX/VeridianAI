@@ -104,21 +104,54 @@ ok("the footer states the content is AI-generated",
 
 
 # =============================================================================
-print("\n=== 2. The example plugin was left alone ===")
+print("\n=== 2. No shipped plugin turns on a hook that needs review ===")
 # =============================================================================
-_ex = os.path.join(_PLUGINS, "example_plugin.json")
-ok("example_plugin.json still exists", os.path.exists(_ex))
-if os.path.exists(_ex):
-    _exd = json.load(io.open(_ex, encoding="utf-8"))
-    ok("...still disabled", _exd.get("enabled") is False, _exd.get("enabled"))
-    ok("...still carrying its GATED hook, unshipped",
-       "prepend_system" in (_exd.get("hooks") or {}),
-       "the example is not the thing that changed; if this is gone somebody "
-       "edited the demo instead of adding the feature")
-    ok("the two are distinct plugins",
-       _exd.get("id") != _doc.get("id"),
-       "same id -> PluginManager keys by id and one silently replaces the "
-       "other")
+# The Prepend/Append example is gone (Todd, 2026-08-23: "we do not need the old
+# example Prepend/Append plugin anymore"). Its append_footer was superseded by
+# the disclosure plugin above, and its prepend_system only ever injected
+# "ALWAYS format code with proper syntax highlighting" into every system
+# prompt -- advice current models do not need, spent on every conversation
+# including the ones with no code in them.
+ok("the superseded example plugin is gone",
+   not os.path.exists(os.path.join(_PLUGINS, "example_plugin.json")),
+   "two plugins offering append_footer means two footers on every reply")
+
+# The rule that outlives it, and the reason its removal is safe to forget:
+# skill_gate.py already decides which hooks are SAFE and which are GATED.
+# Reading that classification here rather than naming prepend_system means a
+# hook reclassified as GATED next year is caught by this test on the day it is
+# reclassified, without anyone remembering to come back.
+_SG = io.open(os.path.join(_HERE, "skill_gate.py"), encoding="utf-8").read()
+_gated = set(re.findall(r'"hook\.([a-z_]+)":\s*GATED', _SG))
+ok("skill_gate's GATED hooks were read", bool(_gated),
+   "no GATED entries parsed -- the check below would pass vacuously")
+print("        gated hooks: %s" % (sorted(_gated) or "none"))
+
+for _f in sorted(os.listdir(_PLUGINS)) if os.path.isdir(_PLUGINS) else []:
+    if not _f.endswith(".json"):
+        continue
+    _p = json.load(io.open(os.path.join(_PLUGINS, _f), encoding="utf-8"))
+    # PluginManager._load_all does setdefault("enabled", True), so a plugin
+    # that simply omits the key ships ON. Mirror that, or this reads a file
+    # as harmless that the app will enable.
+    if _p.get("enabled", True) is not True:
+        continue
+    _bad = sorted(set((_p.get("hooks") or {}).keys()) & _gated)
+    ok("%s ships enabled with no GATED hook" % _f, not _bad,
+       "%s enables %r, which skill_gate says needs human review" % (_f, _bad))
+
+_footers = []
+if os.path.isdir(_PLUGINS):
+    for _f in sorted(os.listdir(_PLUGINS)):
+        if not _f.endswith(".json"):
+            continue
+        _p = json.load(io.open(os.path.join(_PLUGINS, _f), encoding="utf-8"))
+        if _p.get("enabled", True) is True and (_p.get("hooks") or {}).get(
+                "append_footer"):
+            _footers.append(_f)
+ok("exactly one enabled plugin appends a footer", len(_footers) == 1,
+   "%r -- postprocess runs every enabled hook, so two of these is two "
+   "footers on every reply" % _footers)
 
 
 # =============================================================================
@@ -184,6 +217,10 @@ ok("postprocess checks the tail before appending",
    "the footer is saved into chat memory and returned to the model as its "
    "own previous turn; models imitate their own output shape, and an "
    "unconditional append then prints the disclosure twice")
+ok("...ignoring whitespace when it compares",
+   "collapse" in PM or re.search(r"sub\(\" \"", PM) is not None,
+   "an exact endswith would NOT have caught what Todd saw: a model "
+   "reproducing the footer writes the same words, not the same bytes")
 
 sys.path.insert(0, _HERE)
 try:
@@ -199,6 +236,23 @@ try:
        _pm.postprocess("Answer.\n\n" + _footer.strip()).count(
            _footer.strip()) == 1,
        "a model imitating the footer it keeps seeing must not produce two")
+
+    # THE CASE TODD ACTUALLY HIT. The model has seen the footer closing its
+    # own last few turns and writes it itself -- same words, its own spacing.
+    # Every variant below is one a model plausibly produces; an exact-match
+    # guard lets all of them through and prints the disclosure twice, stacked.
+    _sentence = _footer.strip().splitlines()[-1].strip()
+    for _label, _imitation in (
+            ("an extra blank line before the rule", "Answer.\n\n\n---\n" + _sentence),
+            ("a blank line after the rule", "Answer.\n\n---\n\n" + _sentence),
+            ("trailing whitespace", "Answer.\n\n---\n" + _sentence + "   \n"),
+            ("a longer rule", "Answer.\n\n-----\n" + _sentence),
+    ):
+        _out = _pm.postprocess(_imitation)
+        ok("...and is not doubled by %s" % _label,
+           _out.count(_sentence) == 1,
+           "the disclosure appears %d times:\n          ...%s"
+           % (_out.count(_sentence), _out[-200:].replace("\n", "\\n")))
     ok("a normal reply does get the footer", _footer.strip() in _once,
        _once[-120:])
     ok("a disabled plugin still appends nothing",

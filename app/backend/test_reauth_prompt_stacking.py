@@ -77,23 +77,42 @@ R_CODE = _code_only(REAUTH)
 
 
 # =============================================================================
-print("=== 1. The prompt outranks every surface that can raise it ===")
+print("=== 1. The layer ladder: dialogs < unlock prompt < tooltip ===")
 # =============================================================================
+# Both rungs were broken, for the same reason and with the same symptom: an
+# element painted into the DOM, correct in every respect a DOM check can see,
+# and covered on screen by something that happened to be numbered higher.
+#
+#   * the unlock prompt at 10000, under profile overlays at 100002/100003
+#   * the shared a11y tooltip at 100000, under those same overlays
+#
+# Collected from the source rather than listed, so a NEW dialog numbered above
+# either of them fails here rather than being found by a person clicking a
+# button that looks dead.
 _mine = [int(m) for m in re.findall(r"z-index:\s*(\d+)", R_CODE)]
 ok("reauth.js sets a z-index", bool(_mine), R_CODE.count("z-index"))
 _prompt_z = max(_mine) if _mine else 0
-print("        unlock prompt sits at z-index %d" % _prompt_z)
 
-# Every overlay in every file that can trigger an unlock. Collected rather
-# than listed, so a NEW dialog added above this prompt fails here instead of
-# being discovered by a person clicking a dead button three times.
+_tipm = re.search(r"\.a11y-tip\s*\{[^}]*?z-index:\s*(\d+)", CSS, re.S)
+ok("the shared tooltip's z-index was found", _tipm is not None,
+   "a11y-tooltip.js appends ONE tip to document.body; if this rule moved, "
+   "the check below cannot see it")
+_tip_z = int(_tipm.group(1)) if _tipm else 0
+
+# Everything else that paints an overlay. The tooltip's own rule is excluded
+# by value -- it is the top rung, not a competitor for it.
 _others = []
 for _label, _src in (("auth.js", AUTH), ("chat.js", CHAT),
                      ("index.html", INDEX), ("styles.css", CSS)):
     for _m in re.finditer(r"z-index:\s*(\d+)", _code_only(_src)):
-        _others.append((_label, int(_m.group(1))))
+        _v = int(_m.group(1))
+        if _v not in (_tip_z,):
+            _others.append((_label, _v))
 _top = max(_others, key=lambda t: t[1]) if _others else ("?", 0)
-ok("...it is above the highest dialog in the app",
+print("        dialogs reach %d (%s)  |  unlock prompt %d  |  tooltip %d"
+      % (_top[1], _top[0], _prompt_z, _tip_z))
+
+ok("the unlock prompt is above the highest dialog",
    _prompt_z > _top[1],
    "the prompt is at %d and %s reaches %d -- a gate that renders behind the "
    "thing it is gating reads as a dead button" % (_prompt_z, _top[0], _top[1]))
@@ -101,9 +120,23 @@ ok("...with headroom, not by one",
    _prompt_z - _top[1] >= 20,
    "only %d above %s(%d): the next dialog added lands on top of the prompt "
    "and this returns silently" % (_prompt_z - _top[1], _top[0], _top[1]))
-ok("the old, buried value is gone",
+ok("the tooltip is above the unlock prompt, and so above everything",
+   _tip_z > _prompt_z,
+   "tooltip %d vs prompt %d. A tip that cannot be SEEN satisfies none of "
+   "WCAG 1.4.13 for a sighted user, while passing every DOM-level check -- "
+   "the element is there and its text is right." % (_tip_z, _prompt_z))
+ok("...with headroom too", _tip_z - _prompt_z >= 20,
+   "%d above the prompt" % (_tip_z - _prompt_z))
+ok("the old, buried prompt value is gone",
    "z-index:10000;" not in R_CODE,
    "10000 is below all four profile overlays -- this exact number is the bug")
+ok("...and the old, buried tooltip value with it",
+   _tip_z != 100000,
+   "100000 sits under the profile overlays at 100002 and 100003")
+ok("the ladder is written down where the top rung is defined",
+   "LAYER LADDER" in CSS.upper(),
+   "three files pick these numbers independently; without the ladder stated "
+   "somewhere, the fourth one guesses")
 
 
 # =============================================================================

@@ -137,6 +137,24 @@
     return d.innerHTML;
   }
 
+  /* The list collapsed in v2.16.2 (it has no upper bound and was pushing the
+   * rest of Settings off the panel), so the COUNT has to be maintained
+   * separately -- it is the part that stays visible, and these are live
+   * credentials. Every return path below sets it, including the failures:
+   * a stale "4" left over from the last successful load, sitting above a
+   * collapsed list that could not actually be read, is worse than no number.
+   *
+   * Fails to a visible "?" rather than to 0. Zero is a claim ("you have no
+   * keys"); the truth when the read fails is that we do not know. */
+  function setKeyCount(n) {
+    var c = document.getElementById("apikeys-count");
+    if (c) c.textContent = String(n);
+    var det = document.getElementById("apikeys-details");
+    // Nothing to expand into: don't offer a disclosure that opens onto a
+    // single line of explanatory text.
+    if (det && typeof n === "number" && n === 0) det.open = false;
+  }
+
   window.loadApiKeys = async function () {
     var box = document.getElementById("apikeys-list");
     var sel = document.getElementById("apikey-preset");
@@ -144,7 +162,11 @@
     box.textContent = "Loading...";
     try {
       var d = await (await fetch("/api/auth/keys")).json();
-      if (!d.ok) { box.textContent = "Could not read your keys."; return; }
+      if (!d.ok) {
+        box.textContent = "Could not read your keys.";
+        setKeyCount("?");
+        return;
+      }
 
       if (sel && !sel.options.length) {
         (d.presets || []).forEach(function (p) {
@@ -156,6 +178,7 @@
       }
 
       var keys = d.keys || [];
+      setKeyCount(keys.length);
       if (!keys.length) {
         box.innerHTML = '<div class="voice-extras-note">No additional keys. ' +
           'Your default key is the one the Rotate button manages.</div>';
@@ -192,6 +215,7 @@
       });
     } catch (e) {
       box.textContent = "Could not read your keys.";
+      setKeyCount("?");
     }
   };
 
@@ -250,6 +274,11 @@
       showKeyOnce(d.token, d.note);
       var lbl = document.getElementById("apikey-label");
       if (lbl) lbl.value = "";
+      // Open the list on a create. You just issued a credential; the result of
+      // that action should not land inside a collapsed section where the only
+      // feedback is a number quietly going up by one.
+      var det = document.getElementById("apikeys-details");
+      if (det) det.open = true;
       window.loadApiKeys();
     } catch (e) {
       if (window.setStatusError)

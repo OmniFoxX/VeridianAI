@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=015e7413d4" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=1bed8424c2" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -1522,7 +1522,23 @@
             <label class="setting-label" for="apikey-label">
               Additional keys, scoped to one purpose
             </label>
-            <div id="apikeys-list" style="margin: 6px 0"></div>
+            <!-- Collapsible, because this list has no upper bound: one key per
+                 integration and it pushes the rest of Settings off the panel.
+                 A native <details> rather than a scripted toggle -- it is
+                 keyboard-operable, announced as expanded/collapsed, and
+                 findable by in-page search with no JS at all.
+
+                 The COUNT lives in the summary on purpose. Collapsing a list of
+                 live credentials must not make it easier to miss a key you did
+                 not issue, so the one number that would tell you is the part
+                 that stays on screen. -->
+            <details id="apikeys-details" class="apikeys-details">
+              <summary class="apikeys-summary">
+                <span>Existing keys</span>
+                <span class="apikeys-count" id="apikeys-count">0</span>
+              </summary>
+              <div id="apikeys-list"></div>
+            </details>
             <div class="voice-extras" style="gap: 6px; flex-wrap: wrap">
               <input
                 type="text"
@@ -1536,27 +1552,35 @@
               <select
                 id="apikey-preset"
                 class="setting-input"
-                style="min-width: 150px"
+                style="min-width: 150px; flex: 1"
                 aria-label="What this key is allowed to do"
                 data-tip="Least privilege: give a key only what its tool needs"
               ></select>
-              <button
-                type="button"
-                class="voice-extras-btn"
-                id="apikey-create-btn"
-                onclick="createApiKey()"
-                data-tip="Issue a new scoped key; shown once"
-              >
-                Create Key
-              </button>
-              <button
-                type="button"
-                class="voice-extras-btn"
-                onclick="loadApiKeys()"
-                data-tip="Refresh the key list"
-              >
-                Refresh
-              </button>
+              <!-- Own row, full width, split evenly. Sized by their label text
+                   these two were unequal and hugged the left edge, reading as
+                   an afterthought under a full-width control. flex:1 1 0 (not
+                   flex:1) so the split is by available space, not by content
+                   width -- "Create Key" is the longer word and would otherwise
+                   still take the larger half. -->
+              <div class="apikeys-actions">
+                <button
+                  type="button"
+                  class="voice-extras-btn"
+                  id="apikey-create-btn"
+                  onclick="createApiKey()"
+                  data-tip="Issue a new scoped key; shown once"
+                >
+                  Create Key
+                </button>
+                <button
+                  type="button"
+                  class="voice-extras-btn"
+                  onclick="loadApiKeys()"
+                  data-tip="Refresh the key list"
+                >
+                  Refresh
+                </button>
+              </div>
             </div>
             <div class="voice-extras-note" style="margin-top: 4px">
               A read-only key can list models but cannot send messages; an MCP
@@ -2092,7 +2116,7 @@
     <script src="/static/js/reauth.js?v=3d9c9dfcdb"></script>
     <script src="/static/js/data-export.js?v=a21e1205b2"></script>
     <script src="/static/js/reasoning-log.js?v=2ead667184"></script>
-    <script src="/static/js/api-key.js?v=b898dc5a3a"></script>
+    <script src="/static/js/api-key.js?v=3406357bab"></script>
     <!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
      during the WCAG-pass edit. Without this line, the IIFE in
      command-palette.js never runs, the Ctrl+Shift+Space keydown listener
