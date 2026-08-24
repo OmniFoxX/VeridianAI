@@ -48,8 +48,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // 'veridian-decline-exit' carries NO payload either. It is sent only when
     // someone declines the first-run terms, and main.js decides what quitting
     // means -- the renderer cannot pass an exit code or anything else.
+    // 'veridian-devmode-quit' is the same shape for the same reason: a
+    // Developer Mode session cannot be allowed to end at the login screen,
+    // because the log terminals belong to the LAUNCH and would be left open
+    // for whoever signs in next. Payload-less -- the renderer asks to leave,
+    // main.js decides what leaving means, and nothing about HOW to quit
+    // crosses the bridge.
     const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick',
-                     'open-data-folder', 'veridian-decline-exit'];
+                     'open-data-folder', 'veridian-decline-exit',
+                     'veridian-devmode-quit'];
     if (allowed.includes(channel)) {
       ipcRenderer.send(channel, data);
     }

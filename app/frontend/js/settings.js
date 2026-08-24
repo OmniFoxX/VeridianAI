@@ -313,7 +313,9 @@ function renderDevMode(d) {
   }
 
   note.textContent = d.active
-    ? "Log terminals are showing for this session. They close when you quit VeridianAI."
+    ? "Log terminals are showing for this session. They close when VeridianAI " +
+      "closes -- so signing out will close VeridianAI completely. You will be " +
+      "asked first."
     : "Off. Log terminals are hidden.";
 }
 

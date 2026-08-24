@@ -403,6 +403,23 @@ function createWindow(opts) {
     app.quit();
   });
 
+  // v2.16.2: a Developer Mode session signed out, so the whole app leaves.
+  //
+  // Developer Mode is a property of the LAUNCH: the log terminals are owned by
+  // processes started before anybody signed in, and they outlive any
+  // sign-out. Returning to the login screen would hand the next person a
+  // desktop full of somebody else's terminals -- and, as Todd pointed out,
+  // they may well be minimised and forgotten rather than obviously there.
+  //
+  // app.quit() runs 'before-quit' -> stopBackend(), which is what actually
+  // takes the tiers and their consoles down. Closing the window alone would
+  // not: the consoles do not belong to it.
+  ipcMain.removeAllListeners('veridian-devmode-quit');
+  ipcMain.on('veridian-devmode-quit', () => {
+    blog('developer-mode session signed out -- quitting so the log terminals close');
+    app.quit();
+  });
+
   // --- Open the user's data folder ------------------------------------
   // Under MSIX the install directory lives in C:\Program Files\WindowsApps,
   // which the user cannot browse -- and their archives, uploads, downloads

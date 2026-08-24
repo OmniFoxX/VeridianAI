@@ -319,8 +319,73 @@
     }
   }
 
+  /* Signing out of a DEVELOPER MODE session closes VeridianAI completely.
+   *
+   * Not a policy choice -- a consequence. The log terminals belong to the
+   * LAUNCH, not to the session: they were started before anybody signed in and
+   * they outlive signing out. Returning to the login screen would leave them
+   * running for whoever sits down next, and that is worse than it sounds,
+   * because they may be minimised and forgotten rather than obviously there.
+   *
+   * ASKED FIRST, ALWAYS. A "Sign out" button that silently quits the whole
+   * application is the same defect this release has spent the day chasing: a
+   * control doing something other than what it says. So the person is told
+   * what will happen and can decline -- and declining leaves them signed in,
+   * which is exactly what they asked for.
+   *
+   * Only the backend knows whether this launch is a Developer Mode one, but it
+   * reports that on the way OUT, by which point the session is gone. So the
+   * state is read BEFORE signing out, and the response's quit_required is
+   * taken as the authority when it comes back. Both, because the cost of
+   * getting this wrong is quitting an app somebody did not want quit.
+   */
+  async function _devmodeActive() {
+    try {
+      var r = await fetch("/api/devmode", { credentials: "same-origin" });
+      var d = await r.json();
+      return !!(d && d.active);
+    } catch (e) {
+      return false;      // cannot tell -> behave like an ordinary sign-out
+    }
+  }
+
   async function logout() {
-    try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin" }); } catch (e) {}
+    var willQuit = await _devmodeActive();
+    if (willQuit && window.oracleConfirm) {
+      var go = await window.oracleConfirm(
+        "Developer Mode is on for this session.\n\n" +
+          "The log terminals belong to VeridianAI itself, not to your sign-in, " +
+          "so signing out cannot close them on its own. VeridianAI will close " +
+          "completely instead, and the terminals close with it.\n\n" +
+          "Sign out and quit VeridianAI?",
+        { title: "Sign out will close VeridianAI",
+          okLabel: "Sign out and quit" },
+      );
+      if (!go) return;            // stays signed in; nothing happens
+    }
+    var quitNow = willQuit;
+    try {
+      var resp = await fetch("/api/auth/logout",
+                             { method: "POST", credentials: "same-origin" });
+      var body = await resp.json().catch(function () { return null; });
+      if (body && typeof body.quit_required === "boolean") {
+        quitNow = body.quit_required;      // the server is the authority
+      }
+    } catch (e) {}
+    if (quitNow && window.electronAPI && window.electronAPI.send) {
+      window.electronAPI.send("veridian-devmode-quit");
+      return;                     // the app is leaving; do not reload into it
+    }
+    if (quitNow) {
+      // No Electron to ask -- a browser pointed at localhost. The sign-out has
+      // already happened; say the part the page cannot do for itself rather
+      // than returning to a login screen with terminals quietly still open.
+      try {
+        window.alert(
+          "Signed out. Developer Mode was on for this session, so please close "
+          + "VeridianAI completely to close the log terminals.");
+      } catch (e) {}
+    }
     location.reload();
   }
 

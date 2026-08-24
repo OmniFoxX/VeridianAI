@@ -276,17 +276,72 @@ ok("startup does not consume the arm",
    "and losing means the consoles spawn hidden for the one launch somebody "
    "went to the trouble of arming")
 
-_out = _body_src(_func("api_auth_logout"))
-ok("signing out no longer pretends to change Developer Mode",
-   "set_consoles_visible" not in _code_only(_out),
-   "the consoles belong to processes that outlive the session, and the "
-   "windowless ones have no window to hide -- it never worked and it is not "
-   "what signing out means")
-
 _gate = _body_src(_func("_session_gate"))
-ok("...and neither does the session gate",
+ok("the session gate does not touch Developer Mode",
    "devmode" not in _code_only(_gate).lower(),
    "per-profile application was removed with the model it belonged to")
+
+
+# =============================================================================
+print("\n=== 3c. A Developer Mode session cannot end at the login screen ===")
+# =============================================================================
+# The terminals belong to the LAUNCH. Signing out leaves them running for
+# whoever sits down next -- and they may be minimised and forgotten rather than
+# obviously on screen, which is how this goes unnoticed. So the two ways of
+# leaving are made the same thing.
+_out = _body_src(_func("api_auth_logout"))
+ok("logout reports whether quitting is required",
+   "quit_required" in _code_only(_out),
+   "only the backend knows whether this launch is a Developer Mode one")
+ok("...decided by the LAUNCH, not by who signed out",
+   "_DEVMODE_LAUNCH" in _code_only(_out),
+   "a per-session answer would be the model that was already withdrawn")
+ok("...and it still hides what it can, for the no-Electron case",
+   "set_consoles_visible(False)" in _code_only(_out),
+   "a browser pointed at localhost cannot be asked to quit; hiding is the one "
+   "direction that works live")
+
+_PRELOAD = _read(os.path.join(os.path.dirname(_HERE), "electron"), "preload.js")
+_EMAIN = _read(os.path.join(os.path.dirname(_HERE), "electron"), "main.js")
+ok("the quit channel is allowlisted in the preload bridge",
+   "veridian-devmode-quit" in _PRELOAD,
+   "the bridge is allowlist-only by design; an unlisted channel is silently "
+   "dropped and the app would simply never quit")
+ok("...and carries no payload",
+   "Payload-less" in _PRELOAD or "payload-less" in _PRELOAD,
+   "main.js must decide what quitting means; a channel taking an argument "
+   "hands web content something it should not have")
+ok("main.js quits on it", "veridian-devmode-quit" in _EMAIN
+   and "app.quit()" in _EMAIN)
+ok("...and quitting is what tears the tiers down",
+   "before-quit" in _EMAIN and "stopBackend" in _EMAIN,
+   "closing the window alone would leave the consoles running -- they do not "
+   "belong to it")
+
+_AUTH_JS = _read(os.path.join(os.path.dirname(_HERE), "frontend", "js"),
+                 "auth.js")
+_lo = _js_code_only(_AUTH_JS).split("async function logout")[1][:1800] \
+    if "async function logout" in _AUTH_JS else ""
+ok("the sign-out path was found", bool(_lo))
+ok("...it asks before quitting the whole app",
+   "oracleConfirm" in _lo,
+   "a Sign out button that silently closes VeridianAI is the same defect as "
+   "every other control this release had to fix: doing something other than "
+   "what it says")
+ok("...declining leaves them signed in",
+   "if (!go) return" in _lo,
+   "the confirmation has to be real; a dialog whose No does nothing is worse "
+   "than no dialog")
+ok("...and the server's answer overrides the pre-check",
+   "body.quit_required" in _lo,
+   "the state is read before signing out because it is gone afterwards, but "
+   "the authoritative answer arrives with the response")
+ok("...it does not reload back into an app that is leaving",
+   "send(\"veridian-devmode-quit\")" in _lo and "return;" in _lo)
+ok("...and says something useful when there is no Electron to ask",
+   "alert(" in _lo,
+   "a browser at localhost cannot quit the app; silently returning to the "
+   "login screen with terminals open is the bug, not the fallback")
 
 
 # =============================================================================

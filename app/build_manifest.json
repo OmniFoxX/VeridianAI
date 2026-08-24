@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.16.2",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "00c35fb3872645ce8f0812620d5ec0fe",
-    "built_utc": "2026-08-24T01:05:39.529461+00:00",
+    "build_id": "aadc3ca9e7f04205843241cc0671a5e5",
+    "built_utc": "2026-08-24T01:47:12.432272+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "550ecc1cf23ab0224b76249494b9bbdca0c0bc9e204a1eb4e8fcf6cd4f9607a1",
+      "backend/main.py": "eaf85a5b9e8d6b15be85abc820ba55de27b26b3e1e19f7d01227cb0a68a03a22",
       "backend/mcp_handlers.py": "e6175100c5d982aab4931eb8e17f63f8d1a516dc3ddfc1187a8495a312ffdf2a",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "ad11d18057ce37a438ebe5d76ef6523c5652089555ac244eae505bcbbd01ff35",
@@ -238,7 +238,7 @@
       "backend/test_tag_parser_v213.py": "2984de9a3e4cab988d9d36583024d6157a2bba6fd73b6f21e0d9de71bbfc74a2",
       "backend/test_task_prioritiser.py": "e7a87688fe56ba8a4d7955ae1f97326a1261692a74e3b17deb8505584798165f",
       "backend/test_timeout_policy.py": "3c006be4e0e6a363bfe4da32cd60cc47e0adb43791445c5a77db70bdc21ded14",
-      "backend/test_toggle_truthfulness.py": "75fc36ac1588d49a4663074ff05e42eec0e7a37bb87876c473b1b179141e4e7e",
+      "backend/test_toggle_truthfulness.py": "c71acf37be79758a6a99e27f0bf628971dfbc37067eaf3cf7c4c4596979db920",
       "backend/test_token_wraps.py": "c2eb230a33180c45d8023c70948a2c40310a76540563e120d5da24f5854f2f9c",
       "backend/test_ui_prefs_scope.py": "6576677d219eec630982b001103ff278475cb7a18209b996c8381ec38b250759",
       "backend/test_wan_guard.py": "f0f4191e33d4a9e34c722eaa86dbbab869c72c34cf549e3ed4c9eeba85f7557c",
@@ -263,11 +263,11 @@
       "frontend/css/hljs-github-dark-dimmed.css": "be946d7e2d8cdba5bf372e7fb5afaae10f29cec94e236f0ee04589737db5769d",
       "frontend/css/hljs-github.css": "5b43bc87ce2ed16fa3fc245b45428cb5951da801642644254674f141bfcddd1d",
       "frontend/css/styles.css": "1bed8424c298cb13241809851ec4e7e37638748ef299b87e504b969a38290e58",
-      "frontend/index.html": "a4512a24402e0a0204e1c4ad52252c37e183abcead205ccf1e0444bf12626217",
+      "frontend/index.html": "9a6583e786182545f639dbf6ce2fe1382f785e6eb10ecfbfac8e865905f6e25a",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/api-key.js": "3406357babd680e4844a746a11a3ccd88dc080332ade90421101b06ddfc709b1",
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
-      "frontend/js/auth.js": "8df1caf67e49518165ad27e79143141a1c1b932287d71a3fcc1f821ee0cdbe25",
+      "frontend/js/auth.js": "dd7f12c826aa82d284fa14e981e0f59939a00202cc7ff25e526fc7a3c2159d93",
       "frontend/js/boot-status.js": "1a2cd307c4e91e0f900889f614acbaa0e771328efa052d68a57c467353e4c117",
       "frontend/js/chat.js": "49a6c0a077ddb4005f7e9c731fc8254bdd9e304b2c17711668be529969232012",
       "frontend/js/comfyui-wizard.js": "b382ec01d4f3fe8f5e9c7a11c89c23e8d399f8da5dcbcf8881f4f4c8e204a736",
@@ -283,7 +283,7 @@
       "frontend/js/optional-engines.js": "e771ce8620711056eb421077a3b234a3903aedda45a7fea51eecb95934212b49",
       "frontend/js/reasoning-log.js": "2ead667184d55bf6b71761207be18b1dfbdfb669fb82e7d07cca21ddc80fb95f",
       "frontend/js/reauth.js": "3d9c9dfcdb82128b4409573277e757665de8bcc9fe99e75fe42c5f6c01c576ad",
-      "frontend/js/settings.js": "a98bc0bba7ed99a2b09eda29e15d81cfc34ec75a9dc2366e42f20e11f8d64b03",
+      "frontend/js/settings.js": "ea89d77fc8f1e68156114542700b532def7749845aa08106e43d96ca514adeb4",
       "frontend/js/skills.js": "04cbd944f196d87c59db3d0d4d92b186cbbc8117d73ce0320bbebc48a06659a3",
       "frontend/js/socials.js": "c16d09c1b36e9eb461c2850586b00119c1ca035a7bb95a3b2cec063d0f1aecbd",
       "frontend/js/ui-unstick.js": "619fefbb917da5fdf2ce387b7f0139bd02c349c8967182cacb75dde42dca8164",
@@ -304,5 +304,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "xgxqdJIBA3e2JysOWpfHZgtgnDr5Isik4BC+lJwNTL1K6oD/tu+uEltMkOLlW6K3VVnIazNn1uzeVH5LEZ+aCA=="
+  "signature_b64": "znFLmgm7qAXNKqmMD1VKAkxJMS574mHkmt9Y4YqEWbNkpG505QBdCMR4qnf4c4tIXEZzidCSh0wB3Uj2vYZyBg=="
 }

@@ -6264,17 +6264,35 @@ async def api_auth_logout(request: Request):
             aiq_nudge.flush(ns=_safe_ns(_s.get("ns")))
     except Exception as _e:
         print(f"[AIQ_NUDGE] logout flush skipped: {type(_e).__name__}: {_e}")
-    # v2.16.2: signing out deliberately does NOT touch Developer Mode.
+    # v2.16.2: a Developer Mode launch cannot be allowed to end at the login
+    # screen with its terminals still open.
     #
-    # An earlier pass hid the consoles here, which was wrong twice over. It
-    # cannot work -- the consoles belong to processes that outlive the session,
-    # and the ones spawned windowless have no window to hide -- and it is not
-    # what a person signing out is asking for. Developer Mode is a property of
-    # the LAUNCH, and it ends when VeridianAI is quit. The Settings text now
-    # says so plainly, because the gap between "signed out" and "quit" is
-    # exactly where this feature has always confused people.
+    # Todd: "they may have had only one open at a time, and most minimized, or
+    # all minimized and then forgot and just signed out... So, then the next
+    # person logs in and their terminals are still open."
+    #
+    # Developer Mode belongs to the LAUNCH, not to the session -- the consoles
+    # are owned by processes started before anyone signed in and they outlive
+    # any sign-out. So the two ways of leaving have to be made the same thing:
+    # signing out of a Developer Mode session quits VeridianAI outright, which
+    # takes the terminals with it and hands the next person a clean start.
+    #
+    # The client is TOLD rather than surprised -- it confirms first and says
+    # what will happen. See auth.js. The flag is computed here because only the
+    # backend knows whether this launch is a Developer Mode one.
+    _devmode_quit = bool(_DEVMODE_LAUNCH.get("active"))
+    if _devmode_quit:
+        # Belt and braces for the case the app cannot be asked to quit (a
+        # plain browser pointed at localhost, where there is no Electron to
+        # call). Hiding is the one direction that works live, and since
+        # v2.16.2 it also reaches the consoles whose titles match no hint.
+        try:
+            import devmode as _dmod
+            _dmod.set_consoles_visible(False)
+        except Exception as _e:
+            print(f"[DEVMODE] logout hide skipped: {type(_e).__name__}: {_e}")
     _session.destroy_session(request.cookies.get(_AUTH_COOKIE))
-    resp = JSONResponse({"success": True})
+    resp = JSONResponse({"success": True, "quit_required": _devmode_quit})
     resp.delete_cookie(_AUTH_COOKIE, httponly=True, samesite="lax",
                        secure=_cookie_secure(request))
     return resp
