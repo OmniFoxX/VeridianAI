@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VeridianAI Launcher v2.13
+VeridianAI Launcher v2.16
 Usage: python start.py [--port 8000] [--host 127.0.0.1] [--no-browser]
 """
 
