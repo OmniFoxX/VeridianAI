@@ -291,8 +291,25 @@ print("\n=== 8. Decline actually exits ===")
 ok("the renderer sends the decline channel",
    'send("veridian-decline-exit")' in _gate)
 ok("preload whitelists that channel", "'veridian-decline-exit'" in PRELOAD)
+# Asked WITHOUT naming the variable.
+#
+# This said "allowed.includes(channel)" and went red in v2.16.2, when the list
+# was hoisted to ALLOWED_SEND so it could be both enforced and advertised. The
+# bridge was still an allowlist; only an identifier had changed. Pinning a
+# local variable name fails on a harmless rename and passes on a rewrite that
+# drops the guard but keeps the name -- wrong on both counts.
+#
+# What must stay true is structural: the bridge has exactly one
+# ipcRenderer.send, and it is reached only through a membership test on the
+# channel.
+_sends = re.findall(r"ipcRenderer\.send\(", PRELOAD)
 ok("...and the whitelist is still a whitelist",
-   "allowed.includes(channel)" in PRELOAD)
+   re.search(r"\.includes\(\s*channel\s*\)", PRELOAD) is not None
+   and len(_sends) == 1,
+   "found %d ipcRenderer.send call(s) and %s membership test -- an unguarded "
+   "path beside the guarded one is the failure this checks for"
+   % (len(_sends),
+      "a" if re.search(r"\.includes\(\s*channel\s*\)", PRELOAD) else "NO"))
 ok("main.js handles it", "ipcMain.on('veridian-decline-exit'" in EMAIN)
 ok("...by quitting",
    "app.quit()" in EMAIN.split("veridian-decline-exit'", 1)[1][:400])

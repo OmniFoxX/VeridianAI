@@ -311,6 +311,25 @@ ok("...and carries no payload",
    "Payload-less" in _PRELOAD or "payload-less" in _PRELOAD,
    "main.js must decide what quitting means; a channel taking an argument "
    "hands web content something it should not have")
+
+# THE FAILURE THAT COST A ROUND OF TESTING, and the reason it was invisible.
+#
+# preload.js ships inside app.asar; the renderer is served live from frontend/
+# by the Python backend. So a new page runs against whatever shell was last
+# packaged -- and the first attempt at this feature shipped a renderer that
+# asked for a channel the installed shell had never heard of. send() dropped
+# it and returned, exactly as designed, with no way for the page to tell.
+# Dialog appeared, sign-out happened, app did not quit, nothing said why.
+ok("the bridge advertises what it can deliver",
+   "supportedChannels" in _PRELOAD,
+   "without this, 'refused' and 'delivered' are the same observation from the "
+   "renderer's side")
+ok("...and send() reports whether it actually sent",
+   "return true" in _PRELOAD and "return false" in _PRELOAD)
+ok("...and the allowlist is one list, enforced and advertised",
+   _PRELOAD.count("ALLOWED_SEND") >= 3,
+   "two copies would drift, and the advertised one is the half nobody would "
+   "notice was wrong")
 ok("main.js quits on it", "veridian-devmode-quit" in _EMAIN
    and "app.quit()" in _EMAIN)
 ok("...and quitting is what tears the tiers down",
@@ -338,10 +357,20 @@ ok("...and the server's answer overrides the pre-check",
    "the authoritative answer arrives with the response")
 ok("...it does not reload back into an app that is leaving",
    "send(\"veridian-devmode-quit\")" in _lo and "return;" in _lo)
-ok("...and says something useful when there is no Electron to ask",
+ok("...it checks the shell can DELIVER the channel before trusting it",
+   "_canSendToShell(" in _lo,
+   "an older shell drops an unknown channel silently -- sending blind looked "
+   "exactly like succeeding, so the fallback never ran")
+ok("...and says something useful when it cannot",
    "alert(" in _lo,
-   "a browser at localhost cannot quit the app; silently returning to the "
-   "login screen with terminals open is the bug, not the fallback")
+   "no Electron, or a shell that predates the channel; silently returning to "
+   "the login screen with terminals open is the bug, not the fallback")
+
+_AUTH_CODE = _js_code_only(_AUTH_JS)
+ok("the capability check treats a missing list as NO",
+   "supportedChannels" in _AUTH_CODE and "return false" in _AUTH_CODE,
+   "an older shell cannot answer; assuming yes is what produced a quit that "
+   "never happened")
 
 
 # =============================================================================

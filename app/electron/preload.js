@@ -11,11 +11,43 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
+// The send allowlist, hoisted so it can be BOTH enforced and advertised.
+//
+// v2.16.2: advertising it is the point. The renderer is served live from
+// frontend/ by the Python backend, but this file ships inside app.asar and only
+// changes when the Electron shell is repackaged. So a new renderer can be
+// running against an old shell -- and when it asked for a channel that shell
+// had never heard of, send() dropped it and returned undefined, exactly as
+// designed. Silently.
+//
+// That cost Todd a full round of testing on the Developer Mode quit: the
+// dialog appeared, the sign-out happened, and nothing else did. There was no
+// way for the page to find out, because "refused" and "delivered" looked
+// identical from the other side of the bridge.
+//
+// Now the renderer can ask what this shell actually supports and say something
+// honest when the answer is no. The list is not a secret -- it is a fixed
+// allowlist compiled into the app -- and publishing it removes a whole class
+// of silent failure at the cost of nothing.
+const ALLOWED_SEND = Object.freeze([
+  'command-palette-action',
+  'app-ready',
+  'oracle-unstick',
+  'open-data-folder',
+  'veridian-decline-exit',
+  'veridian-devmode-quit',
+]);
+
 contextBridge.exposeInMainWorld('electronAPI', {
 
   // Read-only platform string ('win32', 'darwin', 'linux').
   // Useful for renderer-side conditional UI (e.g. hiding .bat-specific hints).
   platform: process.platform,
+
+  // What this shell will actually deliver. Absent on any build older than
+  // v2.16.2 -- which is itself the useful signal: a renderer that finds this
+  // missing knows it is talking to an older shell and must not assume.
+  supportedChannels: ALLOWED_SEND,
 
   // --- Reload ---------------------------------------------------
   // Replaces any prior 'reload' listener before registering the new
@@ -54,12 +86,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // for whoever signs in next. Payload-less -- the renderer asks to leave,
     // main.js decides what leaving means, and nothing about HOW to quit
     // crosses the bridge.
-    const allowed = ['command-palette-action', 'app-ready', 'oracle-unstick',
-                     'open-data-folder', 'veridian-decline-exit',
-                     'veridian-devmode-quit'];
-    if (allowed.includes(channel)) {
+    //
+    // Returns whether it was actually sent, so a caller that cares can tell
+    // the difference. Callers should still check supportedChannels first --
+    // this only helps the ones that look at the result.
+    if (ALLOWED_SEND.includes(channel)) {
       ipcRenderer.send(channel, data);
+      return true;
     }
+    return false;
   },
 
 });

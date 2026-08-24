@@ -339,6 +339,29 @@
    * taken as the authority when it comes back. Both, because the cost of
    * getting this wrong is quitting an app somebody did not want quit.
    */
+  /* Will the Electron shell actually DELIVER this channel?
+   *
+   * The renderer ships live from frontend/; preload.js ships inside app.asar
+   * and only changes when the shell is repackaged. So a new page can be
+   * running against an old shell, and preload's allowlist drops an unknown
+   * channel and returns -- correctly, by design, and invisibly.
+   *
+   * That is what happened on the first attempt at the Developer Mode quit: the
+   * dialog appeared, the sign-out ran, and the app did not close, with nothing
+   * anywhere to say why. From this side "refused" and "delivered" were the
+   * same observation.
+   *
+   * supportedChannels is published by preload from v2.16.2. Its ABSENCE is the
+   * signal that matters -- an older shell cannot answer, so the honest reading
+   * is "no", and the caller falls back to telling the person instead of
+   * assuming something happened. */
+  function _canSendToShell(channel) {
+    var api = window.electronAPI;
+    if (!api || typeof api.send !== "function") return false;
+    if (!api.supportedChannels || !api.supportedChannels.indexOf) return false;
+    return api.supportedChannels.indexOf(channel) !== -1;
+  }
+
   async function _devmodeActive() {
     try {
       var r = await fetch("/api/devmode", { credentials: "same-origin" });
@@ -372,14 +395,19 @@
         quitNow = body.quit_required;      // the server is the authority
       }
     } catch (e) {}
-    if (quitNow && window.electronAPI && window.electronAPI.send) {
+    if (quitNow && _canSendToShell("veridian-devmode-quit")) {
       window.electronAPI.send("veridian-devmode-quit");
       return;                     // the app is leaving; do not reload into it
     }
     if (quitNow) {
-      // No Electron to ask -- a browser pointed at localhost. The sign-out has
-      // already happened; say the part the page cannot do for itself rather
-      // than returning to a login screen with terminals quietly still open.
+      // Either there is no Electron to ask (a browser pointed at localhost) or
+      // the shell predates this channel. Both end the same way: the page
+      // cannot close the app, so it says the part it cannot do rather than
+      // returning to a login screen with terminals quietly still open.
+      //
+      // This branch is why _canSendToShell exists. Sending blind to an older
+      // shell looked identical to succeeding, so the fallback never ran and
+      // the whole thing failed in silence.
       try {
         window.alert(
           "Signed out. Developer Mode was on for this session, so please close "
