@@ -48,6 +48,7 @@ import re
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
@@ -229,53 +230,63 @@ ok("...it is still localhost-only",
    "_is_local_client(request)" in _code_only(_devbody),
    "opening it to every profile must not also open it to the network")
 ok("...and audited",
-   'devmode.set"' in _dev or "devmode.set'" in _dev,
+   "devmode.arm" in _dev and "devmode.disarm" in _dev,
    "turning it ON reveals daemon and model-server terminals; who asked is "
-   "worth recording")
-ok("...and it answers with the STORED value, not the requested one",
-   "devmode.is_enabled(" in _code_only(_devbody),
-   "echoing the request back is how a write that did not land gets reported "
-   "as one that did")
-ok("...and it writes the preference against the signed-in profile",
-   "ns=_ns" in _code_only(_devbody),
-   "without an ns the choice lands on the machine and the next person "
-   "inherits it -- which is the report")
+   "worth recording, and arming is now the moment that matters")
+ok("...and turning it ON arms a window rather than flipping a switch",
+   "devmode.arm(" in _code_only(_devbody),
+   "a console spawned windowless has no window to reveal, so ON cannot take "
+   "effect where it is thrown")
+ok("...and turning it OFF disarms", "devmode.disarm()" in _code_only(_devbody))
+ok("...and it records that the arm was placed during THIS session",
+   "armed_here" in _code_only(_devbody),
+   "or shutdown clears the window on the way out of the very quit the person "
+   "was told to perform")
 
 _get = _body_src(_func("api_get_devmode"))
-ok("the devmode GET reports THIS profile's own setting",
-   "_session_ns(request)" in _code_only(_get),
-   "otherwise the switch shows what the last person to use the machine chose")
+ok("the devmode GET reports active and armed separately",
+   "devmode.status(" in _code_only(_get),
+   "merging 'terminals are up' with 'the next start will show them' is how "
+   "this feature earned its reputation")
 
 
 # =============================================================================
-print("\n=== 3b. Every sign-in path re-points the desktop ===")
+print("\n=== 3b. The launch owns Developer Mode, start to finish ===")
 # =============================================================================
-# Sessions are minted at four separate call sites. Hooking them individually is
-# four chances to miss one, and the likeliest miss is the MFA path -- the
-# accounts most likely to care. So it is done once, in the middleware every
-# request already passes through.
-_mints = len(re.findall(r"_session\.create_session\(", _code_only(MAIN)))
-_gate = _body_src(_func("_session_gate"))
-ok("the session gate was found", bool(_gate))
-ok("...and it applies the arriving profile's preference",
-   "apply_for(" in _code_only(_gate),
-   "found %d create_session call sites; wiring them one by one is how a path "
-   "gets missed" % _mints)
-ok("...only when the profile actually changed",
-   "_DEVMODE_APPLIED" in _code_only(_gate),
-   "this runs on every request; re-applying each time would enumerate every "
-   "window in the OS on every call")
+_boot = _body_src(_func("_apply_devmode_on_startup"))
+ok("startup asks whether THIS launch is a Developer Mode session",
+   "begin_launch()" in _code_only(_boot))
+ok("...and hides leftovers when it is not",
+   "set_consoles_visible(False)" in _code_only(_boot),
+   "a previous session that was killed rather than quit leaves its terminals "
+   "on screen -- 'if they didn't shut VeridianAI down, the terminals stay up'")
+
+_shut = _body_src(_func("_end_devmode_on_shutdown"))
+ok("quitting ends the Developer Mode session", "end_launch(" in _code_only(_shut))
+ok("...unless this session armed the next one",
+   "armed_here" in _code_only(_shut),
+   "arm-then-quit is the prescribed flow; clearing it here would break the "
+   "one person following the instructions")
+
+# The startup path must NOT consume the arm: tier_launcher reads it from a
+# different process at line 470 of start.bat, before the backend is up.
+ok("startup does not consume the arm",
+   "disarm()" not in _code_only(_boot),
+   "clearing it here would depend on winning a race against tier_launcher, "
+   "and losing means the consoles spawn hidden for the one launch somebody "
+   "went to the trouble of arming")
 
 _out = _body_src(_func("api_auth_logout"))
-ok("signing out hides the terminals",
-   "set_consoles_visible(False)" in _code_only(_out),
-   "one person's daemon and model-server logs must not be left on the login "
-   "screen for whoever sits down next")
-ok("...without erasing what that profile chose",
-   "developer_mode" in _code_only(_out)
-   and "developer_mode_pref" not in _code_only(_out),
-   "the mirror is what is applied; the preference is theirs and must survive "
-   "so signing back in restores it")
+ok("signing out no longer pretends to change Developer Mode",
+   "set_consoles_visible" not in _code_only(_out),
+   "the consoles belong to processes that outlive the session, and the "
+   "windowless ones have no window to hide -- it never worked and it is not "
+   "what signing out means")
+
+_gate = _body_src(_func("_session_gate"))
+ok("...and neither does the session gate",
+   "devmode" not in _code_only(_gate).lower(),
+   "per-profile application was removed with the model it belonged to")
 
 
 # =============================================================================
@@ -294,70 +305,80 @@ ok("...and tells the person, somewhere they can see it",
    "setStatusError" in _tp,
    "console.error is where the first version of this bug went to hide")
 
-_dm = _SC.split("async function setDevMode")[1][:1200] \
+_dm = _SC.split("async function setDevMode")[1][:2600] \
     if "async function setDevMode" in _SC else ""
 ok("setDevMode was found", bool(_dm))
-ok("...it renders the server's value, not the requested one",
-   "d.enabled" in _dm)
+ok("...it renders the server's answer, not the requested one",
+   "renderDevMode(d)" in _dm)
 ok("...it reverts the checkbox on failure", "box.checked = !enabled" in _dm)
 ok("...and reports the failure visibly", "setStatusError" in _dm)
+ok("...it confirms BEFORE starting the clock",
+   _dm.find("oracleConfirm") < _dm.find("fetch(\"/api/devmode\""),
+   "the window starts when they click OK, so the request must go out on "
+   "acceptance -- not before, and not on the toggle moving")
+ok("...and a cancelled dialog leaves the switch off",
+   "box.checked = false" in _dm,
+   "saying no to the dialog while the checkbox stays on is the same lie in a "
+   "smaller place")
+# Case-insensitive: the point is that the sentence is THERE, not how it is
+# capitalised. The first version demanded "Signing out is not enough" and went
+# red on "(signing out is not enough)" -- an assertion about prose, failing on
+# prose, while the instruction it was checking for was present and correct.
+_dml = _dm.lower()
+ok("the dialog spells out the steps",
+   "quit" in _dml and "5-minute" in _dml
+   and "signing out is not enough" in _dml,
+   "the whole design depends on the person knowing to quit and restart; if "
+   "that is only in a tooltip, it may as well not be anywhere")
 
 
 # =============================================================================
 print("\n=== 5. What was deliberate stayed deliberate ===")
 # =============================================================================
-# Developer Mode is per profile as of v2.16.2, WITHOUT breaking the thing that
-# made it machine-scoped in the first place. Two values, two questions:
-# developer_mode_pref is whose choice it is; developer_mode is what is applied
-# to the desktop right now, which is what a daemon reads at spawn time with
-# nobody signed in. The machine key must therefore SURVIVE -- dropping it to
-# make the preference per-user is the change that would look like a fix and
-# leave tier_launcher asking an unanswerable question.
-ok("the applied state is still a MACHINE key",
-   '"developer_mode"' in UIP and "MACHINE_KEYS" in UIP,
-   "tier_launcher reads this in a daemon where there is no user to ask")
-ok("...and the per-profile preference is NOT one",
-   "developer_mode_pref" not in UIP,
-   "a machine key ignores ns by design, so a preference listed there would "
-   "silently go on being shared -- the bug wearing the fix's clothes")
-ok("devmode stores the preference per profile",
-   "_PREF_KEY" in DEV and "ns=ns" in DEV)
-# Asked of the CODE, not of the docstring.
-#
-# The first version of this searched devmode.py for the sentence "Deliberately
-# does not fall back" and went red on correct code, because the sentence wraps
-# across a line. It deserved to fail for a better reason than that: a comment
-# saying a thing is not the thing. What matters is that the ns branch reads the
-# preference and never consults the machine key -- and section 6 then proves
-# the behaviour by running it, which is the assertion that actually holds.
-_ie = ""
-for _n in ast.walk(ast.parse(DEV)):
-    if isinstance(_n, ast.FunctionDef) and _n.name == "is_enabled":
-        _ie = ast.get_source_segment(DEV, _n) or ""
-# Bounded by INDENTATION, not by a line count. A fixed three-line window
-# swallowed the statement after the branch -- the machine-value fallback, which
-# reads _KEY for exactly the right reason -- and reported the correct code as
-# wrong. "The next few lines" is not the same as "this branch".
-_nsbranch = ""
-_lines = _code_only(_ie).splitlines()
-for _i, _l in enumerate(_lines):
-    if _l.strip() == "if ns:":
-        _ind = len(_l) - len(_l.lstrip())
-        _body = []
-        for _nxt in _lines[_i + 1:]:
-            if _nxt.strip() and (len(_nxt) - len(_nxt.lstrip())) <= _ind:
-                break
-            _body.append(_nxt)
-        _nsbranch = "\n".join(_body)
-ok("the per-profile branch reads the preference", "_PREF_KEY" in _nsbranch,
-   _nsbranch or "no `if ns:` branch found in is_enabled")
-ok("...and never consults the machine value for a profile",
-   bool(_nsbranch) and "_KEY" not in _nsbranch.replace("_PREF_KEY", ""),
-   "inheriting whatever the owner last chose is the precise bug being fixed, "
-   "and ui_prefs refuses the same fallback for the same reason")
-ok("...and the UI now describes it as the person's own",
-   "follows your profile" in HTML and "whole computer" not in HTML,
-   "the machine-wide wording was true for about an hour and is now false")
+# The deadline is read by tier_launcher, overseer_daemon and tier_lifecycle --
+# three separate processes, none with a signed-in user. It must therefore stay
+# a MACHINE key, and the per-profile preference had to go: it described a model
+# that could not be implemented, because the consoles are spawned before
+# anybody has signed in.
+ok("the deadline is a MACHINE key",
+   "developer_mode_until" in UIP and "MACHINE_KEYS" in UIP,
+   "tier_launcher reads it at import, in its own process, with no user to ask")
+ok("the per-profile preference is gone",
+   "developer_mode_pref" not in DEV and "developer_mode_pref" not in UIP,
+   "it promised something the spawn model cannot deliver; leaving it in place "
+   "would be a stored value nothing consults")
+ok("the spawn-time question is still answered by is_enabled()",
+   "def is_enabled(" in DEV,
+   "tier_launcher.py, overseer_daemon.py and tier_lifecycle.py all call this; "
+   "renaming it would silently take Developer Mode away from all three")
+ok("...and it is now purely a function of the deadline",
+   "armed_until() > _now()" in _code_only(DEV),
+   "any stored boolean could be left true by a crash and hand the next person "
+   "somebody else's terminals -- an instant in the past cannot")
+
+ok("the UI tells people the actual procedure",
+   "quit VeridianAI" in HTML and "Signing out is not enough" in HTML,
+   "this design asks for a specific sequence; if it is not written where the "
+   "switch is, nobody performs it")
+ok("...and no longer claims it is machine-wide or per profile",
+   "whole computer" not in HTML and "follows your profile" not in HTML,
+   "both were written today and both are now wrong -- it belongs to a LAUNCH")
+
+# The rename sweep that missed _TITLE_HINTS. Todd counted the windows: "the
+# live hide/show only affected the 3 llama terminals, not the other 5".
+ok("the console title hints know the product's current name",
+   '"veridianai"' in DEV,
+   "the 2026-08-14 OracleAI -> VeridianAI sweep never reached this tuple, so "
+   "the main VeridianAI console matched nothing and was never hidden")
+ok("...and still know the old one",
+   '"oracleai"' in DEV,
+   "installs predating the rename still have consoles titled that way")
+ok("hiding may match our own process tree; showing may not",
+   "not visible and pid.value in our_pids" in DEV,
+   "the python.exe and Ollama consoles carry default command-line titles that "
+   "match no hint anyone could write down. Hiding one that is already hidden "
+   "does nothing; SHOWING by pid would reveal deliberately-windowless "
+   "processes as blank terminals, which is the bug the title rule was for")
 ok("the plugin overlay sits beside ui_prefs, not in the install dir",
    "plugin_state.json" in PM_SRC and "DATA_DIR" in PM_SRC)
 ok("...and the reason is written next to it",
@@ -367,9 +388,10 @@ ok("...and the reason is written next to it",
 
 
 # =============================================================================
-print("\n=== 6. Two profiles keep two answers, exercised ===")
+print("\n=== 6. The arm window, exercised against the clock ===")
 # =============================================================================
-# Read off the source everything above is asserting ABOUT. This part runs it.
+# Everything above reads the source. This runs it, because the whole design is
+# a claim about time and a claim about time is worth actually testing.
 _T2 = Path(tempfile.mkdtemp(prefix="vai_dev_"))
 try:
     import ui_prefs as _uip
@@ -377,38 +399,59 @@ try:
     _orig = _uip._data_dir
     _uip._data_dir = lambda: _T2                      # redirect the store
 
-    _dev.set_enabled(True, ns="alice")
-    _dev.set_enabled(False, ns="bob")
+    ok("it starts off", _dev.is_enabled() is False)
 
-    ok("alice keeps her own answer", _dev.is_enabled("alice") is True)
-    ok("bob keeps his, unaffected by hers", _dev.is_enabled("bob") is False,
-       "this is the report: one profile's choice overriding another's")
+    _dev.arm(seconds=60, by="alice")
+    ok("arming turns the spawn-time answer on", _dev.is_enabled() is True,
+       "this is what tier_launcher asks as it starts")
+    ok("...and records who did it", _dev.armed_by() == "alice")
+    ok("...with a real deadline in the future",
+       50 <= _dev.seconds_left() <= 60, _dev.seconds_left())
 
-    # Order matters -- bob wrote last, so the MIRROR is his. The preference
-    # must not be.
-    ok("...and the machine mirror holds what was last APPLIED",
-       _dev.is_enabled() is False,
-       "the daemon reads this with nobody signed in and needs a real answer")
-    ok("...while alice's preference is still hers",
-       _dev.is_enabled("alice") is True,
-       "if the mirror overwrote her preference, per-profile would be a "
-       "relabelling of the same shared value")
+    # THE ONE THAT MATTERS: the deadline is an INSTANT, not a countdown owned
+    # by a running process. Nothing here is running; the stored value alone
+    # decides, which is why it survives the app being shut down.
+    _st = json.loads((_T2 / "ui_prefs.json").read_text(encoding="utf-8"))
+    ok("the deadline is stored as an absolute time",
+       isinstance(_st.get("developer_mode_until"), (int, float))
+       and _st["developer_mode_until"] > time.time(),
+       _st)
 
-    # A profile that has never touched it gets the DEFAULT, not an inheritance.
-    ok("a new profile does not inherit anyone's setting",
-       _dev.is_enabled("carol") is False,
-       "ui_prefs refuses this fallback for the same reason: inheriting the "
-       "owner's choice on first sign-in is the leak the split exists to close")
+    # Wind the clock past it, without waiting five minutes.
+    _uip.set("developer_mode_until", time.time() - 1)
+    ok("a lapsed window is simply off", _dev.is_enabled() is False,
+       "nothing has to run for this to expire -- an instant in the past is "
+       "in the past whether VeridianAI is open or not")
+    ok("...and reports no time left", _dev.seconds_left() == 0)
 
-    # Where the files actually landed. A per-profile key that quietly went to
-    # the shared file would pass every check above by accident.
-    _shared = json.loads((_T2 / "ui_prefs.json").read_text(encoding="utf-8"))
-    ok("the shared file holds ONLY the applied mirror",
-       set(_shared) == {"developer_mode"}, _shared)
-    _alice = json.loads(
-        (_T2 / "users" / "alice" / "ui_prefs.json").read_text(encoding="utf-8"))
-    ok("...and the preference is under the profile's own directory",
-       _alice.get("developer_mode_pref") is True, _alice)
+    # A launch inside the window is a dev session; one outside it is not, and
+    # begin_launch must NOT consume the arm on the way past.
+    _dev.arm(seconds=60, by="alice")
+    ok("a launch inside the window is a Developer session",
+       _dev.begin_launch().get("active") is True)
+    ok("...and the arm is still there for tier_launcher to read",
+       _dev.is_enabled() is True,
+       "the backend and tier_launcher are separate processes; consuming here "
+       "would race the one thing that actually opens the consoles")
+
+    # Quitting ends it -- unless this session armed the NEXT one.
+    _dev.end_launch(arm_placed_this_session=False)
+    ok("quitting ends the session", _dev.is_enabled() is False)
+
+    _dev.arm(seconds=60, by="bob")
+    _dev.end_launch(arm_placed_this_session=True)
+    ok("...but quitting right after arming leaves the window open",
+       _dev.is_enabled() is True,
+       "arm-then-quit IS the prescribed flow; clearing it here would break "
+       "the one person following the instructions exactly")
+
+    _dev.disarm()
+    ok("disarming clears it", _dev.is_enabled() is False)
+    _st2 = json.loads((_T2 / "ui_prefs.json").read_text(encoding="utf-8"))
+    ok("...and leaves nothing behind that could switch it back on",
+       not any(v for k, v in _st2.items()
+               if k.startswith("developer_mode") and v not in (0, "", None)),
+       _st2)
 finally:
     try:
         _uip._data_dir = _orig

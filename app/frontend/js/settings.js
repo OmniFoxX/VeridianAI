@@ -120,8 +120,7 @@ function setChecked(id, val) {
 async function loadDevAndBrowserToggles() {
   try {
     const r = await fetch("/api/devmode");
-    const d = await r.json();
-    setChecked("toggle-devmode", !!d.enabled);
+    renderDevMode(await r.json());
   } catch (e) {
     /* leave default unchecked */
   }
@@ -244,19 +243,101 @@ function renderBuildStatus(d) {
   el.style.color = pair[1];
 }
 
-/* The switch shows what the SERVER says, never what we asked for.
+/* Developer Mode: ARM, QUIT, RESTART.
  *
- * This used to fire and forget. A non-owner was refused by the owner gate, the
- * refusal landed in console.error, and the checkbox sat there showing OFF while
- * the consoles stayed open -- which is exactly how Todd found it. The gate is
- * gone now, but the reporting bug was the worse half and would have outlived
- * it: any future refusal, any failed write, would have gone the same way.
+ * The switch does not turn terminals on, and saying that it does is what made
+ * this feature so confusing. A console spawned windowless has no window to
+ * reveal, so the decision can only be taken as the app starts. Turning this on
+ * opens a five-minute window; the next start inside it is a Developer Mode
+ * session.
  *
- * So: read the authoritative value out of the response and render THAT. On any
- * failure, put the switch back where it was and say so where a person can
- * actually see it. */
+ * Two facts, rendered separately, because one switch cannot carry both:
+ *   active -- terminals are up NOW, for this session
+ *   armed  -- a window is open and the next start will have them
+ */
+var _devCountdown = null;
+
+function _devFmtClock(epochSeconds) {
+  try {
+    return new Date(epochSeconds * 1000).toLocaleTimeString([], {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+  } catch (e) {
+    return "";
+  }
+}
+
+function _devFmtLeft(secs) {
+  var m = Math.floor(Math.max(0, secs) / 60);
+  var s = Math.max(0, secs) % 60;
+  return m + ":" + (s < 10 ? "0" : "") + s;
+}
+
+function renderDevMode(d) {
+  d = d || {};
+  var box = document.getElementById("toggle-devmode");
+  var note = document.getElementById("devmode-status");
+  if (box) box.checked = !!(d.active || d.armed);
+  if (_devCountdown) {
+    clearInterval(_devCountdown);
+    _devCountdown = null;
+  }
+  if (!note) return;
+
+  if (d.armed) {
+    // The DEADLINE is the number that matters, so it is shown as a clock time
+    // as well as a countdown. The countdown is only a convenience -- the
+    // server stamped a wall-clock instant, and it keeps running while
+    // VeridianAI is shut down, which is the entire point.
+    var deadline = (d.until || 0) * 1000;
+    var paint = function () {
+      var left = Math.round((deadline - Date.now()) / 1000);
+      if (left <= 0) {
+        clearInterval(_devCountdown);
+        _devCountdown = null;
+        note.textContent =
+          "The 5-minute window has passed. Turn it on again when you are ready to restart.";
+        if (box) box.checked = !!d.active;
+        return;
+      }
+      note.textContent =
+        "Armed. Fully quit VeridianAI and start it again before " +
+        _devFmtClock(d.until) + " (" + _devFmtLeft(left) + " left). " +
+        "Signing out is not enough.";
+    };
+    paint();
+    _devCountdown = setInterval(paint, 1000);
+    return;
+  }
+
+  note.textContent = d.active
+    ? "Log terminals are showing for this session. They close when you quit VeridianAI."
+    : "Off. Log terminals are hidden.";
+}
+
 async function setDevMode(enabled) {
   const box = document.getElementById("toggle-devmode");
+  if (enabled) {
+    // The clock starts when they click OK, not when the toggle moves -- so the
+    // confirmation comes FIRST and the request goes out on acceptance. Todd:
+    // "the exact time the person clicks okay is when the 5 minutes starts."
+    const go = await window.oracleConfirm(
+      "Developer Mode shows the background log terminals.\n\n" +
+        "It does not take effect straight away. To turn it on:\n\n" +
+        "  1. Click OK -- this starts a 5-minute window.\n" +
+        "  2. Fully QUIT VeridianAI (signing out is not enough).\n" +
+        "  3. Start it again within those 5 minutes.\n\n" +
+        "The terminals stay for that whole session and close when you quit. " +
+        "If the 5 minutes passes first, nothing happens and you can try again.",
+      { title: "Turn on Developer Mode", okLabel: "Start the 5 minutes" },
+    );
+    if (!go) {
+      if (box) box.checked = false;   // they said no; the switch must agree
+      return;
+    }
+  }
   try {
     const r = await fetch("/api/devmode", {
       method: "POST",
@@ -264,15 +345,8 @@ async function setDevMode(enabled) {
       body: JSON.stringify({ enabled: !!enabled }),
     });
     const d = r.ok ? await r.json() : null;
-    if (!r.ok || !d || typeof d.enabled !== "boolean") {
-      throw new Error("HTTP " + r.status);
-    }
-    if (box) box.checked = d.enabled;
-    if (d.enabled !== !!enabled && window.setStatusError) {
-      // The store disagreed with the request. Rare, but silence here is how
-      // the original bug felt from the outside.
-      window.setStatusError("Developer Mode could not be changed.");
-    }
+    if (!r.ok || !d) throw new Error("HTTP " + r.status);
+    renderDevMode(d);              // the server's answer, never the request
   } catch (e) {
     if (box) box.checked = !enabled;          // put it back
     if (window.setStatusError) {

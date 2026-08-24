@@ -734,7 +734,7 @@
               <span
                 class="hw-toggle-label"
                 id="devmode-label"
-                data-tip="Show or hide the background log terminals (Ollama, Toga, Daemon, Overseer, model servers). Off = clean desktop; on = all logs visible. This is your own setting: it follows your profile, and the terminals close when you sign out."
+                data-tip="Show the background log terminals (Ollama, Toga, Daemon, Overseer, model servers). Turning this on does NOT open them straight away: fully quit VeridianAI and start it again within 5 minutes, and they come up with it. Signing out is not enough -- the terminals belong to the app, not to your session."
                 >Show log terminals</span
               >
               <label class="toggle-switch">
@@ -748,6 +748,18 @@
                 <span class="toggle-track"></span>
               </label>
             </div>
+            <!-- The two facts the switch alone cannot carry: whether the
+                 terminals are up NOW, and whether a restart window is open.
+                 Kept as live text rather than a tooltip because the second one
+                 has a deadline attached and a tooltip you have to go looking
+                 for is no use to somebody who has five minutes. -->
+            <div
+              class="voice-extras-note"
+              id="devmode-status"
+              role="status"
+              aria-live="polite"
+              style="margin-top: 4px"
+            ></div>
           </div>
           <!-- Build integrity / provenance -->
           <div class="settings-section">
@@ -2104,7 +2116,7 @@
     <script src="/static/js/games.js?v=efddeb0a06"></script>
     <script src="/static/js/socials.js?v=c16d09c1b3"></script>
     <script src="/static/js/hardware.js?v=f844dcfe34"></script>
-    <script src="/static/js/settings.js?v=7124bf7dcf"></script>
+    <script src="/static/js/settings.js?v=a98bc0bba7"></script>
     <script src="/static/js/chat.js?v=49a6c0a077"></script>
     <script src="/static/js/app.js?v=fca71ed341"></script>
     <script src="/static/js/auth.js?v=8df1caf67e"></script>

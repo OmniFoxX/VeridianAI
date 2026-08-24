@@ -40,7 +40,13 @@ _LOCK = threading.Lock()
 # have no user to ask. Add to this list only when a daemon genuinely needs the
 # answer with nobody signed in.
 MACHINE_KEYS = frozenset({
-    "developer_mode",       # tier_launcher spawns windows from a daemon
+    "developer_mode",       # legacy flag; kept so an old value still lands here
+    # v2.16.2: Developer Mode is an ARM WINDOW, not a flag. tier_launcher,
+    # overseer_daemon and tier_lifecycle each read the deadline as they spawn a
+    # console -- three separate processes, none with a signed-in user to ask,
+    # all needing the same answer. A clock reading is about the machine.
+    "developer_mode_until",  # wall-clock instant the arm lapses
+    "developer_mode_by",     # who armed it: audit trail + the Settings line
     "backend_mode",         # which compute backend this box uses
 })
 

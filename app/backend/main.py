@@ -1171,6 +1171,14 @@ app.add_middleware(CORSMiddleware, allow_origins=_cors_extra,
 model_manager = ModelManager(config)
 plugin_manager = PluginManager(PLUGINS_DIR)
 
+# What this LAUNCH decided about Developer Mode, and whether somebody armed the
+# next one while it was running. Both are facts about this process, not stored
+# preferences -- the only thing persisted is the deadline, in devmode.py.
+#   active     -- these consoles are visible; fixed for the life of the process
+#   armed_here -- a window was opened during this session, so shutdown must not
+#                 clear it out from under the restart it is waiting for
+_DEVMODE_LAUNCH: dict = {"active": False, "armed_here": False}
+
 # Aether skill-share HTTP surface (L4). Gated by config.skill_share_enabled (OFF
 # by default); the two serve paths are allowlisted in the session gate below.
 try:
@@ -3326,16 +3334,21 @@ async def api_set_sage_config(payload: dict, request: Request):
 # respawns too. Live toggle via ShowWindow; no restart needed.
 @app.get("/api/devmode")
 async def api_get_devmode(request: Request):
-    # v2.16.2: THIS profile's own answer, so the switch in Settings shows what
-    # this person chose rather than what the last person to use the machine
-    # chose. With multiuser off there is no ns and this is the machine value,
-    # exactly as before.
+    """Two facts, never merged into one.
+
+    `active`  -- this launch's consoles are up. Fixed for the session.
+    `armed`   -- a window is open and the NEXT start will show them.
+
+    The switch is on when either is true, but Settings has to be able to tell
+    them apart, because the sentence it needs to show is different: "restart
+    within 4:12" versus "showing now, they close when you quit".
+    """
     try:
         import devmode
-        _ns = _safe_ns(_session_ns(request))
-        return {"enabled": devmode.is_enabled(_ns), "applied": devmode.is_enabled()}
+        return devmode.status(session_active=_DEVMODE_LAUNCH.get("active", False))
     except Exception as e:
-        return {"enabled": False, "error": _safe_detail(e, "cap")}
+        return {"active": False, "armed": False, "seconds_left": 0,
+                "error": _safe_detail(e, "cap")}
 
 
 @app.post("/api/devmode")
@@ -3355,14 +3368,16 @@ async def api_set_devmode(payload: dict, request: Request):
     that reported ok for a write that failed. Three shapes of one bug in one
     release: the UI asserting something the system never agreed to.
 
-    THE CHOICE IS PER PROFILE; THE DESKTOP IS NOT. The preference is stored
-    under the signing-in profile, so it is theirs and survives the next person
-    using the machine. What cannot be per-profile is the WINDOWS -- there is
-    one desktop, and tier_launcher reads the applied flag in a daemon with no
-    signed-in user to ask. So devmode keeps a machine mirror of "what is
-    applied right now" and the session gate re-points it at whoever is here.
-    See devmode.py for the full shape, including the case it cannot serve
-    (two profiles signed in at once share one screen).
+    ON ARMS A WINDOW; IT DOES NOT SWITCH ANYTHING ON. A console created with
+    CREATE_NO_WINDOW has no window to reveal, so the decision can only be taken
+    where the process is spawned -- at launch, by tier_launcher, in its own
+    process, before anyone has signed in. Turning this on stamps a wall-clock
+    deadline; quitting and restarting inside it gives a Developer Mode session.
+    devmode.py carries the full reasoning.
+
+    OFF disarms, and also asks the open consoles to hide. Hiding is the one
+    direction that CAN work live, so it is attempted -- best-effort, and the
+    session ends properly at quit either way.
 
     Localhost-only and audited. Turning it ON reveals daemon and model-server
     terminals, whose output is a legitimate thing to record who asked for.
@@ -3372,14 +3387,21 @@ async def api_set_devmode(payload: dict, request: Request):
     import devmode
     enabled = bool(payload.get("enabled"))
     _ns = _safe_ns(_session_ns(request))
-    devmode.set_enabled(enabled, ns=_ns)
-    result = devmode.set_consoles_visible(enabled)
-    _audit_api_action(request, "devmode.set",
-                      {"enabled": enabled, "profile": _ns or "(owner)"})
-    # The value read back from the store, not the value we were asked for --
-    # so a write that did not land cannot be reported as one that did.
-    return {"enabled": devmode.is_enabled(_ns), "requested": enabled,
-            "result": result}
+    if enabled:
+        devmode.arm(by=(_ns or "(owner)"))
+        # Remembered so shutdown does not clear the arm this person just placed
+        # on their way out -- quitting is the next step they were TOLD to take.
+        _DEVMODE_LAUNCH["armed_here"] = True
+        result = None
+    else:
+        devmode.disarm()
+        _DEVMODE_LAUNCH["armed_here"] = False
+        result = devmode.set_consoles_visible(False)
+    _audit_api_action(request, "devmode.arm" if enabled else "devmode.disarm",
+                      {"profile": _ns or "(owner)"})
+    _st = devmode.status(session_active=_DEVMODE_LAUNCH.get("active", False))
+    _st["hide_result"] = result
+    return _st
 
 
 @app.get("/api/devmode/diag")
@@ -4173,40 +4195,57 @@ async def api_dismiss_ollama_notice(payload: dict, request: Request):
 
 @app.on_event("startup")
 async def _apply_devmode_on_startup():
-    """Apply saved Developer Mode state so the log consoles start hidden
-    (default) or visible per the user's last choice. Off-thread + best-effort
-    so it never blocks or breaks startup.
+    """Decide whether THIS launch is a Developer Mode session, and make the
+    desktop match.
 
-    v2.16.2: with multiuser ON, boot to HIDDEN instead of to the last applied
-    value. Nobody is signed in at startup, and the stored mirror is whatever
-    the previous session left behind -- so restoring it would put the last
-    person's log terminals on the login screen, in front of someone who has not
-    authenticated. The session gate applies the arriving profile's own
-    preference a moment later.
+    Read once, here, and remembered for the life of the process. The tiers were
+    spawned moments ago by tier_launcher, which asked the same question in its
+    own process; this is the backend learning what it already did.
 
-    Single-user is unchanged: no profiles, so the machine value IS the owner's
-    choice and restoring it is exactly right.
+    The tidy-up half matters as much. If this launch is NOT armed, any console
+    still on screen belongs to a previous session that was killed rather than
+    quit -- so hide what can be hidden. That is Todd's complaint in one line:
+    "if they didn't shut VeridianAI down, the terminals stay up."
+
+    Off-thread and best-effort so it can neither block nor break startup, and
+    delayed a moment so start.bat's consoles have finished opening -- hiding a
+    window that does not exist yet does nothing.
     """
     try:
         import threading, time
         import devmode
 
+        _DEVMODE_LAUNCH["active"] = bool(devmode.begin_launch().get("active"))
+        print(f"[DEVMODE] this launch: "
+              f"{'DEVELOPER (terminals visible)' if _DEVMODE_LAUNCH['active'] else 'normal'}",
+              flush=True)
+
         def _go():
             try:
                 time.sleep(2.0)  # let start.bat's tier consoles finish opening
-                if config.get("multiuser_enabled", False):
+                if not _DEVMODE_LAUNCH.get("active"):
                     devmode.set_consoles_visible(False)
-                    try:
-                        import ui_prefs as _uip
-                        _uip.set("developer_mode", False)   # mirror, not a pref
-                    except Exception:
-                        pass
-                else:
-                    devmode.apply_saved_state()
             except Exception:
                 pass
 
         threading.Thread(target=_go, daemon=True, name="devmode_apply").start()
+    except Exception:
+        pass
+
+
+@app.on_event("shutdown")
+async def _end_devmode_on_shutdown():
+    """Developer Mode ends when VeridianAI is quit -- the behaviour asked for,
+    and the reason nothing here can be left switched on for the next person.
+
+    Skipped when this session ARMED the window, because quitting is the very
+    next thing that person was instructed to do and clearing it here would
+    break the one flow being supported.
+    """
+    try:
+        import devmode
+        devmode.end_launch(
+            arm_placed_this_session=bool(_DEVMODE_LAUNCH.get("armed_here")))
     except Exception:
         pass
 
@@ -6225,24 +6264,15 @@ async def api_auth_logout(request: Request):
             aiq_nudge.flush(ns=_safe_ns(_s.get("ns")))
     except Exception as _e:
         print(f"[AIQ_NUDGE] logout flush skipped: {type(_e).__name__}: {_e}")
-    # v2.16.2: and take this profile's console windows with it.
+    # v2.16.2: signing out deliberately does NOT touch Developer Mode.
     #
-    # Developer Mode is per profile, but the windows are not -- so leaving them
-    # up would put one person's log terminals on the login screen for whoever
-    # sits down next, showing daemon and model-server output to someone who has
-    # not signed in at all. Back to hidden; the next profile's own preference
-    # is applied by the session gate the moment they arrive.
-    #
-    # Their PREFERENCE is untouched. This changes what is on screen, not what
-    # they chose -- signing back in brings their terminals straight back.
-    try:
-        import devmode as _dmod
-        _DEVMODE_APPLIED.pop("ns", None)
-        _dmod.set_consoles_visible(False)
-        import ui_prefs as _uip
-        _uip.set("developer_mode", False)      # the mirror, not the preference
-    except Exception as _e:
-        print(f"[DEVMODE] logout hide skipped: {type(_e).__name__}: {_e}")
+    # An earlier pass hid the consoles here, which was wrong twice over. It
+    # cannot work -- the consoles belong to processes that outlive the session,
+    # and the ones spawned windowless have no window to hide -- and it is not
+    # what a person signing out is asking for. Developer Mode is a property of
+    # the LAUNCH, and it ends when VeridianAI is quit. The Settings text now
+    # says so plainly, because the gap between "signed out" and "quit" is
+    # exactly where this feature has always confused people.
     _session.destroy_session(request.cookies.get(_AUTH_COOKIE))
     resp = JSONResponse({"success": True})
     resp.delete_cookie(_AUTH_COOKIE, httponly=True, samesite="lax",
@@ -6929,13 +6959,6 @@ async def api_auth_users_access_set(request: Request, payload: dict):
             "users": _users.list_users()}
 
 
-# Which profile's Developer Mode is currently on the desktop. A one-key dict
-# rather than a module global so the middleware can update it without a
-# `global` declaration, and so "nobody yet" is distinguishable from "the owner"
-# (None is a real profile -- the owner's -- so the key starts absent instead).
-_DEVMODE_APPLIED: dict = {}
-
-
 @app.middleware("http")
 async def _session_gate(request: Request, call_next):
     # Phase 2 A2b: require a valid login session for the app surface, but ONLY
@@ -6983,28 +7006,6 @@ async def _session_gate(request: Request, call_next):
         return JSONResponse(
             {"error": "authentication required", "needs_login": True},
             status_code=401)
-    # v2.16.2: the desktop follows whoever is signed in.
-    #
-    # Developer Mode is stored per profile but applies to ONE set of console
-    # windows, so somebody has to notice the profile changed and re-apply. Done
-    # HERE rather than at the login endpoints on purpose: sessions are minted at
-    # four separate call sites (first-owner setup, password login, the
-    # change-password re-issue, and _mint_session_response for both MFA verify
-    # paths). Wiring four sites is four chances to miss one, and the one most
-    # likely to be missed is the MFA path -- the accounts most likely to care.
-    # Every request passes through here, so there is nothing to miss.
-    #
-    # Cheap by construction: a string compare against the last profile applied,
-    # and it only does real work when that actually changes.
-    try:
-        _dm_ns = _safe_ns(_s.get("ns"))
-        if _dm_ns != _DEVMODE_APPLIED.get("ns"):
-            _DEVMODE_APPLIED["ns"] = _dm_ns
-            import devmode as _dmod
-            _dmod.apply_for(_dm_ns)
-    except Exception:
-        pass          # never let a cosmetic setting break the request path
-
     # A must_change session (legacy weak password detected at login) is
     # confined to the auth surface: the ONLY way forward is the change-password
     # flow. Enforced server-side so a hand-crafted client can't skip the modal.

@@ -87,13 +87,25 @@ ok("alice has no private copy of it",
 ok("a daemon with no user still gets the real answer",
    ui_prefs.get("developer_mode", False) is True)
 
-print("\n=== 5. devmode.py keeps working untouched ===")
+print("\n=== 5. devmode.py's arm window is machine-scoped too ===")
+# v2.16.2: Developer Mode stopped being a boolean flag and became a wall-clock
+# ARM WINDOW -- see devmode.py for why a live switch could never work. This
+# section used to set developer_mode=True and expect devmode.is_enabled() to
+# agree. It is rewritten rather than deleted: the point it was making is still
+# the point, and it is the one that matters most for this key. tier_launcher
+# reads the deadline at import, in its own process, with nobody signed in.
 import devmode                                               # noqa: E402
-ok("devmode reads the machine value", devmode.is_enabled() is True)
-devmode.set_enabled(False)
-ok("and writes it back", ui_prefs.get("developer_mode", True) is False)
-ok("still not in alice's file",
-   ui_prefs.get("developer_mode", None, ns="alice") is False)
+ok("the deadline is declared a machine key",
+   "developer_mode_until" in ui_prefs.MACHINE_KEYS)
+devmode.arm(seconds=60, by="alice")
+ok("devmode reads it back", devmode.is_enabled() is True)
+ok("it landed in the shared file, not alice's",
+   "developer_mode_until" not in (Path(_TMP) / "users" / "alice" /
+                                  "ui_prefs.json").read_text(encoding="utf-8"))
+ok("bob gets the same answer -- it is about the machine",
+   ui_prefs.get("developer_mode_until", 0, ns="bob") > 0)
+devmode.disarm()
+ok("and disarming clears it", devmode.is_enabled() is False)
 
 print("\n=== 6. Nothing raises on a missing or broken store ===")
 ok("unknown key returns the default",
