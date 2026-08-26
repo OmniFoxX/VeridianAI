@@ -56,3 +56,4 @@ chat_memory.json
 **/frontend/SAFE/
 _bump_version.py
 bump_version.bat
+app/python/

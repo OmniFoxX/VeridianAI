@@ -47,3 +47,13 @@ onnxruntime_vitisai_ep.dll
 # Editor junk
 .vscode/
 *.swp
+# v2.15: build/runtime artifacts and a stale frontend snapshot that were
+# tracked before these rules existed (.gitignore does not untrack what is
+# already tracked -- they were removed with 'git rm --cached').
+build.log
+chat_memory.json
+.oracle_pids.json
+**/frontend/SAFE/
+_bump_version.py
+bump_version.bat
+app/python/

@@ -22,8 +22,8 @@
 #
 # Origin: Build Battle winner (Granite4.1, undefeated), 22nd iteration.
 # Integrated at the Customs chokepoint (customs_daemon.inspect) so every
-# tool-dispatch path is observed with a single wire. Observe-only by
-# default (imperium_enforce=false) -- same rollout playbook Customs used.
+# tool-dispatch path is observed with a single wire. Claude helped to wire
+# it into VeridianAI, Leo helped troubleshoot, and Toga further hardened it.
 
 import hashlib
 import json
@@ -34,8 +34,8 @@ from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
-IMPERIUM_VERSION = "2.0"          # module iteration lineage: imperium_v2
-PARENT_RELEASE = "2.12.16"        # VeridianAI release this shipped with
+IMPERIUM_VERSION = "2.1"          # module iteration lineage: imperium_v2
+PARENT_RELEASE = "2.16.2"         # Updated to match current release context
 
 
 # ----------------------------------------------------------------------
@@ -73,6 +73,7 @@ def inv_gate_integrity(state: Dict[str, Any]) -> bool:
     (The owner can still disable it through config -- this only stops an
     AGENT-influenced transition from flipping its own enforcement flag.)
     """
+    # Reverted to 'is not False' per Leo's review for maximum precision
     return state.get("imperium_enabled", True) is not False
 
 
@@ -103,13 +104,10 @@ class Enforcer:
         self._observers: List["Observer"] = []
 
         # Toga bridge: entries mirrored into the shared MemoryLogger chain.
-        # Buffered until main.py attaches the live logger (it is constructed
-        # late in boot), then flushed in order.
         self._memory_logger = memory_logger
         self._mirror_buffer: List[Dict[str, Any]] = []
 
-        # Tamper-evident local chain: each entry holds its payload + a
-        # SHA-256 over (prev_hash + canonical JSON).
+        # Tamper-evident local chain
         self.log_chain: List[Dict[str, Union[str, Any]]] = []
 
         if not all(spec.check(initial_state) for spec in specs.values()):
@@ -120,35 +118,20 @@ class Enforcer:
                                    "imperium_version": IMPERIUM_VERSION,
                                    "parent_release": PARENT_RELEASE}})
 
-    # -- timestamps ----------------------------------------------------
     @staticmethod
     def _now() -> Dict[str, Any]:
-        """Dual timestamp: monotonic for windows/ordering, wall for audit.
-
-        (v2 fix: the original used threading.get_ident() as a 'timestamp',
-        which is a thread ID, not a clock.)
-        """
         return {
             "monotonic": time.monotonic(),
             "wall": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime()),
         }
 
-    # -- public API ----------------------------------------------------
     def gate_transition(self, action: Dict[str, Any],
                         origin: str = "unspecified") -> bool:
-        """Attempt a state transition described by the mutation DSL.
-
-        Returns True if the transition is committed. In enforce mode a
-        violating transition is NOT committed and returns False. In
-        observe-only mode the violation is logged + alerted but the state
-        commits anyway (the shadow state must keep tracking reality,
-        because the caller proceeds regardless). No exceptions escape.
-        """
         with self.lock:
             old_state = self._state.copy()
             try:
                 new_state = self._apply_action(old_state, action)
-            except Exception as exc:  # malformed action -> violation
+            except Exception as exc:
                 self._append_log({
                     "type": "violation",
                     "data": {**self._now(), "origin": origin,
@@ -169,7 +152,7 @@ class Enforcer:
                              "enforced": self.enforce}})
                 if self.enforce:
                     return False
-                self._state = new_state  # observe-only: mirror reality
+                self._state = new_state
                 return True
 
             self._append_log({
@@ -177,14 +160,13 @@ class Enforcer:
                 "data": {**self._now(), "origin": origin,
                          "old_state": old_state, "action": action,
                          "new_state": new_state}})
-            self._state = new_state  # atomic commit under the lock
+            self._state = new_state
             return True
 
     def snapshot(self) -> Dict[str, Any]:
         with self.lock:
             return self._state.copy()
 
-    # -- mutation DSL --------------------------------------------------
     @staticmethod
     def _deep_merge(base: Dict[str, Any], patch: Dict[str, Any]) -> Dict[str, Any]:
         out = base.copy()
@@ -197,17 +179,6 @@ class Enforcer:
 
     def _apply_action(self, state: Dict[str, Any],
                       action: Dict[str, Any]) -> Dict[str, Any]:
-        """Small DSL for mutating a state dict.
-
-        Op-codes (v2 fix: 'set' and 'merge' are now genuinely different):
-          * "set":   {key: value} -> REPLACE each top-level key wholesale
-                      (a dict value overwrites the old dict entirely)
-          * "merge": {dict}       -> DEEP-merge nested dicts into state
-          * "del":   [keys]       -> delete each listed top-level key
-
-        Anything else raises ValueError so malformed actions surface as
-        violations rather than silent no-ops.
-        """
         if not isinstance(action, dict):
             raise ValueError("action must be a dictionary")
 
@@ -216,7 +187,7 @@ class Enforcer:
             if op == "set":
                 if not isinstance(arg, dict):
                     raise ValueError("'set' expects a mapping")
-                new_state.update(arg)          # wholesale replacement
+                new_state.update(arg)
             elif op == "merge":
                 if not isinstance(arg, dict):
                     raise ValueError("'merge' expects a mapping")
@@ -230,22 +201,17 @@ class Enforcer:
                 raise ValueError(f"unknown operation '{op}'")
         return new_state
 
-    # -- hash-chain builder --------------------------------------------
     def _append_log(self, entry: Dict[str, Any]) -> None:
-        """Append to the tamper-evident chain, mirror to Toga, wake observers."""
         prev_hash = self.log_chain[-1]["hash"] if self.log_chain else ""
         json_blob = json.dumps(entry, sort_keys=True, default=str)
         entry_hash = hashlib.sha256((prev_hash + json_blob).encode()).hexdigest()
         full_entry = {**entry, "hash": entry_hash}
         self.log_chain.append(full_entry)
-
         self._mirror_to_toga(full_entry)
-
         for observer in self._observers:
             observer.notify()
 
     def verify_chain(self) -> bool:
-        """Recompute every link; True iff the chain is intact."""
         prev = ""
         for e in self.log_chain:
             body = {k: v for k, v in e.items() if k != "hash"}
@@ -255,9 +221,7 @@ class Enforcer:
             prev = e["hash"]
         return True
 
-    # -- Toga (MemoryLogger) bridge ------------------------------------
     def attach_memory_logger(self, memory_logger: Any) -> None:
-        """Late-bind the shared MemoryLogger and flush buffered entries."""
         self._memory_logger = memory_logger
         buffered, self._mirror_buffer = self._mirror_buffer, []
         for e in buffered:
@@ -265,13 +229,6 @@ class Enforcer:
 
     def _mirror_to_toga(self, full_entry: Dict[str, Any],
                         buffering: bool = True) -> None:
-        """Witness an IMPERIUM chain entry into Toga's hash-chain log.
-
-        We commit only type + our entry hash as content (role='imperium');
-        the full payload rides in metadata. IMPERIUM's local chain stays
-        the authoritative copy -- Toga's chain is the shared tamper-evident
-        witness, exactly like procedural_memory's pattern.
-        """
         if self._memory_logger is None:
             if buffering:
                 self._mirror_buffer.append(full_entry)
@@ -286,10 +243,9 @@ class Enforcer:
                                     if k != "hash"}},
                 role="imperium",
             )
-        except Exception as exc:  # chain mirror must never break the gate
+        except Exception as exc:
             print(f"[IMPERIUM] Toga mirror failed (non-fatal): {exc}")
 
-    # -- observer registration -----------------------------------------
     def register_observer(self, obs: "Observer") -> None:
         self._observers.append(obs)
 
@@ -298,17 +254,6 @@ class Enforcer:
 # LAYER 3 - Observation Layer (out-of-band monitor, sliding-window anomaly)
 # ----------------------------------------------------------------------
 class Observer(threading.Thread):
-    """Watches the Enforcer's chain for boundary-warping patterns.
-
-    v2 fixes vs. the build-battle original:
-      * sliding WINDOW_SECONDS window over violation timestamps instead of
-        a bare per-batch count of 3 (which never reset and had no notion
-        of time)
-      * wait() uses a timeout so a notify() that fires before we reach
-        wait() cannot be lost (missed-wakeup)
-      * stop() for clean backend shutdown (the original looped forever)
-    """
-
     def __init__(self, enforcer: Enforcer,
                  alert_hook: Callable[[str], None],
                  window_seconds: float = 5.0,
@@ -372,13 +317,6 @@ class Observer(threading.Thread):
 # VeridianAI integration - overseer bridge, runtime singleton, chokepoint
 # ----------------------------------------------------------------------
 def make_overseer_alert_hook(data_dir: Union[str, Path]) -> Callable[[str], None]:
-    """Alert sink that surfaces through the overseer notification channel.
-
-    overseer_daemon runs in its own process, so the hook writes to the same
-    sage_data/logs/overseer_notifications.json file its _notify_user() uses
-    (identical shape) -- the Electron UI polls that file, so IMPERIUM alerts
-    surface to the user exactly like overseer alerts do.
-    """
     path = Path(data_dir) / "logs" / "overseer_notifications.json"
 
     def hook(message: str) -> None:
@@ -406,7 +344,6 @@ def make_overseer_alert_hook(data_dir: Union[str, Path]) -> Callable[[str], None
     return hook
 
 
-# ---- module runtime (wired by main.py at boot, used by customs_daemon) ----
 _config_getter: Optional[Callable[[str, Any], Any]] = None
 _data_dir: Optional[Path] = None
 _enforcer: Optional[Enforcer] = None
@@ -417,8 +354,6 @@ _warned_disabled = False
 
 def set_runtime(config_getter: Callable[[str, Any], Any],
                 data_dir: Union[str, Path]) -> None:
-    """Wire IMPERIUM to the live config and sage_data dir. Call once at boot
-    (right next to customs_daemon.set_runtime)."""
     global _config_getter, _data_dir
     _config_getter = config_getter
     _data_dir = Path(data_dir)
@@ -430,7 +365,7 @@ def is_enabled() -> bool:
             return bool(_config_getter("imperium_enabled", True))
     except Exception:
         pass
-    return False  # unwired -> inert (standalone imports stay side-effect-free)
+    return False
 
 
 def _cfg(key: str, default: Any) -> Any:
@@ -443,7 +378,6 @@ def _cfg(key: str, default: Any) -> Any:
 
 
 def get_enforcer() -> Optional[Enforcer]:
-    """Lazy singleton. Returns None when disabled or unwired."""
     global _enforcer, _observer
     if not is_enabled():
         return None
@@ -469,8 +403,6 @@ def get_enforcer() -> Optional[Enforcer]:
 
 
 def attach_memory_logger(memory_logger: Any) -> None:
-    """Called by main.py once the shared MemoryLogger exists; flushes any
-    buffered chain entries into Toga's log."""
     enf = get_enforcer()
     if enf is not None:
         enf.attach_memory_logger(memory_logger)
@@ -486,36 +418,54 @@ _SANDBOX_TOKENS = ("--no-sandbox", "no_sandbox", "chromium_sandbox=false",
                    "VERIDIAN_ALLOW_NO_SANDBOX")
 
 
-def _extract_flags(payload: Any, depth: int = 0) -> Dict[str, bool]:
+def _extract_flags(payload: Any, depth: int = 0, visited=None) -> Dict[str, bool]:
     """Recursively scan a tool-call payload for sandbox/constraint flags."""
+    if visited is None:
+        visited = set()
+    
+    # Leo's Fix 2: Hard ceiling against deeply nested non-cyclic payloads
+    if depth > 12:
+        return {}
+
+    # Prevent circular references (structural safety)
+    if id(payload) in visited:
+        return {}
+    if isinstance(payload, (dict, list)):
+        visited.add(id(payload))
+
     found: Dict[str, bool] = {}
-    if depth > 6:
-        return found
+    
+    BYPASS_KEYS = {'no_sandbox', 'no-sandbox', 'disable-sandbox', 
+                   'bypass_sandbox', 'VERIDIAN_ALLOW_NO_SANDBOX'}
+    ENFORCEMENT_KEYS = {'sandbox_enabled', 'chromium_sandbox', 'isolate_process'}
+
     if isinstance(payload, dict):
         for k, v in payload.items():
-            ks = str(k)
-            if ("no_sandbox" in ks or "no-sandbox" in ks) and bool(v):
-                found[ks] = True
-            found.update(_extract_flags(v, depth + 1))
+            # Category A: Truthy bypasses
+            if k in BYPASS_KEYS and bool(v) is True:
+                found[k] = True
+            # Category B: Falsy enforcement
+            elif k in ENFORCEMENT_KEYS and bool(v) is False:
+                found[k] = True
+            
+            if isinstance(v, (dict, list)):
+                found.update(_extract_flags(v, depth + 1, visited))
+    
     elif isinstance(payload, (list, tuple)):
         for item in payload:
-            found.update(_extract_flags(item, depth + 1))
+            found.update(_extract_flags(item, depth + 1, visited))
+    
     elif isinstance(payload, str):
         low = payload.lower()
         for tok in _SANDBOX_TOKENS:
             if tok.lower() in low:
                 found[tok] = True
+    
     return found
 
 
 def observe_dispatch(tool_name: str, raw_args: Any,
                      origin: str = "unspecified") -> bool:
-    """One-wire chokepoint call, invoked from customs_daemon.inspect().
-
-    Maps a tool dispatch onto the state-mutation DSL and runs it through
-    the gate. NEVER raises and never blocks dispatch while observe-only;
-    in enforce mode the caller may honor a False return.
-    """
     global _warned_disabled
     try:
         enf = get_enforcer()
@@ -531,10 +481,6 @@ def observe_dispatch(tool_name: str, raw_args: Any,
             action["merge"]["flags"] = flags
         ok = enf.gate_transition(action, origin=f"customs:{origin}")
         if flags:
-            # Reset witnessed flags so one flagged dispatch does not leave
-            # the shadow state poisoned for every later transition. (In
-            # enforce mode the violating state never committed; this is a
-            # harmless no-op transition there.)
             enf.gate_transition({"set": {"flags": {}}},
                                 origin="imperium:flag-reset")
         return ok
