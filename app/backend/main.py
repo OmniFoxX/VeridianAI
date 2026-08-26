@@ -3978,6 +3978,59 @@ async def api_export_build(payload: dict, request: Request):
         return {"ok": False, "error": _safe_detail(e, "export")}
 
 
+# --- Report AI-generated content that went wrong ---------------------------
+#
+# The Microsoft Store rejected v2.16.1 for one reason: an email address in the
+# documentation is not a MECHANISM. This is the mechanism, and it is
+# deliberately the smallest one that can work: it writes a readable file into
+# the person's own downloads folder and tells them where it is. No upload, no
+# network call, no telemetry. Sending it is their separate act.
+#
+# NOT BEHIND THE STEP-UP UNLOCK, and that is a considered exception rather than
+# an oversight. /api/export is gated because export can extract everything a
+# profile owns; the gate protects BULK EXTRACTION. A report is one reply the
+# person is looking at, plus a version string. Putting a password prompt in
+# front of "this AI said something harmful" would add friction to a safety
+# mechanism the Store requires to be reachable -- and a reviewer meeting a
+# password wall may well read that as the mechanism not being there at all.
+#
+# Still localhost-only and still audited: it writes a file, and every write
+# this app makes on somebody's behalf is recorded.
+@app.post("/api/report")
+async def api_report_build(payload: dict, request: Request):
+    """Write a content report. Explicit user action only -- never automatic."""
+    if not _is_local_client(request):
+        return _cloak_not_found()
+    try:
+        import report_issue
+        ns = _safe_ns(_session_ns(request))
+        _inc = payload.get("include") or {}
+        # Audited by SHAPE, not by content. Recording what somebody reported
+        # would put the reported text into the audit log, which is the one
+        # place it must not go: they chose to send it to a person, not to
+        # store a second copy of it here.
+        _audit_api_action(request, "content.report", {
+            "profile": ns or "(owner)",
+            "included": sorted(k for k in report_issue.OPTIONAL_PARTS
+                               if _inc.get(k) is True),
+        })
+        result = await _run_in_threadpool(
+            report_issue.build,
+            str(payload.get("flagged", "")),
+            str(payload.get("description", "")),
+            str(payload.get("model", "")),
+            str(payload.get("backend", "")),
+            _inc,
+            str(payload.get("prompt", "")),
+            payload.get("context_turns") or None,
+            str(payload.get("reasoning", "")),
+            _downloads_dir_for_ns(ns),
+            ns,
+        )
+        return result
+    except Exception as e:
+        return {"ok": False, "error": _safe_detail(e, "report")}
+
 
 # --- Import: the other half of export -------------------------------------
 #

@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.16.2",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "f852eb71b80a45e7a312d682d0f5d6ce",
-    "built_utc": "2026-08-24T04:25:19.758813+00:00",
+    "build_id": "5db5035f8d51431e8ee615c472d73171",
+    "built_utc": "2026-08-26T17:40:52.841510+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,7 +108,7 @@
       "backend/journalist_ops_detector.py": "d5ef2b39f24bdfeacc2aa1cfe558107c91b73f3d3f3c37b8ffc49054be113f29",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "cb828a036169e68381a3ac8d5ae78d872b47f443b555e6981bdafc888bb5f11b",
+      "backend/main.py": "16ffb1e66b9f08219b87a23c7201c48522c0d6605873a6aec657548d05d83aea",
       "backend/mcp_handlers.py": "e6175100c5d982aab4931eb8e17f63f8d1a516dc3ddfc1187a8495a312ffdf2a",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "ad11d18057ce37a438ebe5d76ef6523c5652089555ac244eae505bcbbd01ff35",
@@ -135,6 +135,7 @@
       "backend/relay_api.py": "2316031a21ce3dd4037114e743cb4da26bffd0f5ed7699c1ed11461a9e3ea586",
       "backend/relay_client.py": "c49e861553ea1c6928187681211e2166ccd80167e840197becec3772e26484df",
       "backend/relay_core.py": "ebbe4277ba561f1cd6aaa66a2794c0fe72c0c88a12e2c8b36c6a697bf4ac34a2",
+      "backend/report_issue.py": "c78b5922d3c81862f0f76147df792f102045ada3d976f50bdaf4f21cce717991",
       "backend/request_scheduler.py": "f662779a754097c4619a214bf8d53b8ca7ad1e336f31e6dde4c9d11c5dee3e8a",
       "backend/sage_daemon.py": "8b00ea170e5e83e985b6b4a7510540cd1929f1a0ea6acfe3ea2b213f30e719d4",
       "backend/sage_daemon_client.py": "fed83c0f91c813eddc29e705e7b555b1ab6e66d9ef791ea5c7d899c7c04e34bc",
@@ -222,6 +223,7 @@
       "backend/test_recovery_ui_contract.py": "7cb35647f42c035e0cbe974519903b8dac21ac31bb2ddb7ff74a97f96bff719f",
       "backend/test_relay.py": "31a7c98549596781cf3438fdadc661d5b9b34d9b8aafc4b5dd12b21704851d23",
       "backend/test_relay_core.py": "ce4c172028b7839ff9f6e78034f6cdb9d2d0d6d2eacf18cca3f49d7e422aa037",
+      "backend/test_report_mechanism.py": "1f86f88252264b70aa7d71ac472b8ac52106d7afdf2a79fbeb4b9c6db6196ed3",
       "backend/test_request_scheduler.py": "4afd18bd3a8e8521e3730fd8e53bcfcf98c0859f34ff6a6ab90773398ead3c88",
       "backend/test_sage_rag.py": "944d95d7860b2f52f2a3346d080b881306f71d480b6d892b7ab1b0599ca9eb4c",
       "backend/test_save_verify_path.py": "55803826f6d60d56d79269390fb11ae168683f69470dccbef18860adb83d04e7",
@@ -262,8 +264,8 @@
       "frontend/css/command-palette.css": "0c4b63333e40490934cfdd961896c71d790b7ed6c92dc74f2a04ed6c84fa52ba",
       "frontend/css/hljs-github-dark-dimmed.css": "be946d7e2d8cdba5bf372e7fb5afaae10f29cec94e236f0ee04589737db5769d",
       "frontend/css/hljs-github.css": "5b43bc87ce2ed16fa3fc245b45428cb5951da801642644254674f141bfcddd1d",
-      "frontend/css/styles.css": "1bed8424c298cb13241809851ec4e7e37638748ef299b87e504b969a38290e58",
-      "frontend/index.html": "73a29e92cfd0296e54377d6348ee10860ab9c06023eacc899243236d79b771aa",
+      "frontend/css/styles.css": "0e7ba92998979b6f12c510f2bb087711997073cb1753daa9fed1bd7f715656a4",
+      "frontend/index.html": "a34f6931df9c38382399b7cb9abf34f8ab20b81c7b42ed22ca87e48f7b2a9645",
       "frontend/js/a11y-tooltip.js": "09bf90a93215a75d5e8da2342c25229b919aa0a1850b701eca5a888aa3c05dd0",
       "frontend/js/api-key.js": "3406357babd680e4844a746a11a3ccd88dc080332ade90421101b06ddfc709b1",
       "frontend/js/app.js": "fca71ed341ded9541a1924751f34d95cba9d264e37c93e83008c47acb6df80bd",
@@ -283,6 +285,7 @@
       "frontend/js/optional-engines.js": "e771ce8620711056eb421077a3b234a3903aedda45a7fea51eecb95934212b49",
       "frontend/js/reasoning-log.js": "2ead667184d55bf6b71761207be18b1dfbdfb669fb82e7d07cca21ddc80fb95f",
       "frontend/js/reauth.js": "3d9c9dfcdb82128b4409573277e757665de8bcc9fe99e75fe42c5f6c01c576ad",
+      "frontend/js/report.js": "e0ea4f738eda6dd86c549c741e091c701b929d981bbc685be2755bbf37560a37",
       "frontend/js/settings.js": "ea89d77fc8f1e68156114542700b532def7749845aa08106e43d96ca514adeb4",
       "frontend/js/skills.js": "04cbd944f196d87c59db3d0d4d92b186cbbc8117d73ce0320bbebc48a06659a3",
       "frontend/js/socials.js": "c16d09c1b36e9eb461c2850586b00119c1ca035a7bb95a3b2cec063d0f1aecbd",
@@ -304,5 +307,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "DEeqDfHxZaKlKOu8OoZIQgvNBXZLHvXUOYA6wVw/nSiJeq8CyebUiyZfrXWOQCo0+H7O1N051ADd9VIMBSiXAA=="
+  "signature_b64": "Dt9554Cx2wuOAJnUI40fVabhNTv25/RLtecEWWnRlCQyWuCxWvZ/Im2PGPJH4xlb0NcuxWh1Z7RvAHeq+Mr6BA=="
 }

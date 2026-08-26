@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=1bed8424c2" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=0e7ba92998" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -65,6 +65,24 @@
         <span class="brand-name">VERIDIAN<span class="brand-ai">AI</span></span>
       </div>
       <div class="header-controls">
+        <!-- Report a problem with something Toga generated.
+             Static markup rather than injected, so it exists in single-user
+             mode, before sign-in, and on a machine with no profiles at all --
+             a reporting mechanism that only appears once you have an account
+             is not reachable, which is the finding this closes.
+             Sits immediately before the model selector: the auth cluster
+             inserts itself at firstChild, so this lands between the account
+             buttons and the model dropdown. -->
+        <button
+          type="button"
+          class="report-btn"
+          id="report-btn"
+          onclick="openReportDialog()"
+          aria-label="Report a problem with AI-generated content"
+          data-tip="Report AI-generated content that is wrong, harmful or offensive. Writes a file you can check and send; nothing is uploaded."
+        >
+          <span aria-hidden="true">&#9888;&#65039;</span> Report
+        </button>
         <select
           class="model-selector"
           id="model-select"
@@ -2128,6 +2146,9 @@
     <script src="/static/js/reauth.js?v=3d9c9dfcdb"></script>
     <script src="/static/js/data-export.js?v=a21e1205b2"></script>
     <script src="/static/js/reasoning-log.js?v=2ead667184"></script>
+    <!-- Loaded AFTER chat.js on purpose: it reads chat.js's top-level
+         `messages` binding to pre-fill the reply being reported. -->
+    <script src="/static/js/report.js?v=e0ea4f738e"></script>
     <script src="/static/js/api-key.js?v=3406357bab"></script>
     <!-- v2.1.11 fix: command-palette.js script tag was accidentally deleted
      during the WCAG-pass edit. Without this line, the IIFE in

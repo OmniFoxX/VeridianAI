@@ -2247,6 +2247,95 @@ pre:hover .copy-btn {
   line-height: 1.35;
 }
 
+/* ── Report button (header) --------------------------------------- */
+/* Sits between the account cluster and the model selector.
+   Matched to the account buttons' geometry deliberately: it belongs to that
+   row, and a control styled like an advert reads as one rather than as a
+   safety mechanism. The blue carries findability, the warning triangle
+   carries the meaning.
+   --teal is used for the focus ring because it is the one this stylesheet
+   already measured to 3.33:1 against --surface-3 for 1.4.11. */
+.report-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  margin-right: 8px;
+  font-family: var(--font-body);
+  font-size: 11px;
+  line-height: 1.4;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 6px;
+  color: var(--text);
+  background: rgba(74, 158, 255, 0.16);
+  border: 1px solid var(--accent, #4a9eff);
+}
+
+.report-btn:hover {
+  background: rgba(74, 158, 255, 0.30);
+}
+
+.report-btn:focus-visible {
+  outline: 2px solid var(--teal);
+  outline-offset: 2px;
+}
+
+/* The dialog's text fields.
+   Modelled on .setting-textarea rather than left bare: an unstyled <textarea>
+   takes the BROWSER's default of black text on a white box, which is what the
+   first version of this did -- a pair of white slabs in the middle of a dark
+   dialog. It looked broken, and the person reading it is deciding whether to
+   trust this app with a piece of their conversation. Found by rendering it. */
+.report-textarea {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: 13px;
+  resize: vertical;
+}
+
+.report-textarea::placeholder {
+  color: var(--text-muted);
+}
+
+.report-textarea:focus {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-glow);
+}
+
+/* The reported reply is shown monospaced: it is being quoted as evidence, and
+   whitespace in it may be part of what went wrong. */
+.report-textarea.is-mono {
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+}
+
+.report-err {
+  font-size: 0.87em;
+  min-height: 1.1em;
+  margin-bottom: 8px;
+  color: var(--error);
+}
+
+/* Paths and addresses in the result panel. Long, unbreakable, and meant to be
+   selected and copied. */
+.report-value {
+  flex: 1 1 260px;
+  min-width: 0;
+  word-break: break-all;
+  padding: 7px 9px;
+  border-radius: var(--radius-sm);
+  font-size: 0.84em;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+}
+
 /* ── Scoped API keys (Settings) ---------------------------------- */
 /* The list is a native <details>: one key per integration and no upper bound,
    so left open it pushes the rest of Settings off the panel. */
