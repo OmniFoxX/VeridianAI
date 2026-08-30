@@ -334,9 +334,12 @@
         "further\u201d.</p>" +
         "<p style=\"margin:0 0 8px\">A model can be wrong, and it can be talked into " +
         "being wrong by something it reads. Use this when you are watching.</p>" +
-        "<p style=\"margin:0\">You can drop back to Beginner or Advanced at any " +
-        "time, with no confirmation. Confinement comes back the moment you " +
+        "<p style=\"margin:0 0 8px\">You can drop back to Beginner or Advanced at " +
+        "any time, with no confirmation. Confinement comes back the moment you " +
         "do.</p>" +
+        "<p style=\"margin:0\"><strong>Expert ends when you sign out or close " +
+        "VeridianAI.</strong> It is never saved, so nobody inherits it by " +
+        "sitting down at this machine after you.</p>" +
         "</div>" +
         (needTick
           ? '<label style="display:flex;gap:8px;align-items:flex-start;' +

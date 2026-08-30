@@ -3496,11 +3496,57 @@ IDE_MODES = ("beginner", "advanced", "expert")
 _IDE_BUFFER_MAX = 60000
 
 
+# EXPERT IS NOT PERSISTED, and this is the correction to a real hole rather
+# than a preference.
+#
+# The ladder was stored in ui_prefs, which survives everything -- so escalating
+# to Expert on Monday and signing out left the next person to sign in with a
+# model that could write into an executable buffer and press Run, unconfined,
+# without anyone confirming anything. That is precisely the scenario the
+# password gate was put there to stop ("a lent laptop should not be one
+# dropdown away from it"), arriving through the back door of the preference
+# store. Phase 4 was written to check this and it is what the check found.
+#
+# So Expert lives in memory, for this process, and Beginner/Advanced are what
+# reaches disk. Sign out, or close the app, and the ladder drops to Advanced.
+# The precedent is directly below in api_auth_logout, which already takes a
+# profile's pending nudges with the session for the same reason.
+#
+# Cost, stated plainly: restarting VeridianAI drops you out of Expert and you
+# escalate again. That is the intended shape of a mode whose own dialog says
+# "use this when you are watching".
+_IDE_EXPERT_LIVE: set = set()
+_IDE_EXPERT_LOCK = threading.Lock()
+
+
+def _ide_expert_live(ns) -> bool:
+    with _IDE_EXPERT_LOCK:
+        return ns in _IDE_EXPERT_LIVE
+
+
+def _ide_set_expert_live(ns, on: bool) -> None:
+    with _IDE_EXPERT_LOCK:
+        if on:
+            _IDE_EXPERT_LIVE.add(ns)
+        else:
+            _IDE_EXPERT_LIVE.discard(ns)
+
+
 def _ide_mode(ns) -> str:
-    """This namespace's stored mode. Unknown or unreadable -> the safe end."""
+    """This namespace's EFFECTIVE mode. Unknown or unreadable -> the safe end.
+
+    Expert is only ever true for a namespace that escalated in this process and
+    has not signed out since. A stored "expert" is clamped to Advanced: it can
+    only be a leftover from before Expert stopped being persisted, and reading
+    it back would restore exactly the authority this is here to drop.
+    """
+    if _ide_expert_live(ns):
+        return "expert"
     try:
         import ui_prefs
         m = str(ui_prefs.get("ide_mode", "beginner", ns=ns) or "beginner").lower()
+        if m == "expert":
+            return "advanced"
         return m if m in IDE_MODES else "beginner"
     except Exception:
         return "beginner"
@@ -3579,8 +3625,15 @@ async def api_set_ide_prefs(payload: dict, request: Request):
         # Dropping DOWN is never gated. Reducing your own authority is always
         # safe, and friction on the way out of Expert would be friction in
         # exactly the wrong direction.
-        ui_prefs.set("ide_mode", want, ns=_ns)
-        _audit_api_action(request, "ide.mode", {"mode": want})
+        #
+        # What reaches DISK is at most Advanced -- see the note on
+        # _IDE_EXPERT_LIVE. Expert is held for this process and this session
+        # only, so a sign-out or a restart drops it.
+        _ide_set_expert_live(_ns, want == "expert")
+        ui_prefs.set("ide_mode", "advanced" if want == "expert" else want,
+                     ns=_ns)
+        _audit_api_action(request, "ide.mode", {"mode": want,
+                                                "persisted": want != "expert"})
         out["mode"] = want
     else:
         out["mode"] = _ide_mode(_ns)
@@ -3700,8 +3753,24 @@ async def api_ide_run(payload: dict, request: Request):
             raw = await loop.run_in_executor(
                 None, sage_engine.execute_python,
                 code, _timeout, _on_start)
-    except Exception as e:
-        raw = f"[EXECUTION ERROR] {type(e).__name__}: {e}"
+    except Exception as exc:
+        # TWO different tracebacks can reach this endpoint's response, and they
+        # are not the same thing at all:
+        #
+        #   the CHILD's stderr  -- a traceback of the code the person wrote and
+        #                          pressed Run on. Showing it is the entire
+        #                          point of an IDE, and it never touches this
+        #                          branch: it arrives as ordinary output.
+        #   THIS exception      -- a traceback of VeridianAI's own executor
+        #                          failing. That is an internal detail, and it
+        #                          used to be interpolated straight into the
+        #                          response (CodeQL py/stack-trace-exposure,
+        #                          alert 200).
+        #
+        # So this one goes through _safe_detail like every other internal
+        # failure in this file: logged in full server-side, returned as a
+        # correlation ref. The user's own traceback is untouched.
+        raw = "[EXECUTION ERROR] " + _safe_detail(exc, "ide.run")
     finally:
         with _IDE_RUNS_LOCK:
             was_cancelled = _IDE_RUNS.get(_ns, {}).get("cancelled", False)
@@ -6625,6 +6694,15 @@ async def api_auth_logout(request: Request):
             aiq_nudge.flush(ns=_safe_ns(_s.get("ns")))
     except Exception as _e:
         print(f"[AIQ_NUDGE] logout flush skipped: {type(_e).__name__}: {_e}")
+    # And take Expert with the session, for the same reason and with higher
+    # stakes: a nudge left behind is a message, Expert left behind is a model
+    # with the Run button and no confinement. Same placement -- BEFORE the
+    # session is destroyed, because the namespace comes from it.
+    try:
+        _s = _session.get_session(request.cookies.get(_AUTH_COOKIE)) or {}
+        _ide_set_expert_live(_safe_ns(_s.get("ns")), False)
+    except Exception as _e:
+        print(f"[IDE] logout expert-drop skipped: {type(_e).__name__}: {_e}")
     # v2.16.2: a Developer Mode launch cannot be allowed to end at the login
     # screen with its terminals still open.
     #

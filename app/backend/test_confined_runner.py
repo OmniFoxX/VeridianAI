@@ -23,6 +23,7 @@ had to learn an exception for it, or the runner could not write its own temp
 file. A dev VM where those two paths happened to diverge hid that completely.
 So section 1 asserts the relationship rather than trusting the layout.
 """
+import io
 import os
 import sys
 import tempfile
@@ -182,6 +183,61 @@ ok("the guards are callable OBJECTS, not plain functions",
    "a plain function assigned to os.listdir becomes a descriptor and binds "
    "self, which broke Path('.').iterdir() in the runner's own directory; "
    "socket.socket must stay a class because ssl.py subclasses it")
+
+print("\n=== 8. Abandoned run scripts do not pile up ===")
+# Each run unlinks its own temp script in a finally block, and that unlink is
+# deliberately swallowed on failure -- tidying up must not turn a good run into
+# an error. The consequence is silent, unbounded growth in the person's data
+# folder anywhere the delete does not succeed: a locked file, an antivirus
+# holding it open, a mount that refuses unlink. Found by counting: 122 of them
+# in one tree.
+_wd = se._confine_workdir(None)
+_old = os.path.join(str(_wd), "tmp_stale_probe_%d.py" % os.getpid())
+io.open(_old, "w", encoding="utf-8").write("# abandoned\n")
+os.utime(_old, (time.time() - 999999, time.time() - 999999))
+_fresh = os.path.join(str(_wd), "tmp_fresh_probe_%d.py" % os.getpid())
+io.open(_fresh, "w", encoding="utf-8").write("# just written\n")
+
+# Can this environment delete at all? If not, the sweep cannot possibly work
+# and reporting that as a failure would be blaming the code for the mount --
+# which is exactly the confusion this project keeps having to unpick. Said out
+# loud rather than passed silently: a skip nobody can see is worse than a red
+# line, because it looks like coverage.
+_probe = os.path.join(str(_wd), "tmp_unlink_probe_%d.py" % os.getpid())
+io.open(_probe, "w", encoding="utf-8").write("# probe\n")
+try:
+    os.unlink(_probe)
+    _can_delete = True
+except OSError as _e:
+    _can_delete = False
+    _why_no_delete = "%s: %s" % (type(_e).__name__, _e)
+
+se.execute_python_confined("print('sweep')", timeout=30)
+
+if _can_delete:
+    ok("an abandoned script is swept", not os.path.exists(_old),
+       "otherwise the data folder grows forever on any machine that cannot "
+       "unlink, and nobody finds out until it is measured in gigabytes")
+else:
+    ok("an abandoned script is swept (SKIPPED: this data folder refuses "
+       "unlink -- %s)" % _why_no_delete, True,
+       "the sweep is the mitigation for exactly this condition and cannot "
+       "run under it; the check is real wherever deletion works")
+ok("a FRESH one is left alone", os.path.exists(_fresh),
+   "the age cut is derived from CODE_EXEC_TIMEOUT_MAX, so it can never "
+   "reach a run that is still going")
+ok("the cutoff is beyond the longest legal run",
+   "CODE_EXEC_TIMEOUT_MAX + 300" in se._sweep_confine_workdir.__doc__
+   or "CODE_EXEC_TIMEOUT_MAX + 300" in io.open(
+       os.path.join(_HERE, "sage_engine.py"), encoding="utf-8").read(),
+   "a hand-picked number here would eventually delete somebody's live run")
+ok("the sweep never raises, whatever it finds",
+   se._sweep_confine_workdir("/definitely/not/a/directory") is None)
+for _p in (_old, _fresh):
+    try:
+        os.unlink(_p)
+    except OSError:
+        pass
 
 print("")
 if _fails:

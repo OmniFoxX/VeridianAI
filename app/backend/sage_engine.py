@@ -1797,6 +1797,37 @@ def _confine_workdir(ns=None):
     return d
 
 
+def _sweep_confine_workdir(workdir) -> None:
+    """Delete abandoned run scripts. Best effort, never raises.
+
+    Every confined run unlinks its own temp script in a finally block, and that
+    unlink is wrapped in `except Exception: pass` -- correct, because failing to
+    tidy up must not turn a successful run into an error. The consequence is
+    that on any machine where the delete does NOT succeed (a locked file, an
+    antivirus holding it open, a mount that refuses unlink) the scripts pile up
+    in the person's own data folder, silently, forever. Found exactly that way:
+    122 of them in a tree where deletes were being refused.
+
+    The age cut is derived, not chosen: anything older than the maximum legal
+    timeout plus a margin cannot belong to a run that is still going, so this
+    can never delete a live run's script no matter how long it has been asked
+    to wait.
+    """
+    try:
+        cutoff = time.time() - (CODE_EXEC_TIMEOUT_MAX + 300)
+        for entry in os.scandir(str(workdir)):
+            name = entry.name
+            if not (name.startswith("tmp") and name.endswith(".py")):
+                continue
+            try:
+                if entry.stat().st_mtime < cutoff:
+                    os.unlink(entry.path)
+            except OSError:
+                pass
+    except Exception:
+        pass
+
+
 def _confine_deny_roots():
     """Directories the confined child may not open. Realpaths, resolved here
     so the child does not have to import config."""
@@ -1829,6 +1860,7 @@ def execute_python_confined(code: str, timeout: int = None, ns=None,
 
     code = _strip_code_preamble(code)
     workdir = _confine_workdir(ns)
+    _sweep_confine_workdir(workdir)
     preamble = _CONFINE_PREAMBLE.replace(
         "__VAI_DENY_ROOTS__", repr(tuple(_confine_deny_roots()))
     ).replace(

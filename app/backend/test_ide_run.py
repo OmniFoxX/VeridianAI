@@ -180,9 +180,11 @@ try:
         content = ""
 
     main.customs_daemon.inspect_tag = lambda *a, **k: _Bounced()
-    _marker = os.path.join(se._confine_workdir(None), "_customs_ran.txt")
-    if os.path.exists(_marker):
-        os.unlink(_marker)
+    # A name that has never existed, so "was it created?" is a clean question
+    # and no delete has to succeed first. Same reasoning as _MARK below.
+    _marker = os.path.join(se._confine_workdir(None),
+                           "_customs_ran_%d_%d.txt" % (os.getpid(),
+                                                       int(time.time() * 1000)))
     rb = run("open(r'%s', 'w').write('ran')" % _marker.replace("\\", "\\\\"))
     ok("a Customs refusal comes back as output, not an exception",
        rb["status"] == "refused", rb)
@@ -204,7 +206,16 @@ _CFG["code_exec_timeout"] = 120
 # the stop survives" failed for a reason that had nothing to do with the
 # product. A sleep would have papered over it on this machine and reappeared on
 # a slower one.
-_MARK = os.path.join(se._confine_workdir(None), "_ide_run_started.tmp")
+# UNIQUE PER INVOCATION, so nothing has to be deleted for this to be correct.
+# The first version used a fixed name and unlinked it up front, which turned
+# "can this environment delete files?" into a precondition of a test about
+# stopping a subprocess -- and duly failed in one tree where the data folder
+# does not permit unlink. A stale marker from an earlier run would also have
+# satisfied the wait loop instantly and quietly restored the very race the
+# marker was added to remove. A fresh name cannot go stale.
+_MARK = os.path.join(se._confine_workdir(None),
+                     "_ide_run_started_%d_%d.tmp" % (os.getpid(),
+                                                     int(time.time() * 1000)))
 _FOREVER = (
     "import time\n"
     "print('started', flush=True)\n"
@@ -214,8 +225,6 @@ _FOREVER = (
 
 
 async def _run_then_stop():
-    if os.path.exists(_MARK):
-        os.unlink(_MARK)
     t0 = time.time()
     task = asyncio.ensure_future(main.api_ide_run({"code": _FOREVER}, _Req()))
     for _ in range(600):
@@ -295,6 +304,53 @@ _CFG["code_exec_timeout"] = 30
 
 
 # =============================================================================
+print("\n=== 7b. Two tracebacks, and only one of them is the person's ===")
+# =============================================================================
+# CodeQL alert 200, py/stack-trace-exposure, and it was a true positive.
+#
+# The child's stderr is a traceback of the code the PERSON wrote and pressed
+# Run on. Showing it is the entire point of an IDE. VeridianAI's own executor
+# blowing up is a different thing wearing the same clothes, and it used to be
+# interpolated straight into the response. Both directions are asserted here,
+# because fixing this by suppressing tracebacks generally would have "closed"
+# the alert and broken the feature.
+r_user = run("raise ValueError('the user wrote this')")
+ok("the PERSON's traceback still reaches them",
+   "ValueError" in r_user["output"]
+   and "the user wrote this" in r_user["output"],
+   r_user["output"][:160])
+ok("...with the traceback body, not just the type",
+   "Traceback" in r_user["output"], r_user["output"][:160])
+
+_real_exec = se.execute_python_confined
+
+
+def _explode(*a, **k):
+    raise RuntimeError("SECRET-INTERNAL-DETAIL /srv/veridian/private/key.pem")
+
+
+se.execute_python_confined = _explode
+try:
+    r_int = run("print('never gets here')")
+finally:
+    se.execute_python_confined = _real_exec
+
+ok("an INTERNAL failure does not leak its message",
+   "SECRET-INTERNAL-DETAIL" not in r_int["output"], r_int["output"][:200])
+ok("...nor the path inside it",
+   "key.pem" not in r_int["output"], r_int["output"][:200])
+ok("...nor the exception type",
+   "RuntimeError" not in r_int["output"], r_int["output"][:200])
+ok("...but the person is told something went wrong",
+   "[EXECUTION ERROR]" in r_int["output"], r_int["output"][:200])
+ok("...with a correlation ref they can quote",
+   "ref" in r_int["output"].lower(),
+   "the full error is in the server log under that ref -- see _safe_detail")
+ok("...and it is reported as an error, not a successful run",
+   r_int["status"] == "error", r_int["status"])
+
+
+# =============================================================================
 print("\n=== 8. What the source must keep saying ===")
 # =============================================================================
 _src = open(os.path.join(_HERE, "main.py"), encoding="utf-8").read()
@@ -310,6 +366,15 @@ ok("Expert is the ONLY unconfined branch",
 ok("the confined call passes the namespace",
    "execute_python_confined,\n                code, _timeout, _ns" in _ep,
    "each person's scratch directory is their own")
+
+# Best effort, and best effort ONLY: the markers carry unique names so
+# nothing depends on these succeeding. This just avoids leaving litter in
+# a directory the person can open and look at.
+for _leftover in [_marker, _MARK]:
+    try:
+        os.unlink(_leftover)
+    except OSError:
+        pass
 
 print("")
 if _fails:
