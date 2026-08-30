@@ -276,7 +276,9 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
     {
         "name": "code",
         "description": (
-            "Execute Python in VeridianAI's sandboxed subprocess. "
+            "Run Python in a separate process on this machine. "
+            "NOT sandboxed: it has the user's own access to files and "
+            "network. "
             "Returns labelled stdout + stderr. UTF-8 throughout. "
             "DOWNLOADS_DIR / BASE_DIR are exposed as variables. "
             "Pass RAW Python only -- no markdown fences, no language tag."
@@ -286,7 +288,7 @@ TOOL_DESCRIPTORS: List[Dict[str, Any]] = [
             "properties": {
                 "code": {"type": "string"},
                 "timeout": {
-                    "type": "integer", "default": 56000, "minimum": 1,
+                    "type": "integer", "default": 120, "minimum": 1,
                 },
             },
             "required": ["code"],
@@ -535,7 +537,8 @@ def _tool_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
 
 def _tool_code(args: Dict[str, Any]) -> Dict[str, Any]:
     code = str(args.get("code", ""))
-    timeout = int(args.get("timeout", 56000))
+    # 56000 lived here too. One constant now, in the executor that owns it.
+    timeout = int(args.get("timeout", _sage().CODE_EXEC_TIMEOUT_DEFAULT))
     if not code.strip():
         return _result_text("[error] empty code", is_error=True)
     out = _sage().execute_python(code, timeout=timeout)

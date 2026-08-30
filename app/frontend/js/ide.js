@@ -24,6 +24,31 @@
   var EXPANDED_CLASS = "ide-expanded";
   var _menuOpen = false;
 
+  /* The authority ladder. Ordered, and the order is the meaning -- each notch
+   * strictly adds what Toga may do with the editor. The SERVER stores and
+   * enforces this; everything here is presentation. If the two ever disagree,
+   * the server is right, which is why every change re-reads its answer instead
+   * of trusting the value we just set. */
+  var MODES = ["beginner", "advanced", "expert"];
+  var MODE_BLURB = {
+    beginner: "Beginner - the editor is yours alone. You write, you Run, you Save.",
+    advanced: "Advanced - Toga may read and write the editor. Only you press Run.",
+    expert: "Expert - Toga may read, write, AND run code by itself."
+  };
+  var _mode = "beginner";
+  /* Separate from the mode on purpose. The mode says what is PERMITTED; this
+   * says whether it is switched ON right now. Advanced with the switch off
+   * shares nothing -- and the server enforces both, so this is only the UI's
+   * copy of an answer it re-reads. */
+  var _togaClip = false;
+  /* One step, not a stack. "Put back what was there before Toga's last
+   * change" is a promise anyone can hold in their head; an N-deep history in
+   * a side panel is a feature nobody asked for and a place for stale buffers
+   * to live. */
+  var _undoBuffer = null;
+  var _canExpert = false;
+  var _expertNeedsPassword = false;
+
   function $(id) { return document.getElementById(id); }
   function panel() { return $("oracle-panel"); }
 
@@ -59,8 +84,15 @@
   function loadPref() {
     fetch("/api/ide/prefs")
       .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (d) { if (d && d.expanded) setExpanded(true, false); })
-      .catch(function () { /* default width is a fine answer */ });
+      .then(function (d) {
+        if (!d) return;
+        if (d.expanded) setExpanded(true, false);
+        _canExpert = !!d.can_expert;
+        _expertNeedsPassword = !!d.expert_needs_password;
+        _togaClip = !!d.toga_clip;
+        applyMode(d.mode || "beginner");
+      })
+      .catch(function () { /* the safe defaults are already applied */ });
   }
 
   function savePref(on) {
@@ -70,6 +102,264 @@
       body: JSON.stringify({ expanded: !!on })
     }).catch(function () { /* the class is already applied; this is memory only */ });
   }
+
+  /* ---- the authority ladder --------------------------------------------
+   * applyMode() paints; ideOnModeChange() negotiates. Keeping them apart
+   * matters, because the server can refuse and the control then has to go
+   * BACK to what is actually stored rather than to what was clicked. */
+  function applyMode(mode) {
+    _mode = MODES.indexOf(mode) === -1 ? "beginner" : mode;
+    var sel = $("ide-mode");
+    if (sel) {
+      sel.value = _mode;
+      sel.setAttribute("data-mode", _mode);
+      sel.setAttribute("data-tip", MODE_BLURB[_mode]);
+      var expertOpt = sel.querySelector('option[value="expert"]');
+      if (expertOpt) {
+        // Do not offer a choice that will be refused. A non-owner sees why.
+        expertOpt.disabled = !_canExpert && _mode !== "expert";
+        expertOpt.textContent = _canExpert ? "Expert" : "Expert (owner only)";
+      }
+    }
+    // The copy/paste item is governed by the ladder. It is still not WIRED --
+    // that lands next -- so it stays disabled either way, but the reason it
+    // gives is the true one for the mode you are actually in.
+    applyTogaClip();
+  }
+
+  /* The switch itself. Beginner disables it AND forces the displayed state
+   * off, because "on but not permitted" is not a state anyone should have to
+   * reason about. */
+  function applyTogaClip() {
+    var clip = $("ide-toga-clip");
+    var note = $("ide-toga-clip-note");
+    if (!clip || !note) return;
+    var allowed = _mode !== "beginner";
+    clip.disabled = !allowed;
+    var on = allowed && _togaClip;
+    clip.setAttribute("aria-pressed", on ? "true" : "false");
+    if (!allowed) {
+      note.textContent = "Advanced only";
+      clip.setAttribute("data-tip",
+        "Beginner keeps the editor to yourself. Switch to Advanced or " +
+        "Expert to let Toga read and write it.");
+    } else {
+      note.textContent = on ? "on" : "off";
+      clip.setAttribute("data-tip", on
+        ? "Toga can read the editor and propose changes to it. Your messages "
+          + "will include its contents."
+        : "Switch on to let Toga read the editor and propose changes.");
+    }
+  }
+
+  async function ideToggleTogaClip() {
+    if (_mode === "beginner") return;
+    var want = !_togaClip;
+    try {
+      var res = await fetch("/api/ide/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ toga_clip: want })
+      });
+      if (!res.ok) throw new Error("refused");
+      var d = await res.json();
+      _togaClip = (d && typeof d.toga_clip === "boolean") ? d.toga_clip : want;
+    } catch (e) {
+      if (window.setStatusError) {
+        setStatusError("Could not change that setting.");
+      }
+      return;
+    }
+    applyTogaClip();
+    setMenu(false);
+    if (window.setStatus) {
+      setStatus(_togaClip
+        ? "Toga can now read your editor, and propose changes to it."
+        : "Toga can no longer see your editor.");
+    }
+    if (window.Haptic) Haptic.vibrate(Haptic.PATTERNS.toggle);
+  }
+
+  /* What chat.js asks before sending. Null means "send nothing" -- not an
+   * empty string, so the payload key is omitted entirely rather than carrying
+   * an empty buffer that says the same thing less clearly. */
+  function ideBufferForSend() {
+    if (_mode === "beginner" || !_togaClip) return null;
+    var ta = $("ide-editor");
+    if (!ta || !ta.value) return null;
+    return ta.value;
+  }
+
+  /* A write arriving from the model. It REPLACES the buffer, so the previous
+   * contents are kept and the menu grows an undo. Text only, and set through
+   * .value -- there is no path here by which model output becomes markup. */
+  function ideApplyWrite(text) {
+    var ta = $("ide-editor");
+    if (!ta || typeof text !== "string") return false;
+    _undoBuffer = ta.value;
+    ta.value = text;
+    var undo = $("ide-undo-write");
+    if (undo) undo.hidden = false;
+    // Make it visible that something changed under them.
+    if (window.PanelViews && PanelViews.current() !== "ide") {
+      var tab = document.querySelector('.game-tab[data-view="ide"]');
+      if (tab) tab.click();
+    }
+    if (window.setStatus) {
+      setStatus("Toga changed the editor. Undo is in the panel menu.");
+    }
+    return true;
+  }
+
+  function ideUndoWrite() {
+    if (_undoBuffer === null) return;
+    var ta = $("ide-editor");
+    if (ta) ta.value = _undoBuffer;
+    _undoBuffer = null;
+    var undo = $("ide-undo-write");
+    if (undo) undo.hidden = true;
+    setMenu(false);
+    if (window.setStatus) setStatus("Put the editor back.");
+  }
+
+  async function ideOnModeChange(sel) {
+    var want = sel ? sel.value : "beginner";
+    if (want === _mode) return;
+
+    // Dropping down is immediate and unconfirmed. Reducing your own authority
+    // is always safe, and a confirmation here would put friction in exactly
+    // the wrong direction.
+    var goingUp = MODES.indexOf(want) > MODES.indexOf(_mode);
+
+    if (goingUp && want === "expert") {
+      var confirmed = await confirmExpert();
+      if (!confirmed) { applyMode(_mode); return; }   // snap back, no request
+      // The password, when there is an account to ask. requireUnlock resolves
+      // true without prompting on a single-user install -- there the checkbox
+      // in the dialog above WAS the deliberate act.
+      if (window.requireUnlock) {
+        var unlocked = await window.requireUnlock(
+          "Confirm it is you before handing Toga the Run button.");
+        if (!unlocked) { applyMode(_mode); return; }
+      }
+    }
+
+    var prev = _mode;
+    var stored = await postMode(want);
+    if (stored === null) { applyMode(prev); return; }
+    applyMode(stored);
+
+    // Leaving Expert also drops the elevation. Staying unlocked after giving
+    // up the privilege it was for is a window nobody asked for.
+    if (prev === "expert" && stored !== "expert" && window.reauthDrop) {
+      try { window.reauthDrop(); } catch (e) {}
+    }
+    if (window.setStatus) setStatus(MODE_BLURB[stored]);
+    if (window.Haptic) Haptic.vibrate(Haptic.PATTERNS.toggle);
+  }
+
+  /* Returns the mode the SERVER now holds, or null if it refused. */
+  async function postMode(want) {
+    try {
+      var res = await fetch("/api/ide/prefs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: want })
+      });
+      if (!res.ok) {
+        var why = "Could not change mode.";
+        if (res.status === 404) {
+          why = "Expert mode is owner-only on this install.";
+        } else {
+          try {
+            var d = await res.json();
+            why = (d && (d.detail || d.error)) || why;
+            if (why && typeof why === "object") why = why.error || "Could not change mode.";
+          } catch (e) { /* keep the generic message */ }
+        }
+        if (window.setStatusError) setStatusError(String(why));
+        return null;
+      }
+      var data = await res.json();
+      return (data && data.mode) || want;
+    } catch (e) {
+      if (window.setStatusError) {
+        setStatusError("Could not reach the backend to change mode.");
+      }
+      return null;
+    }
+  }
+
+  /* The loud one. Cancel is always live, Escape cancels, clicking outside
+   * cancels. On a single-user install the confirm button stays disabled until
+   * the acknowledgement is ticked -- there is no password to ask for, so the
+   * tick IS the deliberate act. */
+  function confirmExpert() {
+    return new Promise(function (resolve) {
+      var root = document.getElementById("modal-root");
+      if (!root) { resolve(false); return; }
+      var needTick = !_expertNeedsPassword;
+
+      root.innerHTML =
+        '<div class="modal-overlay" id="ide-expert-overlay" style="z-index:100001"' +
+        ' role="dialog" aria-modal="true" aria-labelledby="ide-expert-title">' +
+        '<div class="modal-box" style="max-width:460px">' +
+        '<div class="modal-title" id="ide-expert-title">Expert mode</div>' +
+        '<div style="font-size:13px;line-height:1.55;color:var(--text)">' +
+        "<p style=\"margin:0 0 8px\"><strong>Expert mode lets Toga run code in the " +
+        "editor by itself.</strong></p>" +
+        "<p style=\"margin:0 0 8px\">It can write into the editor and press Run " +
+        "without asking you first. Code runs on this machine, with your " +
+        "account's access to your files and network.</p>" +
+        "<p style=\"margin:0 0 8px\">A model can be wrong, and it can be talked into " +
+        "being wrong by something it reads. Use this when you are watching.</p>" +
+        "<p style=\"margin:0\">You can drop back to Beginner or Advanced at any " +
+        "time, with no confirmation.</p>" +
+        "</div>" +
+        (needTick
+          ? '<label style="display:flex;gap:8px;align-items:flex-start;' +
+            'margin-top:12px;font-size:13px;cursor:pointer">' +
+            '<input type="checkbox" id="ide-expert-ack" style="margin-top:3px">' +
+            "<span>I understand the risks and want Expert mode.</span></label>"
+          : '<p style="margin-top:12px;font-size:12.5px;color:var(--text-muted)">' +
+            "You will be asked for your password next.</p>") +
+        '<div class="modal-actions">' +
+        '<button class="modal-btn" id="ide-expert-cancel">Cancel</button>' +
+        '<button class="modal-btn primary" id="ide-expert-ok"' +
+        (needTick ? " disabled" : "") + ">I understand</button>" +
+        "</div></div></div>";
+
+      var onKey;
+      var finish = function (val) {
+        document.removeEventListener("keydown", onKey, true);
+        root.innerHTML = "";
+        resolve(val);
+      };
+      onKey = function (e) {
+        if (e.key === "Escape") { e.preventDefault(); finish(false); }
+      };
+      document.addEventListener("keydown", onKey, true);
+
+      var ack = document.getElementById("ide-expert-ack");
+      var okBtn = document.getElementById("ide-expert-ok");
+      if (ack && okBtn) {
+        ack.addEventListener("change", function () { okBtn.disabled = !ack.checked; });
+      }
+      var ov = document.getElementById("ide-expert-overlay");
+      ov.addEventListener("click", function (e) { if (e.target === ov) finish(false); });
+      document.getElementById("ide-expert-cancel").onclick = function () { finish(false); };
+      okBtn.onclick = function () { finish(true); };
+
+      var first = ack || document.getElementById("ide-expert-cancel");
+      if (first) first.focus();
+    });
+  }
+
+  /* What the rest of the app may ask about the ladder. Read-only on purpose:
+   * nothing outside this module gets to SET the mode, and the server would not
+   * believe it anyway. */
+  function ideMode() { return _mode; }
+  function ideMayTogaTouchBuffer() { return _mode !== "beginner"; }
 
   /* ---- the collapsible menu -------------------------------------------- */
   function setMenu(open) {
@@ -235,6 +525,10 @@
     var ta = $("ide-editor");
     if (ta) ta.addEventListener("keydown", onEditorKeydown);
 
+    // Paint the safe end of the ladder before the server has answered. If the
+    // fetch never lands, "Beginner" is the state the panel should be showing.
+    applyMode("beginner");
+
     if (window.PanelViews) {
       window.PanelViews.register("ide", {
         ids: ["ide-view"],
@@ -262,6 +556,13 @@
 
   window.ideToggleExpand = ideToggleExpand;
   window.ideToggleMenu = ideToggleMenu;
+  window.ideOnModeChange = ideOnModeChange;
+  window.ideToggleTogaClip = ideToggleTogaClip;
+  window.ideBufferForSend = ideBufferForSend;
+  window.ideApplyWrite = ideApplyWrite;
+  window.ideUndoWrite = ideUndoWrite;
+  window.ideMode = ideMode;
+  window.ideMayTogaTouchBuffer = ideMayTogaTouchBuffer;
   window.ideSaveAs = ideSaveAs;
   window.ideShowOutput = ideShowOutput;
   window.ideClearOutput = ideClearOutput;

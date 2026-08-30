@@ -265,6 +265,10 @@ class TogaSection:
     web_search_enabled: bool = False
     # WRITES: executes model-authored code, which can create files.
     code_exec_enabled: bool = False
+    # Seconds. NOT a sandbox setting -- there is no sandbox; this only bounds
+    # how long a runaway can run. The executor refuses anything above
+    # sage_engine.CODE_EXEC_TIMEOUT_MAX rather than clamping it.
+    code_exec_timeout: int = 120
     # --- CRAIID evidence ledger + particulars preservation (v2.13.18) ---
     # A handoff preserves MEANING and drops SPECIFICS. For conversation that is
     # right; for a fetched paper or an itinerary it destroys the only part that
@@ -537,6 +541,7 @@ class OracleConfig:
             "agentic_mode":            self.sage.agentic_mode,
             "web_search_enabled":      self.sage.web_search_enabled,
             "code_exec_enabled":       self.sage.code_exec_enabled,
+            "code_exec_timeout":       self.sage.code_exec_timeout,
             "customs_enabled":         self.sage.customs_enabled,
             "imperium_enabled":        self.sage.imperium_enabled,
             "imperium_enforce":        self.sage.imperium_enforce,
@@ -697,6 +702,7 @@ class OracleConfig:
         cfg.sage.agentic_mode       = bool(_g("agentic_mode",       cfg.sage.agentic_mode))
         cfg.sage.web_search_enabled = bool(_g("web_search_enabled", cfg.sage.web_search_enabled))
         cfg.sage.code_exec_enabled  = bool(_g("code_exec_enabled",  cfg.sage.code_exec_enabled))
+        cfg.sage.code_exec_timeout  = int(_g("code_exec_timeout",  cfg.sage.code_exec_timeout))
         cfg.sage.customs_enabled    = bool(_g("customs_enabled",    cfg.sage.customs_enabled))
         cfg.sage.imperium_enabled   = bool(_g("imperium_enabled",   cfg.sage.imperium_enabled))
         cfg.sage.imperium_enforce   = bool(_g("imperium_enforce",   cfg.sage.imperium_enforce))

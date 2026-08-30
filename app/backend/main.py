@@ -1016,7 +1016,13 @@ DEFAULT_CONFIG = {
     # a fresh install gets an empty prompt file and Toga uses its built-in
     # SAGE_SYSTEM_PROMPT, no Todd-specific text baked into the codebase.
     "sage_mode": True, "agentic_mode": True,
-    "web_search_enabled": True, "code_exec_enabled": True,
+    # 2026-08-30: these two said True here while config_store's schema says
+    # False and shipped config.json says false. Three sources, two answers --
+    # and the disagreement only surfaced if the key went MISSING, at which
+    # point web search and code execution would come up ON for a user who had
+    # never enabled either. Fallbacks now match the schema, which is the one
+    # that describes the product.
+    "web_search_enabled": False, "code_exec_enabled": False,
     "privacy_mode": False,
     # v2.12.1 personalization: persona name (per-user capable) + wake word
     # (owner-level — one microphone). UI labels stay "Toga" by design; this
@@ -3305,8 +3311,10 @@ async def api_sage_config(request: Request):
     return {
         "sage_mode": eff.get("sage_mode", True),
         "agentic_mode": eff.get("agentic_mode", True),
-        "web_search_enabled": eff.get("web_search_enabled", True),
-        "code_exec_enabled": eff.get("code_exec_enabled", True),
+        # Absent -> OFF, matching config_store's schema. Reporting True for a
+        # missing key would draw the toggle ON for a capability that is not on.
+        "web_search_enabled": eff.get("web_search_enabled", False),
+        "code_exec_enabled": eff.get("code_exec_enabled", False),
     }
 
 
@@ -3460,7 +3468,49 @@ async def api_set_browser_config(payload: dict, request: Request):
 # this is a fact about a person. It is deliberately NOT in ui_prefs.MACHINE_KEYS
 # -- one width for the whole install is the exact bug the cookie switch had,
 # where one profile's choice became everybody's default and never came back.
-_IDE_PREF_DEFAULTS = {"expanded": False}
+# toga_clip: may Toga see and rewrite the editor. Separate from the MODE
+# on purpose -- the mode says what is PERMITTED, this says whether it is
+# switched on right now. Advanced with the switch off shares nothing.
+_IDE_PREF_DEFAULTS = {"expanded": False, "toga_clip": False}
+
+# --- the IDE authority ladder ----------------------------------------------
+#
+# Ordered, and the order IS the meaning: each notch strictly adds what Toga may
+# do with the editor. A dial whose middle setting granted LESS than its first
+# would be unreadable, so index comparison is the whole rule.
+#
+#   beginner  Toga has no access to the editor. You write, you Run, you Save.
+#   advanced  Toga may READ and WRITE the buffer. Only you press Run.
+#   expert    Toga may read, write, AND run.
+#
+# STORED PER PERSON, and enforced HERE. The dropdown in the panel is a
+# convenience; a client that simply says "I am in Expert" is a client talking
+# about itself. Every privileged path asks _ide_mode_at_least() with the
+# caller's own namespace instead of believing the payload -- the same posture
+# as options["_priority"] and _turn_stats in the chat socket, which are
+# server-assigned precisely so a crafted payload cannot pre-seed them.
+IDE_MODES = ("beginner", "advanced", "expert")
+
+# Prompt context, not storage. Big enough for a real working file,
+# small enough that a paste cannot evict the conversation.
+_IDE_BUFFER_MAX = 60000
+
+
+def _ide_mode(ns) -> str:
+    """This namespace's stored mode. Unknown or unreadable -> the safe end."""
+    try:
+        import ui_prefs
+        m = str(ui_prefs.get("ide_mode", "beginner", ns=ns) or "beginner").lower()
+        return m if m in IDE_MODES else "beginner"
+    except Exception:
+        return "beginner"
+
+
+def _ide_mode_at_least(ns, level: str) -> bool:
+    try:
+        return IDE_MODES.index(_ide_mode(ns)) >= IDE_MODES.index(level)
+    except ValueError:
+        return False
 
 
 @app.get("/api/ide/prefs")
@@ -3468,10 +3518,23 @@ async def api_get_ide_prefs(request: Request):
     try:
         import ui_prefs
         _ns = _safe_ns(_session_ns(request))
-        return {"expanded": bool(ui_prefs.get("ide_expanded", False, ns=_ns))}
+        return {
+            "expanded": bool(ui_prefs.get("ide_expanded", False, ns=_ns)),
+            "mode": _ide_mode(_ns),
+            # Whether Expert is even offerable to this caller, so the panel can
+            # say "owner only" instead of presenting a choice that will 404.
+            "can_expert": bool(_is_owner(request)),
+            # Whether choosing Expert will ask for a password. False on a
+            # single-user install, where there is no account to re-verify --
+            # the panel shows an acknowledgement checkbox instead.
+            "expert_needs_password": bool(_elevation_applies(request)),
+        }
     except Exception:
         # A preference read must never be the reason a panel fails to open.
-        return dict(_IDE_PREF_DEFAULTS)
+        out = dict(_IDE_PREF_DEFAULTS)
+        out.update({"mode": "beginner", "can_expert": False,
+                    "expert_needs_password": False})
+        return out
 
 
 @app.post("/api/ide/prefs")
@@ -3492,6 +3555,36 @@ async def api_set_ide_prefs(payload: dict, request: Request):
         val = bool(payload.get(key))
         ui_prefs.set("ide_" + key, val, ns=_ns)
         out[key] = val
+
+    # --- the authority ladder, which is not an ordinary preference ---------
+    if "mode" in payload:
+        want = str(payload.get("mode") or "").strip().lower()
+        if want not in IDE_MODES:
+            raise HTTPException(400, "unknown mode")
+
+        if want == "expert":
+            # OWNER FIRST, then the password. Expert is the notch where a model
+            # may run code of its own accord, so it is a system decision, not a
+            # personal preference -- _owner_gate 404-cloaks a non-owner exactly
+            # as it does for tokens and devmode.
+            _owner_gate(request)
+            # And then prove it is still the person sitting there. Being SIGNED
+            # IN is not the same as choosing to hand a model the Run button; a
+            # lent laptop should not be one dropdown away from it. On a
+            # single-user install _demand_elevation is a no-op by design (there
+            # is no password to ask for) and the panel's acknowledgement
+            # checkbox is the deliberate act instead.
+            _demand_elevation(request)
+
+        # Dropping DOWN is never gated. Reducing your own authority is always
+        # safe, and friction on the way out of Expert would be friction in
+        # exactly the wrong direction.
+        ui_prefs.set("ide_mode", want, ns=_ns)
+        _audit_api_action(request, "ide.mode", {"mode": want})
+        out["mode"] = want
+    else:
+        out["mode"] = _ide_mode(_ns)
+
     return out
 
 
@@ -7584,11 +7677,16 @@ def _bb_gate_summary(raw):
 
 
 async def _bb_run_gate(candidate_code, test_content, module_name, test_filename, timeout=60):
-    """Run a gate test against candidate code in VeridianAI's sandbox. Writes
+    """Run a gate test against candidate code in a temp dir. Writes
     <module>.py + the test into a temp dir, runs the test as a subprocess, and
     returns (passed, raw_output). Off-thread so the event loop is not blocked."""
     import base64 as _b64
     import asyncio as _aio
+    # NOT a sandbox, and this docstring used to call it one. It is a temp
+    # directory and a subprocess with the same rights as this process --
+    # see sage_engine.execute_python. The isolation here is that the
+    # candidate cannot overwrite the real module, not that it cannot reach
+    # the machine.
     # ── CUSTOMS gate (v2.13): model-produced candidate code enters the
     # sandbox through here. Structure check only (Customs never needs to
     # understand the code -- that's the gate test's job).
@@ -8040,6 +8138,35 @@ async def ws_chat(websocket: WebSocket):
             _turn_stats = {}
             options["_turn_stats"] = _turn_stats
 
+            # --- the IDE buffer, if this person has opened it to Toga ------
+            #
+            # It rides WITH the turn instead of living in a server-side store.
+            # That is deliberate: a code buffer is user content, this app
+            # encrypts user content at rest, and storing it would mean one more
+            # thing to encrypt, migrate, export and burn -- for something whose
+            # natural lifetime is one message. So the toggle in the panel
+            # literally controls whether the text goes on the wire at all,
+            # exactly as report_issue.py treats an unticked section: not
+            # summarised, not redacted, simply never sent.
+            #
+            # THE PAYLOAD IS NOT THE AUTHORITY. The client sends the buffer
+            # because it is the client's own text and its own choice; it does
+            # NOT get to say what mode it is in. The stored mode decides,
+            # here, from this connection's namespace.
+            _ide_buf = ""
+            try:
+                import ui_prefs as _uip
+                _clip_on = bool(_uip.get("ide_toga_clip", False, ns=_ws_ns))
+                if _clip_on and _ide_mode_at_least(_ws_ns, "advanced"):
+                    _raw_buf = data.get("ide_buffer")
+                    if isinstance(_raw_buf, str):
+                        # A ceiling, because this is prompt context and an
+                        # enormous paste would silently evict the conversation
+                        # it is supposed to be helping with.
+                        _ide_buf = _raw_buf[:_IDE_BUFFER_MAX]
+            except Exception:
+                _ide_buf = ""
+
             # v2.11.13 per-user settings: fill generation options from this
             # user's overlay where the request didn't set them explicitly.
             # (model_manager falls back to the GLOBAL config for missing
@@ -8268,8 +8395,15 @@ async def ws_chat(websocket: WebSocket):
             _eff = {**config, **_ws_overlay}
             sage_mode = _eff.get("sage_mode", True)
             agentic = _eff.get("agentic_mode", True) and sage_mode
-            web_ok = _eff.get("web_search_enabled", True)
-            code_ok = _eff.get("code_exec_enabled", True)
+            # Absent key -> OFF. See the note on the defaults dict above: a
+            # missing flag must not be read as consent.
+            web_ok = _eff.get("web_search_enabled", False)
+            code_ok = _eff.get("code_exec_enabled", False)
+            try:
+                _code_timeout = int(_eff.get(
+                    "code_exec_timeout", sage_engine.CODE_EXEC_TIMEOUT_DEFAULT))
+            except (TypeError, ValueError):
+                _code_timeout = sage_engine.CODE_EXEC_TIMEOUT_DEFAULT
 
             # ── Build system prompt -----------------------------------
             # #68 Phase E Step 6: prompt now lives in a file
@@ -8390,6 +8524,30 @@ async def ws_chat(websocket: WebSocket):
             except Exception as _pm_e:
                 print(f"[PROCEDURAL] system-prompt injection failed: "
                       f"{_pm_e}")
+
+            # --- the editor, and what may be done with it ----------------
+            # Only present when the person actually shared it. A model that is
+            # never told about [IDE_WRITE:] cannot be argued into emitting it,
+            # and in Beginner there is nothing to describe anyway.
+            if _ide_buf:
+                _may_run = _ide_mode_at_least(_ws_ns, "expert")
+                sys_prompt += (
+                    "\n\n=== THE PERSON'S CODE EDITOR (internal — do not "
+                    "display) ===\n"
+                    "They have opened the IDE panel's editor to you. Its "
+                    "current contents are between the markers below. Do not "
+                    "echo this section back at them; they can already see it.\n"
+                    "To REPLACE the editor contents, emit exactly one\n"
+                    "  [IDE_WRITE: <the complete new contents>]\n"
+                    "It replaces the whole buffer, so send the whole file, not "
+                    "a fragment or a diff. Only do this when they asked you to "
+                    "change the code.\n"
+                    + ("You may also run it with [CODE:] when they ask.\n"
+                       if _may_run else
+                       "You may NOT run it. They press Run themselves.\n")
+                    + "--- EDITOR BEGIN ---\n" + _ide_buf
+                    + "\n--- EDITOR END ===\n"
+                )
 
             if not messages or messages[0].get("role") != "system":
                 messages = [
@@ -9040,10 +9198,16 @@ async def ws_chat(websocket: WebSocket):
                                 })
                                 try:
                                     loop = asyncio.get_event_loop()
+                                    # The timeout is PASSED. This call site
+                                    # used to omit it and inherit the
+                                    # executor's 56000-second default -- 15.5
+                                    # hours of a wedged worker thread for one
+                                    # `while True:` from a model.
                                     result = await loop.run_in_executor(
                                         None,
                                         sage_engine.execute_python,
                                         content,
+                                        _code_timeout,
                                     )
                                 except Exception as e:
                                     result = f"Code error: {e}"
@@ -9056,6 +9220,54 @@ async def ws_chat(websocket: WebSocket):
                                     "tool": "code",
                                     "output": result[:500],
                                 })
+
+                            elif action_type == "ide_write":
+                                # THE MODE IS RE-CHECKED HERE, not inherited
+                                # from whether the buffer arrived. Those are
+                                # different questions: the buffer riding in is
+                                # the person's choice about their own text,
+                                # while writing back is authority over their
+                                # editor. A turn that began in Advanced and was
+                                # dropped to Beginner mid-stream must not still
+                                # be able to write.
+                                executed_any = True
+                                try:
+                                    import ui_prefs as _uip2
+                                    _clip_ok = bool(_uip2.get(
+                                        "ide_toga_clip", False, ns=_ws_ns))
+                                except Exception:
+                                    _clip_ok = False
+                                if not (_clip_ok and _ide_mode_at_least(
+                                        _ws_ns, "advanced")):
+                                    tool_results_acc[f"ide_write_step_{step}"] = (
+                                        "[REFUSED] The person's IDE mode does "
+                                        "not allow you to write to their "
+                                        "editor.")
+                                else:
+                                    await websocket.send_json({
+                                        "type": "tool_call",
+                                        "tool": "ide_write",
+                                        "input": f"{len(content)} chars",
+                                        "message": "\u270e Writing to the editor\u2026",
+                                    })
+                                    # The browser owns the editor; this is a
+                                    # PROPOSAL travelling to it. ide.js keeps
+                                    # the previous contents so the person can
+                                    # undo -- a model rewriting your file with
+                                    # no way back is not an assistant.
+                                    await websocket.send_json({
+                                        "type": "ide_write",
+                                        "content": content,
+                                    })
+                                    tool_results_acc[f"ide_write_step_{step}"] = (
+                                        f"Sent {len(content)} characters to the "
+                                        f"person's editor. They can undo it.")
+                                    await websocket.send_json({
+                                        "type": "tool_result",
+                                        "tool": "ide_write",
+                                        "output": f"editor updated "
+                                                  f"({len(content)} chars)",
+                                    })
 
                             elif action_type == "search_memory":
                                 executed_any = True

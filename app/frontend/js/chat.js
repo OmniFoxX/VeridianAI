@@ -89,6 +89,13 @@ function connectWS() {
     else if (data.type === "agent_step") handleAgentStep(data);
     else if (data.type === "tool_call") handleToolCall(data);
     else if (data.type === "tool_result") handleToolResult(data);
+    // A proposed rewrite of the IDE editor. The panel owns the buffer, so it
+    // decides what to do with this -- including keeping the previous contents
+    // for undo. Guarded because ide.js may not have loaded yet on a slow
+    // first paint, and a dropped write is better than a thrown error.
+    else if (data.type === "ide_write") {
+      if (window.ideApplyWrite) window.ideApplyWrite(data.content);
+    }
     // #44 AIQNudge: backend verified the HMAC and injected the directive as a
     // system message (invisible to the user). This is the ONLY visible signal
     // that an urgency-bearing nudge actually landed.
@@ -293,6 +300,19 @@ async function sendMessage() {
       messages: buildPayload(),
       model_id: modelId,
       options,
+      // The IDE editor, but ONLY when this person switched it on AND their
+      // mode permits it. ide.js returns null otherwise, and JSON.stringify
+      // drops an undefined key entirely -- so in Beginner, or with the switch
+      // off, the editor's contents are not summarised or redacted, they are
+      // simply never put on the wire. Same principle as the report dialog's
+      // unticked sections.
+      //
+      // The server does not take this as permission. It re-reads the stored
+      // mode and switch for this namespace before using the buffer, and again
+      // before letting anything write back.
+      ide_buffer: window.ideBufferForSend
+        ? window.ideBufferForSend() || undefined
+        : undefined,
       // Build Battle: per-battle round count (1-3). Left undefined for other
       // actions, so JSON.stringify omits it and the backend uses its config
       // default (build_battle_rounds). Backend re-clamps to 1-3 authoritatively.

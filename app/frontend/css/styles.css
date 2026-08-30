@@ -1929,6 +1929,32 @@ pre:hover .copy-btn {
   cursor: not-allowed;
 }
 
+/* Attached to Run, which is what it governs. Run keeps flex:1 and simply has
+   less room now -- exactly the "make the Run button a bit smaller and put a
+   dropdown at its side" shape. */
+.ide-mode {
+  flex-shrink: 0;
+  max-width: 104px;
+  min-height: 26px;
+  padding: 3px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-control);
+  background: var(--surface-3);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.ide-mode:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+/* Expert is the notch where a model may press Run. It should not look like
+   the other two. */
+.ide-mode[data-mode="expert"] {
+  border-color: var(--error);
+  color: var(--error);
+}
+
 .ide-menu-wrap {
   position: relative;
   flex-shrink: 0;
@@ -2792,6 +2818,17 @@ pre:hover .copy-btn {
   background: var(--gold);
   color: #0a0e18;
   border-color: var(--gold);
+}
+
+/* A disabled modal button must LOOK disabled. The Expert-mode dialog keeps its
+   confirm inert until the acknowledgement is ticked, and without this the
+   button sat there in full primary gold -- a control announcing one state and
+   behaving as another, which is the same class of problem as an enabled-looking
+   Run that does nothing. Applies to every modal, since none of them wanted the
+   old behaviour either. */
+.modal-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .modal-btn.primary:hover {
   background: #ffc030;

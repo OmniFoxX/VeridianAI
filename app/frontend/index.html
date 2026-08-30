@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=9dee57fd0d" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=c723bae41c" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -685,13 +685,12 @@
               <span
                 class="hw-toggle-label"
                 id="code-execution-label"
-                data-tip="Allow Toga to run code in a sandbox to compute results, run tests, or process files during a reply."
+                data-tip="Let Toga run Python on this machine to compute results, run tests, or process files during a reply. It runs in a separate process with a time limit, but with your own access to files and network - it is not sandboxed."
                 >Code Execution</span
               >
               <label class="toggle-switch">
                 <input
                   aria-labelledby="code-execution-label"
-                  checked=""
                   id="toggle-codeexec"
                   role="switch"
                   onchange="updateSetting('code_exec_enabled', this.checked)"
@@ -2165,6 +2164,20 @@
             <span class="sr-only" id="ide-run-note"
               >Running code is not available in this build.</span
             >
+            <!-- The authority ladder, attached to Run because that is what it
+                 governs. The server stores and enforces it; this only shows
+                 and changes it. -->
+            <label class="sr-only" for="ide-mode">Who may use the editor</label>
+            <select
+              class="ide-mode"
+              id="ide-mode"
+              data-tip="Who may use the editor: you only, or Toga as well."
+              onchange="ideOnModeChange(this)"
+            >
+              <option value="beginner">Beginner</option>
+              <option value="advanced">Advanced</option>
+              <option value="expert">Expert</option>
+            </select>
             <div class="ide-menu-wrap">
               <button
                 class="ide-menu-btn"
@@ -2182,13 +2195,18 @@
               <div class="ide-menu" id="ide-menu" role="menu" hidden>
                 <button
                   class="ide-menu-item"
+                  id="ide-toga-clip"
                   type="button"
                   role="menuitem"
+                  aria-pressed="false"
                   disabled
-                  data-tip="Arrives with the Beginner/Advanced/Expert modes in the next build."
+                  onclick="ideToggleTogaClip()"
+                  data-tip="Beginner keeps the editor to yourself. Advanced or Expert lets Toga read and write it."
                 >
                   Allow Toga to Copy/Paste
-                  <span class="ide-menu-soon">next build</span>
+                  <span class="ide-menu-soon" id="ide-toga-clip-note"
+                    >Advanced only</span
+                  >
                 </button>
                 <button
                   class="ide-menu-item"
@@ -2199,6 +2217,17 @@
                   onclick="ideSaveAs()"
                 >
                   Save as file…
+                </button>
+                <button
+                  class="ide-menu-item"
+                  id="ide-undo-write"
+                  type="button"
+                  role="menuitem"
+                  hidden
+                  data-tip="Put back what was in the editor before Toga's last change."
+                  onclick="ideUndoWrite()"
+                >
+                  Undo Toga's last change
                 </button>
               </div>
             </div>
@@ -2240,8 +2269,8 @@
     <script src="/static/js/games.js?v=8cebc392c9"></script>
     <script src="/static/js/socials.js?v=f66d2d32f2"></script>
     <script src="/static/js/hardware.js?v=f844dcfe34"></script>
-    <script src="/static/js/settings.js?v=ea89d77fc8"></script>
-    <script src="/static/js/chat.js?v=49a6c0a077"></script>
+    <script src="/static/js/settings.js?v=9cc2909e4c"></script>
+    <script src="/static/js/chat.js?v=ede3a36429"></script>
     <script src="/static/js/app.js?v=fca71ed341"></script>
     <script src="/static/js/auth.js?v=cc68812d27"></script>
     <script src="/static/js/skills.js?v=04cbd944f1"></script>
@@ -2262,7 +2291,7 @@
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
     <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
-    <script src="/static/js/ide.js?v=4e9ba41b7f"></script>
+    <script src="/static/js/ide.js?v=9acd30b54e"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

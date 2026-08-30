@@ -37,6 +37,15 @@ to GenericSchemaValidator (log + permissive pydantic floor).
 
 from __future__ import annotations
 
+# The executor owns these numbers; Customs mirrors them so the two agree. Soft
+# import: sage_engine does not import this module, so there is no cycle, but a
+# standalone import of customs_daemon (a test, a lint) must still work.
+try:
+    from sage_engine import (CODE_EXEC_TIMEOUT_DEFAULT as _CODE_TIMEOUT_DEFAULT,
+                             CODE_EXEC_TIMEOUT_MAX as _CODE_TIMEOUT_MAX)
+except Exception:
+    _CODE_TIMEOUT_DEFAULT, _CODE_TIMEOUT_MAX = 120, 3600
+
 import hashlib
 import json
 import re
@@ -168,7 +177,18 @@ if BaseModel is not None:
     class CodeArgs(BaseModel):
         code: str = Field(min_length=1,
                           json_schema_extra={"sensitive": True})
-        timeout: int = Field(default=56000, ge=1, le=86400)
+        # Same numbers the executor enforces, deliberately. If this ceiling
+        # were the looser one, Customs would wave through a timeout that
+        # sage_engine then refuses -- a pass here and a failure there, for the
+        # same call. Matching them means an over-long timeout bounces at the
+        # border, with a correction the model can act on.
+        timeout: int = Field(default=_CODE_TIMEOUT_DEFAULT, ge=1,
+                             le=_CODE_TIMEOUT_MAX)
+
+    class IdeWriteArgs(BaseModel):
+        # The model's proposed editor contents. `sensitive` because it is the
+        # person's working code and must never reach an audit preview.
+        code: str = Field(json_schema_extra={"sensitive": True})
 
     class SaveFileArgs(BaseModel):
         filename: str = Field(min_length=1, max_length=255)
@@ -482,6 +502,57 @@ class CodeValidator(ToolValidator):
         return None
 
 
+class IdeWriteValidator(ToolValidator):
+    """ide_write: the model proposing new contents for the IDE editor.
+
+    Shares CodeValidator's ONE deterministic repair -- strip a markdown fence,
+    because models wrap code in them no matter what the prompt says -- and
+    nothing else. Whether the code is a good idea is not a question Customs
+    can answer; what it does answer is that the call is well formed, and that
+    it is RECORDED. This tag can only fire when the person's stored mode is
+    advanced or expert, and main.py checks that, but the audit entry is what
+    makes "the model rewrote my editor" a fact rather than a memory.
+
+    Deliberately no length ceiling here: an editor buffer is as long as the
+    person's file, and a truncating validator would corrupt code rather than
+    refuse it.
+    """
+    tool_name = "ide_write"
+    schema = IdeWriteArgs if BaseModel is not None else None
+    _FENCE_RE = re.compile(r"^\s*```[\w+-]*\s*\n(.*?)\n?\s*```\s*$",
+                           re.DOTALL)
+
+    def validate(self, raw_call):
+        res = super().validate(raw_call)
+        if res.verdict == "pass":
+            code = res.args.get("code", "")
+            if isinstance(code, str) and self._FENCE_RE.match(code):
+                return ValidationResult(
+                    "bounce", args=dict(res.args),
+                    correction="ide_write: send the editor contents raw, not "
+                               "as a markdown ```-fenced block.",
+                    error_type="markdown_fence")
+        return res
+
+    def attempt_repair(self, raw_call, error):
+        code = raw_call.get("code")
+        if isinstance(code, str):
+            m = self._FENCE_RE.match(code)
+            if m:
+                cand = dict(raw_call)
+                cand["code"] = m.group(1)
+                return cand
+        return None
+
+    def safe_preview(self, args):
+        # Never the code. Length is enough to tell a 4-line patch from a
+        # 400-line rewrite in the audit trail.
+        try:
+            return "%d chars" % len(str(args.get("code", "")))
+        except Exception:
+            return ""
+
+
 class SaveFileValidator(ToolValidator):
     tool_name = "save_file"
     schema = SaveFileArgs if BaseModel is not None else None
@@ -587,7 +658,8 @@ registry = CustomsRegistry()
 for _v in (BrowserToolValidator(), SearchValidator(),
            SearchGeneralValidator(), SearchMemoryValidator(),
            RecallValidator(), WebSearchBrowserValidator(),
-           WeatherValidator(), CodeValidator(), SaveFileValidator(),
+           WeatherValidator(), CodeValidator(), IdeWriteValidator(),
+           SaveFileValidator(),
            GenerateImageValidator(), VerifyFileValidator(),
            RememberValidator(), RememberFailValidator(),
            ExprValidator(), LintExprValidator(), PrioritiseValidator()):
@@ -772,6 +844,7 @@ _TAG_TO_ARGS: Dict[str, Callable[[Any], Dict[str, Any]]] = {
     "recall":             lambda c: {"query": str(c)},
     "weather":            lambda c: {"location": str(c)},
     "code":               lambda c: {"code": str(c)},
+    "ide_write":          lambda c: {"code": str(c)},
     "generate_image":     lambda c: {"prompt": str(c)},
     "verify_file":        lambda c: {"path": str(c)},
     "lint_expr":          lambda c: {"expr": str(c)},
@@ -797,6 +870,7 @@ _ARGS_TO_TAG: Dict[str, Callable[[Dict[str, Any]], Any]] = {
     "recall":             lambda a: a["query"],
     "weather":            lambda a: a["location"],
     "code":               lambda a: a["code"],
+    "ide_write":          lambda a: a["code"],
     "generate_image":     lambda a: a["prompt"],
     "verify_file":        lambda a: a["path"],
     "lint_expr":          lambda a: a["expr"],

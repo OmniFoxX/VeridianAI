@@ -94,7 +94,10 @@ function applySettingsToUI(cfg) {
   setChecked("toggle-sage", cfg.sage_mode !== false);
   setChecked("toggle-agentic", cfg.agentic_mode !== false);
   setChecked("toggle-websearch", cfg.web_search_enabled !== false);
-  setChecked("toggle-codeexec", cfg.code_exec_enabled !== false);
+  // === true, not !== false. The old form drew this ON for a config that
+  // simply had not mentioned the key -- which is exactly the case where
+  // nobody has consented to anything. Absent means off.
+  setChecked("toggle-codeexec", cfg.code_exec_enabled === true);
   setChecked("toggle-autoroute", cfg.auto_route === true);
 
   // Load tavily status

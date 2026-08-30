@@ -221,7 +221,7 @@ If a tool result contradicts training knowledge, trust the tool result. If it co
 
 ## Format: [Tool Call: variable] | Description (addenda).
 
-[CODE: python_script] | Executes Python in a sandboxed subprocess with UTF-8 output capture and safety scrubbing (bracket-balanced - safely handles internal brackets like [ ] or { }).
+[CODE: python_script] | Runs Python in a separate process on this machine with the user's own access to files and network - it is NOT sandboxed, so do not run anything you would not run on their behalf knowingly. UTF-8 output capture, bracket-balanced (handles internal [ ] or { } safely).
 [SAVE_FILE: filename.extension | "file content"] | Saves text/code to the downloads folder. Automatically handles backups, path sanitization, and namespace routing. NEVER include a path in the name. NEVER put it in a markdown code fence in chat. See SAVE_FILE rules in IMPORTANT POINTS above.
 [VERIFY_FILE: path/to/file] | Checks file existence/size, AST-parses .py files for syntax errors without executing them, and auto-resolves download paths if needed.
 [SEARCH_MEMORY: query] | Pulls exact/recent daemon log entries.
@@ -274,7 +274,7 @@ SAGE_SYSTEM_PROMPT_SMALL = """You are Toga, a helpful, locally-run, evolving AI 
 # Tool Call List
 ## Format: [Tool Call: variable] | Description (addenda).
 
-[CODE: python_script] | Executes Python in a sandboxed subprocess with UTF-8 output capture and safety scrubbing (bracket-balanced - handles internal [ ] or { } safely).
+[CODE: python_script] | Runs Python in a separate process on this machine with the user's own access to files and network - it is NOT sandboxed, so do not run anything you would not run on their behalf knowingly. UTF-8 output capture, bracket-balanced (handles internal [ ] or { } safely).
 [SAVE_FILE: filename.extension | "file content"] | Saves text/code to the downloads folder. Handles backups, path sanitization, and namespace routing. NEVER include a path in the name. NEVER put it in a markdown code fence in chat.
 [VERIFY_FILE: path/to/file] | Checks file existence/size, AST-parses .py files for syntax errors without executing them, auto-resolves download paths if needed.
 [SEARCH_MEMORY: query] | Pulls exact/recent daemon log entries.
@@ -1307,6 +1307,29 @@ def get_weather(location: str) -> str:
     return "\n".join(lines)
 
 
+# --- how long model-authored code may run -----------------------------------
+#
+# 2026-08-30. The default here was 56000 -- and subprocess.run(timeout=) is in
+# SECONDS, so that is 15 hours 33 minutes. The agentic [CODE:] path passed no
+# timeout at all, which means one `while True:` from a model tied up a worker
+# thread for the rest of the day and looked like the backend had simply gone
+# quiet. That value has been hunted out of model_manager and main.py already
+# (both carry "was 56000.0 -- 15.5 hours" notes); this was the copy nobody had
+# reached yet.
+#
+# 120s is a working number, not a guess: long enough to read a file, crunch a
+# CSV or run a test, short enough that a runaway is an inconvenience rather
+# than an outage. Raise it in config.json (sage.code_exec_timeout) when a job
+# genuinely needs longer.
+#
+# The MAX exists so the ceiling is a REFUSAL rather than a silent clamp.
+# customs_daemon's CodeArgs carries the same number, so a model asking for
+# 86400 gets a visible bounce it can learn from -- "wrong-but-valid is worse
+# than invalid-and-rejected", which is that module's own rule.
+CODE_EXEC_TIMEOUT_DEFAULT = 120
+CODE_EXEC_TIMEOUT_MAX = 3600
+
+
 def _strip_code_preamble(code: str) -> str:
     """Defensive scrubber for code coming out of the [CODE:] parser.
 
@@ -1362,8 +1385,26 @@ def _strip_code_preamble(code: str) -> str:
     return code.strip()
 
 
-def execute_python(code: str, timeout: int =56000) -> str:
+def execute_python(code: str, timeout: int = None) -> str:
     """Execute Python code in a subprocess and return captured output.
+
+    THIS IS NOT A SANDBOX, and this docstring used to say it was.
+
+    What it actually is: a separate process, a timeout, and UTF-8 forced on the
+    pipes. The child runs as the same user with the same rights -- it can read
+    and write any file this account can reach, and open any socket. The
+    convenience preamble below (`import sys, io, os, ...` plus DOWNLOADS_DIR
+    and BASE_DIR) is ergonomics, not a jail; nothing is removed from the
+    interpreter and nothing restricts it.
+
+    That matters because the word travelled: the settings toggle told the user
+    "run code in a sandbox", and the system prompt told the MODEL it was
+    running in one. A promise nobody keeps is worse than no promise, because
+    people spend real trust against it. All three now describe what this does.
+
+    `timeout` is in SECONDS (subprocess.run's units) and defaults to
+    CODE_EXEC_TIMEOUT_DEFAULT. Values above CODE_EXEC_TIMEOUT_MAX are refused
+    rather than clamped, so a caller finds out.
 
     v2.1.3 FIXES (April 11, 2026) - output capture bulletproofing:
 
@@ -1404,6 +1445,18 @@ def execute_python(code: str, timeout: int =56000) -> str:
          for file verification are INVALID. Always use [VERIFY_FILE: path] 
          for all file verification without exception
     """
+    if timeout is None:
+        timeout = CODE_EXEC_TIMEOUT_DEFAULT
+    try:
+        timeout = int(timeout)
+    except (TypeError, ValueError):
+        return ("[EXECUTION ERROR] timeout must be a whole number of seconds.")
+    if timeout < 1 or timeout > CODE_EXEC_TIMEOUT_MAX:
+        # Refused, not clamped. A caller that asked for 15 hours and silently
+        # got 1 has been told nothing; this way it learns.
+        return (f"[EXECUTION ERROR] timeout must be between 1 and "
+                f"{CODE_EXEC_TIMEOUT_MAX} seconds (asked for {timeout}).")
+
     # v2.2 (2026-05-30) defensive scrub for verbose-model emission
     # habits: strip markdown fences / language hints / bare
     # 'python' identifiers that nemotron-class models often leak
@@ -2294,13 +2347,13 @@ def _tag_fills_code_fence(text: str, tag_start: int, tag_end: int):
 # SEARCH_GENERAL/SEARCH_MEMORY/REMEMBER_FAIL listed before their
 # prefixes so the alternation matches the longest name.
 _ORPHAN_TAG_RE = re.compile(
-    r"\[(SAVE_FILE|VERIFY_FILE|CODE|SEARCH_GENERAL|SEARCH_MEMORY|SEARCH|"
+    r"\[(SAVE_FILE|VERIFY_FILE|IDE_WRITE|CODE|SEARCH_GENERAL|SEARCH_MEMORY|SEARCH|"
     r"WEATHER|BROWSE|WEB_SEARCH|REMEMBER_FAIL|REMEMBER|RECALL|PRIORITISE|"
     r"GENERATE_IMAGE|LINT_EXPR|PARSE_EXPR)\s*[:\]]", re.I)
 
 
 _KNOWN_TAG_NAMES = (
-    "SAVE_FILE", "VERIFY_FILE", "CODE", "SEARCH_GENERAL", "SEARCH_MEMORY",
+    "SAVE_FILE", "VERIFY_FILE", "IDE_WRITE", "CODE", "SEARCH_GENERAL", "SEARCH_MEMORY",
     "SEARCH", "WEATHER", "BROWSE", "WEB_SEARCH", "REMEMBER_FAIL",
     "REMEMBER", "RECALL", "PRIORITISE", "GENERATE_IMAGE", "LINT_EXPR",
     "PARSE_EXPR", "TASK_DONE",
@@ -2400,7 +2453,13 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
     # Bracket-balanced extraction for CODE and SAVE_FILE.
     # These tags' content may legitimately contain `[` and `]`
     # (Python list literals, dict access, slicing, JSON, type hints, etc.)
-    for tag_name, action_type in (("CODE", "code"), ("SAVE_FILE", "save_file")):
+    # IDE_WRITE joins the bracket-balanced group for the same reason CODE is
+    # in it: its body is source, and source is full of `[`. The old non-greedy
+    # regex stopped at the first `]`, which silently truncated `list[0]` or
+    # `data["key"]` mid-expression -- for [CODE:] that produced a SyntaxError,
+    # and for [IDE_WRITE:] it would quietly hand the person a corrupted buffer.
+    for tag_name, action_type in (("CODE", "code"), ("SAVE_FILE", "save_file"),
+                                  ("IDE_WRITE", "ide_write")):
         marker = "[" + tag_name + ":"
         marker_lower = marker.lower()
         text_lower = text.lower()

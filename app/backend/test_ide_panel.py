@@ -153,9 +153,25 @@ if menu:
     ok("the Toga item was found", len(toga_item) == 1)
     if toga_item:
         ti = toga_item[0]
-        ok("Toga copy/paste is still disabled", "disabled" in ti,
-           "the Beginner/Advanced/Expert modes that govern it do not exist yet")
-        ok("...and still says when it arrives", "next build" in ti)
+        # Phase 2b-ii WIRED this. The markup still ships disabled because
+        # Beginner is the default mode, but ide.js enables it the moment the
+        # mode allows -- so the note is a STATE now ("on"/"off"), not an
+        # excuse. These assertions changed in the commit that made the old
+        # ones untrue, which is the whole point of writing them down.
+        ok("it is a real toggle now", "ideToggleTogaClip()" in ti,
+           "it was inert through Phase 1 and 2b-i")
+        ok("...with a pressed state for screen readers",
+           'aria-pressed="false"' in ti)
+        ok("...shipping disabled because Beginner is the default",
+           "disabled" in ti)
+        ok("...and labelled with the mode that would allow it",
+           "Advanced only" in ti)
+        ok("ide.js swaps the label for the real state",
+           'note.textContent = on ? "on" : "off"' in IDEJS,
+           "a mode-dependent excuse became an on/off state")
+        ok("Beginner both disables it and forces it off",
+           "var allowed = _mode !== \"beginner\"" in IDEJS
+           and "var on = allowed && _togaClip" in IDEJS)
 
 print("\n=== 3b. Save as file is wired end to end ===")
 ok("ide.js defines ideSaveAs", "function ideSaveAs" in IDEJS)
@@ -195,9 +211,23 @@ ok("...and Escape releases the tab trap", "Escape" in IDEJS_RAW,
    "trapping Tab with no way out strands keyboard users")
 
 print("\n=== 6. Output is text, never markup ===")
-ok("the output element is written with textContent",
-   "textContent" in IDEJS and "innerHTML" not in IDEJS,
+# This used to assert that innerHTML appears NOWHERE in ide.js. That was a fine
+# proxy while the file had no dialogs, and it broke the moment confirmExpert()
+# built one -- which is the wrong reason for this test to go red. The property
+# that actually matters is narrower and permanent: whatever the display area
+# receives is PROGRAM OUTPUT, and program output must never become markup.
+_show = IDEJS[IDEJS.index("function ideShowOutput"):]
+_show = _show[:_show.index("\n  }") + 4]
+ok("ideShowOutput writes with textContent", "textContent" in _show,
    "program output is precisely the text that must not become markup")
+ok("...and never with innerHTML", "innerHTML" not in _show)
+
+# The one place that DOES build markup may only build constants.
+_dlg = IDEJS[IDEJS.index("function confirmExpert"):]
+_dlg = _dlg[:_dlg.index("\n  }") + 4]
+ok("the Expert dialog interpolates no variables into its HTML",
+   ("+ _" not in _dlg) and ("${" not in _dlg),
+   "a dialog built from static strings cannot carry someone else's markup")
 
 print("\n=== 7. Double width is one variable ===")
 ok("--oracle-w-x2 is defined", "--oracle-w-x2" in CSS)
@@ -221,6 +251,63 @@ import ui_prefs
 ok("ide_expanded is NOT a machine key",
    "ide_expanded" not in ui_prefs.MACHINE_KEYS,
    "MACHINE_KEYS is for facts a daemon needs with nobody signed in")
+
+print("\n=== 8b. The authority ladder ===")
+ok("the mode select exists", 'id="ide-mode"' in HTML)
+ok("...with all three notches",
+   all(('value="%s"' % m) in HTML for m in ("beginner", "advanced", "expert")))
+ok("...and a label for it", 'for="ide-mode"' in HTML,
+   "a bare select is unnamed to a screen reader")
+ok("ide.js orders the modes", 'MODES = ["beginner", "advanced", "expert"]' in IDEJS,
+   "the order IS the meaning; index comparison is the whole rule")
+ok("the ladder is monotone in the UI copy",
+   "read and write" in IDEJS and "AND run" in IDEJS)
+
+ok("main.py declares the same order",
+   'IDE_MODES = ("beginner", "advanced", "expert")' in MAIN,
+   "two orderings would be two ladders")
+ok("there is a server-side reader", "def _ide_mode(" in MAIN)
+ok("...and a comparison helper", "def _ide_mode_at_least(" in MAIN,
+   "every privileged path asks this instead of believing the payload")
+ok("an unknown mode is rejected", 'raise HTTPException(400, "unknown mode")' in MAIN)
+
+_post = MAIN[MAIN.index('@app.post("/api/ide/prefs")'):]
+_post = _post[:_post.index("@app.", 10)]
+ok("Expert is owner-gated", "_owner_gate(request)" in _post,
+   "a model gaining the Run button is a system decision, not a preference")
+ok("Expert demands elevation", "_demand_elevation(request)" in _post,
+   "being signed in is not the same as choosing to hand a model the Run button")
+ok("...and both are inside the expert branch only",
+   _post.index('want == "expert"') < _post.index("_owner_gate(request)"),
+   "gating the whole route would gate de-escalation too")
+ok("dropping down is NOT gated",
+   _post.index("_demand_elevation(request)") < _post.index('ui_prefs.set("ide_mode"'),
+   "reducing your own authority must never need a ceremony")
+ok("the change is audited", '"ide.mode"' in _post)
+ok("GET reports whether Expert is even offerable", '"can_expert"' in MAIN)
+ok("GET reports whether a password applies", '"expert_needs_password"' in MAIN,
+   "single-user has no account to re-verify; the panel shows a checkbox there")
+
+import ui_prefs as _up
+ok("ide_mode is NOT a machine key", "ide_mode" not in _up.MACHINE_KEYS,
+   "one mode for the whole install is the bug the cookie switch had")
+
+print("\n=== 8c. The escalation dialog ===")
+ok("there is a confirm step for Expert", "function confirmExpert" in IDEJS)
+ok("...built on the in-app modal, not a native dialog", "modal-root" in IDEJS,
+   "a native dialog costs the Electron window its focus")
+ok("...Escape cancels", 'e.key === "Escape"' in IDEJS)
+ok("...clicking outside cancels", "e.target === ov" in IDEJS)
+ok("...and the checkbox path exists for single-user",
+   "ide-expert-ack" in IDEJS)
+ok("the password is asked through requireUnlock",
+   "window.requireUnlock" in IDEJS,
+   "reauth.js already handles 2FA-if-configured and single-user")
+ok("leaving Expert drops the elevation", "reauthDrop" in IDEJS,
+   "staying unlocked after giving up the privilege is a window nobody asked for")
+ok("a refusal snaps the control back to the stored mode",
+   "applyMode(prev)" in IDEJS,
+   "the dropdown must show what the SERVER holds, not what was clicked")
 
 print("\n=== 9. Cache-busting ===")
 ok("ide.js is referenced with a ?v= bust",
