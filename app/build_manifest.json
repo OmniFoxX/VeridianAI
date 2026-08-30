@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.16.2",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "3e632cd1ab674c6b91c44b58a51e8394",
-    "built_utc": "2026-08-30T10:00:07.729728+00:00",
+    "build_id": "b5a3c789a20f4e81a7efec8e30eac9bc",
+    "built_utc": "2026-08-30T15:51:09.574901+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -39,7 +39,7 @@
       "backend/_tier_config_reader.py": "d8cdb7cc5e2de8b53a5339dd4b588889bff27df07bb2de75d831353760589891",
       "backend/_ws_bridge.py": "e281c64efe5a2bb2519551cd34b8617f0474b506956c8f7842a8e545f4e9fbdc",
       "backend/access_policy.py": "692c92031f37cc3ac7e54fc855b1dd6b503709159d84ffba71a420a5ac0cbd13",
-      "backend/aiq_nudge.py": "2c1cda40a10bae7dd95ec7cd5c047dd003593cac0133678540a7f029a1a5dc4f",
+      "backend/aiq_nudge.py": "b4b0cb00b99562e89568eaef30106cb1d1131c78d95443e67ae0bdc57523e73c",
       "backend/argonet_aether.py": "77fd125a8c05f4988d6474e5a3224e6a22254817796840f759c09005947a033c",
       "backend/argonet_ble.py": "fa2df0cb11824a679072c8914e9ac8bb04d96743ee99927ba0ab58a2a810454e",
       "backend/argonet_bridge.py": "e801b919c12bef7d3551a374597c03f52dc3ae03ceb9f1c2de56201dc1712a71",
@@ -139,7 +139,7 @@
       "backend/request_scheduler.py": "f662779a754097c4619a214bf8d53b8ca7ad1e336f31e6dde4c9d11c5dee3e8a",
       "backend/sage_daemon.py": "8b00ea170e5e83e985b6b4a7510540cd1929f1a0ea6acfe3ea2b213f30e719d4",
       "backend/sage_daemon_client.py": "fed83c0f91c813eddc29e705e7b555b1ab6e66d9ef791ea5c7d899c7c04e34bc",
-      "backend/sage_engine.py": "8069a5b01e0dd86e2f2a4d4cbec8f66a0b8a4fb4624d86f690640479c84b0f12",
+      "backend/sage_engine.py": "765a5b6f7ab8b2c3adae8600637434081a5b770460e97a559a536ed7a2706a62",
       "backend/sage_messaging_adapter.py": "339761c5f2e3c78bd3c5c8b9f3bf79c6789633fdf463aabbbf3a22d8c4b64617",
       "backend/sage_rag.py": "7ca658001913cf2fdccc23235e3bb76bc5b2d860a833a80d04bfdcd098f813ec",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
@@ -159,7 +159,7 @@
       "backend/test_action_intent.py": "7dd5b0ee8319cc64459a846e58c8925c2025639de436dc33af3a3b9d185129e6",
       "backend/test_aether_sim.py": "6451a546822f6ac727202f9e192e0c4473861265ebd8779f32e1411523ac59ca",
       "backend/test_ai_disclosure_default.py": "82aecd33ffa95f76de1c9d45db9df59c4c3b321ef25be5501317eb22de652e0f",
-      "backend/test_aiq_nudge_scope.py": "5e68a9814889cc61774c1e60614d011b94e1ea4e2d0f0c9dfb2a7d0a72fc76ed",
+      "backend/test_aiq_nudge_scope.py": "10ed0d2846f16a42f12c63d5c9ea6c4e299c5f0b10837043c0ddd4f3d5d3ceb5",
       "backend/test_answer_guarantee.py": "a5e04156437e17c117166a3f1c906cddc77b3b3d00b48b6554ab578435d7bcb2",
       "backend/test_api_http.py": "b1c699163c70664ed9e2b03746d54d3556700b50f4fe2563debc31fa1c199279",
       "backend/test_api_ownership.py": "b7e829286ba1c7f20618d583bd2ea8d1e29a048494bf21df19cda3094fc9f5da",
@@ -177,6 +177,7 @@
       "backend/test_chat_memory_at_rest.py": "dbb9d98dc1a26f9a0832a2f46fe9bb8c2815c2af52affbb823dbb9820ee8b4cd",
       "backend/test_code_exec_defects.py": "6ec1a15297fd33d34fe0f9e694c75efdd197fbea9d34065e7259f1686c3884b5",
       "backend/test_comfyui_launcher.py": "57ab796134ad80a182d2b19cd7e956bc623f9ff4691122a327a27f9d53367aeb",
+      "backend/test_confined_runner.py": "81dc830c84c1fc840a4f01007ab92fde45558f82b7e93be5439d7bc749f5f14e",
       "backend/test_context_fill_channel.py": "631ac1a14e1b428e22938f3f7bf3b0ba1dffb275544cb53759e482ad193e0d64",
       "backend/test_craiid_archive_dir.py": "42ef51a38827f88dbe15d9ff271b92833bc7d58404b38f781dcdc0fd918a9dce",
       "backend/test_craiid_archive_paths.py": "b498ad7d5b6111a41bb36f7241f1f4a2fdac1fa59e5bf3d3c6d760feb16f2897",
@@ -312,5 +313,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "lyjm16j5pE5SSpuRpCZkFk5vDU2lIOuVV8icSB7CCkzzmsqSY67NSBJmnq2cu/yach8XMDj2NwEXUwVbmiIVBQ=="
+  "signature_b64": "4L2HsktJowTwlj2lVnha6jLU8MIvENeRh5hVPSdb5YSmwVYkrXVydmljZqOApI49GvwcRlZeHwZ+QzCnSi6PAg=="
 }

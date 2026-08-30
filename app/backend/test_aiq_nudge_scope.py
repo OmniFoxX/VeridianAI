@@ -144,6 +144,21 @@ try:
     # =========================================================================
     print("\n=== 5. Logout takes the pending nudges with it ===")
     # =========================================================================
+    # Sent in a tight loop ON PURPOSE. The filename was nudge_<ms>.txt,
+    # so two sends inside one millisecond produced the same path and the
+    # second overwrote the first -- across profiles. It surfaced as the
+    # flush count below being wrong, on a machine whose clock happened to
+    # be coarse enough to collide, which is a terrible way to find out.
+    _pre = len(list(WATCH.glob("nudge_*.txt")))
+    for _i in range(8):
+        N.send("burst-%d" % _i, ns="carol")
+    ok("eight nudges sent back to back are eight FILES",
+       len(list(WATCH.glob("nudge_*.txt"))) - _pre == 8,
+       "same-millisecond sends must not share a filename")
+    ok("...and all eight are still readable",
+       len(N.read_pending(ns="carol")) == 8)
+    N.flush(ns="carol")
+
     N.send("a1", ns="alice")
     N.send("a2", ns="alice")
     N.send("b1", ns="bob")

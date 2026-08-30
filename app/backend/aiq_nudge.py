@@ -397,7 +397,15 @@ class AIQNudge:
             raise NudgeError("refusing to send an empty nudge")
         signed = self.sign(body, ns=ns)
         self.watch_dir.mkdir(parents=True, exist_ok=True)
-        target = self.watch_dir / f"nudge_{int(time.time() * 1000)}.txt"
+        # The name used to be nudge_<ms>.txt, which is not unique. Two
+        # nudges sent inside the same millisecond produced the SAME path
+        # and the second silently overwrote the first -- and nothing here
+        # scopes the name by profile, so one person's nudge could erase
+        # another's. A random tail makes each send its own file; the
+        # millisecond stays in front so a plain sort is still
+        # chronological, and the "nudge_*.txt" readers are unaffected.
+        stamp = int(time.time() * 1000)
+        target = self.watch_dir / f"nudge_{stamp}_{secrets.token_hex(4)}.txt"
         tmp = target.with_suffix(".txt.tmp")
         try:
             tmp.write_text(signed, encoding="utf-8")

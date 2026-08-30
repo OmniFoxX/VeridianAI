@@ -1527,6 +1527,284 @@ def execute_python(code: str, timeout: int = None) -> str:
             except Exception:
                 pass
                 
+# ============================================================================
+#  CONFINED RUNNER  (2026-08-30)
+# ============================================================================
+#
+# WHAT THIS IS, AND THE WORD IT IS NOT
+#
+# It is NOT a sandbox, and it is not called one anywhere it is user-visible.
+# On Windows, without shipping a container or a VM, there is no true sandbox to
+# be had -- and claiming one is how a person ends up spending trust they should
+# have kept. What this is: a CONFINED RUNNER. It removes the three capabilities
+# that turn a mistake into an incident, and it is honest that a fourth --
+# reading arbitrary files by absolute path -- is only partly addressed.
+#
+# WHAT IT STOPS
+#   * Outbound network. socket is the chokepoint under urllib, requests,
+#     httpx and everything else, so it is stubbed. This is the one that
+#     matters most: without it a mistake stays on the machine; with it, a
+#     mistake LEAVES.
+#   * Spawning processes. Code that reaches powershell has stepped around
+#     every other limit in one line.
+#   * Reads and writes anywhere inside the data directory -- the Fernet key,
+#     the memory chain, profile data, the signing key. That is the "critical
+#     internal" that actually needs a wall.
+#   * Escaping the working directory BY DEFAULT: cwd is a scratch dir, so
+#     relative paths land there rather than in the project tree.
+#
+# WHAT IT DOES NOT STOP, stated plainly so nobody has to discover it
+#   * Reading your ordinary files by absolute path. A general allow-list on
+#     open() breaks the import machinery, and a half-working guard is worse
+#     than a documented gap.
+#   * Code that deliberately dismantles these guards. They are installed IN
+#     the child interpreter, so ctypes, a fresh import of _socket internals,
+#     or a dozen other routes can undo them. This is a guard against accidents
+#     and casual reach, not against an adversary who already has local code
+#     execution.
+#
+# The right mental model: it is the difference between a workshop with the
+# doors shut and a workshop with the doors open. Not a vault.
+#
+# WHY A PREAMBLE AND NOT A SUPERVISOR
+# A separate supervising process could enforce more, and would be a second
+# thing to ship, keep alive, and get right on a machine with no admin rights.
+# The preamble costs nothing, ships with the app, and covers the cases that
+# actually occur. When that stops being true, this is the note that says so.
+
+_CONFINE_PREAMBLE = r"""
+import builtins as _b, io as _io, os as _os, sys as _sys
+
+_DENY_ROOTS = tuple(_p for _p in __VAI_DENY_ROOTS__ if _p)
+# The scratch directory this run works in. It lives INSIDE the data folder on a
+# real install (user_data_dir puts a profile's files under DATA_DIR), so
+# without this exception the guard below would block the runner from writing
+# its own files. A VM where the two paths happened to diverge hid that -- which
+# is a good argument for keeping this assertion in the tests rather than in
+# somebody's head.
+_ALLOW_ROOT = __VAI_ALLOW_ROOT__
+
+
+class _Refused(PermissionError):
+    pass
+
+
+_WHY = (" This code is running in VeridianAI's confined runner: no network, "
+        "no new processes, and no access to the app's data folder. Switch the "
+        "IDE to Expert mode to run without confinement.")
+
+
+# CALLABLE OBJECTS, NOT FUNCTIONS -- and this is not a style choice.
+#
+# A plain Python function assigned to os.listdir becomes a DESCRIPTOR. pathlib
+# holds `_NormalAccessor.listdir = os.listdir`, and the original is a builtin,
+# which does not bind. Swap in a function and `self._accessor.listdir(self)`
+# suddenly passes `self` as an extra argument -- so `Path(".").iterdir()` blew
+# up with "listdir() takes at most 1 argument (2 given)" in the runner's OWN
+# directory, where it was supposed to work. An instance with __call__ is not a
+# descriptor and binds nothing.
+class _Blocked:
+    def __init__(self, what):
+        self._what = what
+
+    def __call__(self, *a, **k):
+        raise _Refused(self._what + " is not available here." + _WHY)
+
+
+def _blocked(what):
+    return _Blocked(what)
+
+
+# --- network -------------------------------------------------------------
+try:
+    import socket as _s
+
+    # socket.socket must stay a CLASS. ssl.py does `class SSLSocket(socket)` at
+    # import time, so replacing it with a function made `import urllib` die
+    # with a bare "TypeError:" from deep inside the stdlib -- technically
+    # blocked, but unreadable, and it would have taught people the runner was
+    # broken rather than that the network was closed.
+    class _NoSocket:
+        def __init__(self, *a, **k):
+            raise _Refused("Network access is not available here." + _WHY)
+
+    _s.socket = _NoSocket
+    for _n in ("socketpair", "create_connection", "create_server",
+               "getaddrinfo", "gethostbyname", "gethostbyname_ex"):
+        if hasattr(_s, _n):
+            setattr(_s, _n, _blocked("Network access"))
+except Exception:
+    pass
+
+# --- new processes -------------------------------------------------------
+try:
+    import subprocess as _sp
+    for _n in ("Popen", "run", "call", "check_call", "check_output"):
+        if hasattr(_sp, _n):
+            setattr(_sp, _n, _blocked("Starting another program"))
+except Exception:
+    pass
+for _n in ("system", "popen", "execv", "execve", "execvp", "execvpe",
+           "spawnv", "spawnve", "spawnvp", "spawnvpe", "posix_spawn",
+           "fork", "forkpty"):
+    if hasattr(_os, _n):
+        try:
+            setattr(_os, _n, _blocked("Starting another program"))
+        except Exception:
+            pass
+
+# --- the data folder -----------------------------------------------------
+# A DENY-list, not an allow-list, and that is deliberate: an allow-list over
+# open() breaks the import machinery, which reads real files from real paths.
+# This blocks the directory that actually holds secrets and leaves the rest of
+# the filesystem alone -- a documented gap beats a guard that half works.
+_real_open, _real_io_open, _real_os_open = _b.open, _io.open, _os.open
+
+
+def _denied(path):
+    try:
+        rp = _os.path.realpath(_os.fspath(path))
+    except Exception:
+        return False
+    if _ALLOW_ROOT and (rp == _ALLOW_ROOT
+                        or rp.startswith(_ALLOW_ROOT + _os.sep)):
+        return False
+    for root in _DENY_ROOTS:
+        if rp == root or rp.startswith(root + _os.sep):
+            return True
+    return False
+
+
+class _Guarded:
+    # Same descriptor reasoning as _Blocked above: an object, not a function.
+    def __init__(self, fn, label):
+        self._fn = fn
+        self.__name__ = label
+
+    def __call__(self, file, *a, **k):
+        if _denied(file):
+            raise _Refused(
+                "That path is inside VeridianAI's data folder, which the "
+                "confined runner cannot reach." + _WHY)
+        return self._fn(file, *a, **k)
+
+
+def _guard(fn, label):
+    return _Guarded(fn, label)
+
+
+_b.open = _guard(_real_open, "open")
+_io.open = _guard(_real_io_open, "open")
+_os.open = _guard(_real_os_open, "open")
+del _real_open, _real_io_open, _real_os_open
+
+# Opening was blocked but LISTING was not, so `os.listdir(DATA_DIR)` still
+# returned ['.atrest_key', '.oai_signing_key.pem', ...]. Knowing exactly which
+# secrets exist and what they are called is worth something to an attacker even
+# without their contents. scandir covers pathlib.iterdir and glob too.
+for _fn_name in ("listdir", "scandir"):
+    _orig = getattr(_os, _fn_name, None)
+    if _orig is not None:
+        setattr(_os, _fn_name, _guard(_orig, _fn_name))
+del _fn_name, _orig
+"""
+
+
+def _confine_workdir(ns=None):
+    """A scratch directory for confined runs, per namespace, created on demand.
+
+    Inside the user's own data area rather than a system temp dir, so a person
+    can go and look at what their code wrote -- and so it is covered by the
+    same export and burn paths as the rest of their data instead of being a
+    quiet pile nobody accounts for.
+    """
+    base = user_data_dir(ns)
+    d = (Path(base) / "ide_runs") if base else (DOWNLOADS_DIR.parent / "ide_runs")
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _confine_deny_roots():
+    """Directories the confined child may not open. Realpaths, resolved here
+    so the child does not have to import config."""
+    roots = []
+    try:
+        from config import DATA_DIR as _DD
+        roots.append(os.path.realpath(str(_DD)))
+    except Exception:
+        pass
+    return roots
+
+
+def execute_python_confined(code: str, timeout: int = None, ns=None) -> str:
+    """Run code with the confinement described above. Same return shape as
+    execute_python: a labelled string, never an exception.
+
+    Not a sandbox. See the block comment above for exactly what is and is not
+    stopped, and say the same thing to anyone who asks.
+    """
+    if timeout is None:
+        timeout = CODE_EXEC_TIMEOUT_DEFAULT
+    try:
+        timeout = int(timeout)
+    except (TypeError, ValueError):
+        return "[EXECUTION ERROR] timeout must be a whole number of seconds."
+    if timeout < 1 or timeout > CODE_EXEC_TIMEOUT_MAX:
+        return (f"[EXECUTION ERROR] timeout must be between 1 and "
+                f"{CODE_EXEC_TIMEOUT_MAX} seconds (asked for {timeout}).")
+
+    code = _strip_code_preamble(code)
+    workdir = _confine_workdir(ns)
+    preamble = _CONFINE_PREAMBLE.replace(
+        "__VAI_DENY_ROOTS__", repr(tuple(_confine_deny_roots()))
+    ).replace(
+        "__VAI_ALLOW_ROOT__", repr(os.path.realpath(str(workdir))))
+
+    # NOTE what is NOT in here: DOWNLOADS_DIR and BASE_DIR. The unconfined
+    # executor hands those over as a convenience; handing a confined run a
+    # signpost to the app tree would be working against the point.
+    body = preamble + "\n" + code
+
+    tmpname = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False,
+                                         encoding="utf-8", dir=str(workdir)) as tmp:
+            tmp.write(body)
+            tmpname = tmp.name
+
+        # -I is isolated mode: no user site-packages, and PYTHON* environment
+        # variables ignored. That is why the env below is minimal rather than
+        # carrying PYTHONIOENCODING -- `-X utf8` sets the stdio encoding as a
+        # command-line flag, which -I does not discard.
+        env = {"PATH": os.environ.get("PATH", ""),
+               "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+               "TEMP": str(workdir), "TMP": str(workdir)}
+        result = subprocess.run(
+            [sys.executable, "-I", "-X", "utf8", tmpname],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=timeout, cwd=str(workdir), env=env,
+        )
+        stdout, stderr = result.stdout or "", result.stderr or ""
+        parts = []
+        if stdout:
+            parts.append(stdout.rstrip())
+        if stderr:
+            parts.append("[STDERR]\n" + stderr.rstrip())
+        if result.returncode != 0 and not stderr:
+            parts.append(f"[EXIT CODE {result.returncode}]")
+        return "\n".join(parts) if parts else "[no output]"
+    except subprocess.TimeoutExpired:
+        return f"[TIMEOUT] Code execution exceeded {timeout}s limit."
+    except Exception as e:
+        return f"[EXECUTION ERROR] {type(e).__name__}: {e}"
+    finally:
+        if tmpname and os.path.exists(tmpname):
+            try:
+                os.unlink(tmpname)
+            except Exception:
+                pass
+
+
 def verify_written_file(path: str) -> str:
     """
     Verify a written file without executing it.
