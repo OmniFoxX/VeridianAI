@@ -135,9 +135,44 @@ if menu:
     m = menu.group(0)
     ok("the menu offers Toga copy/paste", "Allow Toga to Copy/Paste" in m)
     ok("the menu offers Save as file", "Save as file" in m)
-    ok("both menu items are disabled in this build", m.count("disabled") >= 2,
-       "they are not wired yet; a live-looking item that no-ops is worse")
-    ok("...and both are marked as arriving later", m.count("next build") >= 2)
+
+    # Phase 2a: Save as file went LIVE, so the assertion that said otherwise
+    # changed in the same commit that made it untrue. That is the whole point
+    # of writing the promise down as a test -- see this file's docstring.
+    save_item = re.search(r'<button[^>]*id="ide-save".*?</button>', m, re.S)
+    ok("the Save item was found", save_item is not None)
+    if save_item:
+        si = save_item.group(0)
+        ok("Save as file is ENABLED", "disabled" not in si,
+           "it is wired to /api/downloads/save, which now has an allowlist")
+        ok("...and calls ideSaveAs()", "ideSaveAs()" in si)
+        ok("...and no longer claims to arrive later", "next build" not in si)
+
+    toga_item = [b for b in re.findall(r'<button[^>]*>.*?</button>', m, re.S)
+                 if "Allow Toga" in b]
+    ok("the Toga item was found", len(toga_item) == 1)
+    if toga_item:
+        ti = toga_item[0]
+        ok("Toga copy/paste is still disabled", "disabled" in ti,
+           "the Beginner/Advanced/Expert modes that govern it do not exist yet")
+        ok("...and still says when it arrives", "next build" in ti)
+
+print("\n=== 3b. Save as file is wired end to end ===")
+ok("ide.js defines ideSaveAs", "function ideSaveAs" in IDEJS)
+ok("...and exports it", "window.ideSaveAs" in IDEJS)
+ok("...posting to /api/downloads/save", "/api/downloads/save" in IDEJS)
+ok("...sending the editor contents", "ta.value" in IDEJS)
+ok("it asks for the filename with the in-app prompt, not window.prompt alone",
+   "oraclePrompt" in IDEJS,
+   "a native dialog costs the Electron window its focus -- see the "
+   "unclickable-UI fix")
+ok("it reports the server's own refusal text",
+   "detail" in IDEJS,
+   "the allowlist lives on the server; restating the rule here would let the "
+   "two drift apart")
+ok("it says so when the server renamed the file",
+   "renamed from" in IDEJS,
+   "otherwise someone goes looking for a name that is not on disk")
 
 print("\n=== 4. It plugs into the panel registry, not around it ===")
 ok("ide.js registers a view named 'ide'",

@@ -8,10 +8,11 @@
  * schema-says-off / fallback-says-on mismatch. Those get fixed before a button
  * in this panel can reach them.
  *
- * The two menu items exist and are disabled for the same reason: the modes
- * that govern "Allow Toga to Copy/Paste" arrive next, and "Save as file"
- * arrives with the extension allowlist that /api/downloads/save still needs.
- * A control that looks live and does nothing is worse than one that admits it.
+ * "Save as file" IS live: /api/downloads/save now delegates to the one
+ * executor and enforces an extension allowlist, so it is safe to point a
+ * button at. "Allow Toga to Copy/Paste" stays disabled until the
+ * Beginner/Advanced/Expert modes that govern it exist -- a control that looks
+ * live and does nothing is worse than one that admits it.
  *
  * NO EDITOR LIBRARY. Monaco and CodeMirror both mean a CDN, and offline boot
  * is a hard requirement. A textarea with Tab handling is the honest answer at
@@ -164,6 +165,71 @@
 
   function ideClearOutput() { ideShowOutput(""); }
 
+  /* ---- save as file ----------------------------------------------------
+   * Writes the buffer into the person's own downloads folder through
+   * POST /api/downloads/save. The server decides what may be written -- see
+   * sage_engine.check_save_filename -- and this reports its answer verbatim
+   * rather than guessing at the rule, so the two can never drift apart.
+   *
+   * The filename is remembered for the session so a second save offers the
+   * first name back instead of making you retype it. Not persisted: a
+   * filename is a fact about what you are working on right now. */
+  var _lastName = "untitled.py";
+
+  async function ideSaveAs() {
+    setMenu(false);
+    var ta = $("ide-editor");
+    if (!ta) return;
+
+    var name = window.oraclePrompt
+      ? await window.oraclePrompt(
+          "Save the editor contents into your downloads folder as:",
+          { title: "Save as file", okLabel: "Save", value: _lastName })
+      : window.prompt("Save as:", _lastName);
+    if (name == null) return;                 // cancelled, and that is fine
+    name = String(name).trim();
+    if (!name) {
+      if (window.setStatusError) setStatusError("Save cancelled - no filename.");
+      return;
+    }
+
+    try {
+      var res = await fetch("/api/downloads/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ filename: name, content: ta.value })
+      });
+      var data = null;
+      try { data = await res.json(); } catch (e) { data = null; }
+
+      if (!res.ok) {
+        // FastAPI puts HTTPException text in `detail`. Show the server's own
+        // words: it knows why it refused and this does not.
+        var why = (data && (data.detail || data.error)) ||
+                  ("save failed (" + res.status + ")");
+        if (window.setStatusError) setStatusError(String(why));
+        return;
+      }
+
+      _lastName = (data && data.filename) || name;
+      var msg = "Saved " + _lastName + " to your downloads folder";
+      // The server sanitizes; if it had to change the name, say so rather than
+      // letting someone go looking for a file under the name they typed.
+      if (data && data.filename && data.filename !== name) {
+        msg += ' (renamed from "' + name + '")';
+      }
+      if (data && data.backup) {
+        msg += " - the previous version was kept as " + data.backup;
+      }
+      if (window.setStatus) setStatus(msg);
+      if (window.Haptic) Haptic.vibrate(Haptic.PATTERNS.done);
+    } catch (e) {
+      if (window.setStatusError) {
+        setStatusError("Could not reach the backend to save the file.");
+      }
+    }
+  }
+
   /* ---- registration ---------------------------------------------------- */
   function init() {
     var ta = $("ide-editor");
@@ -196,6 +262,7 @@
 
   window.ideToggleExpand = ideToggleExpand;
   window.ideToggleMenu = ideToggleMenu;
+  window.ideSaveAs = ideSaveAs;
   window.ideShowOutput = ideShowOutput;
   window.ideClearOutput = ideClearOutput;
 })();

@@ -6025,21 +6025,42 @@ async def api_clear_downloads(request: Request):
 
 @app.post("/api/downloads/save")
 async def api_save_to_downloads(payload: dict, request: Request):
-    """Save text content as a file in downloads."""
-    filename = payload.get("filename", "")
+    """Save text content as a file in downloads.
+
+    DELEGATES to sage_engine.save_to_downloads -- the executor the [SAVE_FILE:]
+    tag (:9173) and the MCP save_file tool (mcp_handlers) already call.
+
+    This route used to carry its own copy of the scrub-and-write, and that is
+    exactly how it ended up with a DIFFERENT set of rules from the other two
+    writers: no extension check, and no backup-before-overwrite, so a retry
+    loop through the HTTP route destroyed prior versions that the same retry
+    through the tag path would have preserved. Three writers, three answers to
+    "what may be saved" -- the shape this project keeps paying for.
+
+    Containment now lives in the executor (it resolves the final path and
+    refuses anything outside the namespace's downloads dir) alongside the
+    filename scrub and sage_engine.check_save_filename. One writer, one set of
+    rules, one place to change them.
+    """
+    filename = str(payload.get("filename", "") or "")
     content = payload.get("content", "")
-    if not filename:
+    if not isinstance(content, str):
+        content = str(content)
+    if not filename.strip():
         raise HTTPException(400, "filename required")
-    import re as _re
-    safe_name = _re.sub(r'[^\w\-.]', '_', filename)
-    _ddir = _downloads_dir_for_ns(_safe_ns(_session_ns(request)))
-    path = _ddir / safe_name
-    # safe_name is scrubbed, but '.' is allowed so a bare '..' could slip through;
-    # confirm the final path stays inside the user's downloads dir before writing.
-    if safe_name in ("", ".", "..") or not _within(path, _ddir):
-        raise HTTPException(400, "invalid filename")
-    path.write_text(content, encoding="utf-8")
-    return {"success": True, "filename": safe_name, "size": path.stat().st_size}
+
+    result = sage_engine.save_to_downloads(
+        filename, content, ns=_safe_ns(_session_ns(request)))
+    if not result.get("success"):
+        # The executor's refusals are already safe to show: they name the
+        # extension or say "invalid filename", never a path.
+        raise HTTPException(400, result.get("error", "could not save"))
+
+    out = {"success": True, "filename": result.get("filename"),
+           "size": result.get("size")}
+    if result.get("backup"):
+        out["backup"] = result["backup"]
+    return out
 
 
 # --- Health Check ---

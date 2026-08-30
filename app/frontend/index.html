@@ -2192,13 +2192,13 @@
                 </button>
                 <button
                   class="ide-menu-item"
+                  id="ide-save"
                   type="button"
                   role="menuitem"
-                  disabled
-                  data-tip="Arrives in the next build, together with the file-type allowlist."
+                  data-tip="Write the editor contents into your downloads folder."
+                  onclick="ideSaveAs()"
                 >
                   Save as file…
-                  <span class="ide-menu-soon">next build</span>
                 </button>
               </div>
             </div>
@@ -2262,7 +2262,7 @@
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
     <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
-    <script src="/static/js/ide.js?v=fd9b5ee57c"></script>
+    <script src="/static/js/ide.js?v=4e9ba41b7f"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

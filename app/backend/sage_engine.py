@@ -1996,6 +1996,95 @@ def downloads_dir_for(ns=None):
     return d
 
 
+# --- what may be written into downloads ------------------------------------
+#
+# THE SCRUB WAS NEVER A FILE-TYPE CHECK. `re.sub(r'[^\w\-.]', '_', name)`
+# removes path separators; it says nothing about what the file IS. Until
+# 2026-08-30 that meant `[SAVE_FILE: pwn.bat|...]` from a model, or one POST to
+# /api/downloads/save, put an executable batch file in the person's own
+# downloads folder. main.py's `_bb_resolve_gate_path` docstring already records
+# this route as half of a past read-and-execute chain.
+#
+# WHERE THE LINE IS DRAWN, and it is a real judgement call:
+#
+#   BLOCKED: formats whose only purpose is to be executed -- .bat, .cmd, .exe,
+#   .com, .scr, .pif, .lnk, .msi, .hta, .cpl, .msc, .reg, .vbs, .wsf, .ps1,
+#   .jar, .inf, .sct, .url. Nobody edits these in a code editor; they exist to
+#   run. They are simply absent from the list below.
+#
+#   ALLOWED: source languages, markup, config and data -- INCLUDING ones that
+#   are themselves executable. `.py` and `.js` are both a double-click away
+#   from an interpreter on a Windows box with Python or WSH registered. They
+#   are on the list anyway, because a code editor that cannot save its own
+#   source files is not a code editor, and refusing `.js` while allowing `.py`
+#   would be incoherent.
+#
+# So this is not "nothing dangerous can be saved". It is "you cannot be handed
+# a double-clickable payload dressed as a document". The remaining risk is
+# governed by WHO may write -- the Beginner/Advanced/Expert ladder -- not by
+# the extension.
+#
+# One list, used by every writer. save_to_downloads() is the executor both the
+# [SAVE_FILE:] tag and the MCP save_file tool already go through, so the check
+# lives here rather than at each call site.
+ALLOWED_SAVE_EXT = frozenset({
+    # python / notebooks
+    ".py", ".pyi", ".ipynb",
+    # web
+    ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".vue", ".svelte",
+    ".html", ".htm", ".css", ".scss", ".sass", ".less", ".svg",
+    # data / config
+    ".json", ".jsonc", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".conf",
+    ".env", ".properties", ".xml", ".csv", ".tsv", ".sql", ".graphql",
+    ".proto", ".tf",
+    # prose
+    ".md", ".markdown", ".txt", ".rst", ".adoc", ".tex", ".bib", ".log",
+    ".diff", ".patch",
+    # shell -- not auto-executed on Windows
+    ".sh", ".bash", ".zsh", ".fish",
+    # other languages
+    ".c", ".h", ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".cs", ".java",
+    ".kt", ".kts", ".go", ".rs", ".rb", ".php", ".pl", ".pm", ".lua",
+    ".r", ".jl", ".swift", ".m", ".mm", ".scala", ".clj", ".ex", ".exs",
+    ".erl", ".hs", ".ml", ".dart", ".groovy", ".gradle", ".asm", ".s",
+})
+
+# Windows opens CON, PRN, AUX, NUL, COM1-9 and LPT1-9 as DEVICES, extension or
+# not. Writing one is at best confusing and at worst a hang.
+_RESERVED_STEMS = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
+
+
+def check_save_filename(safe_name: str):
+    """None if this ALREADY-SANITIZED name may be written, else a reason.
+
+    Takes the sanitized name on purpose: the extension that matters is the one
+    that ends up on disk, not the one that was asked for.
+    """
+    if not safe_name or safe_name in (".", ".."):
+        return "invalid filename"
+    # Windows discards trailing dots and spaces when opening a file, so
+    # "pwn.bat." on disk opens as "pwn.bat". Judge the name Windows will use.
+    effective = safe_name.rstrip(". ")
+    if not effective:
+        return "invalid filename"
+    stem, ext = os.path.splitext(effective)
+    if stem.lower() in _RESERVED_STEMS or effective.lower() in _RESERVED_STEMS:
+        return f"'{stem}' is a reserved Windows device name"
+    if not ext:
+        # Makefile, Dockerfile, LICENSE, .gitignore. Nothing without an
+        # extension is executed by a double click on Windows.
+        return None
+    if ext.lower() not in ALLOWED_SAVE_EXT:
+        return (f"'{ext}' files cannot be saved here. Allowed: source, markup, "
+                f"config and data files -- not executables or scripts Windows "
+                f"runs on a double click.")
+    return None
+
+
 def save_to_downloads(filename: str, content: str, ns=None) -> dict:
     """Save text content to the downloads folder. Returns {success, filename, path, size}."""
     try:
@@ -2004,6 +2093,9 @@ def save_to_downloads(filename: str, content: str, ns=None) -> dict:
         safe_name = re.sub(r'[^\w\-.]', '_', filename.strip())
         if not safe_name:
             return {"success": False, "error": "Invalid filename"}
+        _refuse = check_save_filename(safe_name)
+        if _refuse:
+            return {"success": False, "error": _refuse}
         path = _dl / safe_name
         # Don't allow escaping the downloads dir
         try:
