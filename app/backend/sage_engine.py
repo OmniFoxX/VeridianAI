@@ -1385,7 +1385,86 @@ def _strip_code_preamble(code: str) -> str:
     return code.strip()
 
 
-def execute_python(code: str, timeout: int = None) -> str:
+# ============================================================================
+# One place that starts a child interpreter, so STOP can be real
+# ============================================================================
+# Both executors below used subprocess.run(), which gives you the result and
+# never the process. That is fine until something has to CANCEL a run: a Stop
+# button that only stops caring is not a Stop button, and the code keeps
+# burning a core until its timeout expires.
+#
+# So the two of them share this, and it hands the caller the Popen through
+# `on_start` before it starts waiting. Everything else -- the timeout, the kill
+# on timeout, the labelled output -- behaves exactly as subprocess.run did,
+# because that is what the existing callers were written against.
+
+if os.name == "nt":
+    _CHILD_GROUP_KW = {"creationflags": getattr(
+        subprocess, "CREATE_NEW_PROCESS_GROUP", 0)}
+else:
+    _CHILD_GROUP_KW = {"start_new_session": True}
+
+
+def _kill_tree(proc) -> None:
+    """Kill the child AND anything it started. Never raises.
+
+    proc.kill() reaches the child alone. Confined runs cannot spawn anything,
+    so there it makes no difference -- but Expert runs unconfined, and a
+    half-killed tree is a Stop button that lies in exactly the mode where
+    lying costs the most.
+    """
+    if proc is None or proc.poll() is not None:
+        return
+    try:
+        if os.name == "nt":
+            # taskkill /T walks the tree. It ships with Windows; if it is
+            # somehow missing we still get the direct child below.
+            subprocess.run(["taskkill", "/T", "/F", "/PID", str(proc.pid)],
+                           capture_output=True, timeout=10)
+        else:
+            import signal
+            os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except Exception:
+        pass
+    try:
+        proc.kill()
+    except Exception:
+        pass
+
+
+def _run_child(argv, cwd, env, timeout, on_start=None):
+    """Start argv, hand the Popen to on_start, wait, return (rc, out, err).
+
+    Raises subprocess.TimeoutExpired on timeout, having killed the tree first
+    -- the same contract subprocess.run offers, so the callers' except blocks
+    did not have to change.
+    """
+    proc = subprocess.Popen(
+        argv, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, encoding="utf-8", errors="replace",
+        cwd=cwd, env=env, **_CHILD_GROUP_KW)
+    if on_start is not None:
+        # A callback that throws must not become a leaked process. Note the
+        # order: the caller gets the handle BEFORE we block, which is the
+        # whole reason this function exists.
+        try:
+            on_start(proc)
+        except Exception:
+            _kill_tree(proc)
+            raise
+    try:
+        stdout, stderr = proc.communicate(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        _kill_tree(proc)
+        try:
+            proc.communicate(timeout=5)
+        except Exception:
+            pass
+        raise
+    return proc.returncode, stdout or "", stderr or ""
+
+
+def execute_python(code: str, timeout: int = None, on_start=None) -> str:
     """Execute Python code in a subprocess and return captured output.
 
     THIS IS NOT A SANDBOX, and this docstring used to say it was.
@@ -1487,19 +1566,13 @@ def execute_python(code: str, timeout: int = None) -> str:
         env["PYTHONIOENCODING"] = "utf-8"
         env["PYTHONUTF8"] = "1"
 
-        result = subprocess.run(
+        rc, stdout, stderr = _run_child(
             [sys.executable, "-X", "utf8", tmpname],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            timeout=timeout,
             cwd=str(BASE_DIR),
             env=env,
+            timeout=timeout,
+            on_start=on_start,
         )
-
-        stdout = result.stdout or ""
-        stderr = result.stderr or ""
 
         # Build labeled output so signal is distinguishable from error noise.
         parts = []
@@ -1507,8 +1580,8 @@ def execute_python(code: str, timeout: int = None) -> str:
             parts.append(stdout.rstrip())
         if stderr:
             parts.append("[STDERR]\n" + stderr.rstrip())
-        if result.returncode != 0 and not stderr:
-            parts.append(f"[EXIT CODE {result.returncode}]")
+        if rc != 0 and not stderr:
+            parts.append(f"[EXIT CODE {rc}]")
 
         out = "\n".join(parts) if parts else "[no output]"
 
@@ -1736,7 +1809,8 @@ def _confine_deny_roots():
     return roots
 
 
-def execute_python_confined(code: str, timeout: int = None, ns=None) -> str:
+def execute_python_confined(code: str, timeout: int = None, ns=None,
+                            on_start=None) -> str:
     """Run code with the confinement described above. Same return shape as
     execute_python: a labelled string, never an exception.
 
@@ -1779,19 +1853,17 @@ def execute_python_confined(code: str, timeout: int = None, ns=None) -> str:
         env = {"PATH": os.environ.get("PATH", ""),
                "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
                "TEMP": str(workdir), "TMP": str(workdir)}
-        result = subprocess.run(
+        rc, stdout, stderr = _run_child(
             [sys.executable, "-I", "-X", "utf8", tmpname],
-            capture_output=True, text=True, encoding="utf-8",
-            errors="replace", timeout=timeout, cwd=str(workdir), env=env,
+            cwd=str(workdir), env=env, timeout=timeout, on_start=on_start,
         )
-        stdout, stderr = result.stdout or "", result.stderr or ""
         parts = []
         if stdout:
             parts.append(stdout.rstrip())
         if stderr:
             parts.append("[STDERR]\n" + stderr.rstrip())
-        if result.returncode != 0 and not stderr:
-            parts.append(f"[EXIT CODE {result.returncode}]")
+        if rc != 0 and not stderr:
+            parts.append(f"[EXIT CODE {rc}]")
         return "\n".join(parts) if parts else "[no output]"
     except subprocess.TimeoutExpired:
         return f"[TIMEOUT] Code execution exceeded {timeout}s limit."

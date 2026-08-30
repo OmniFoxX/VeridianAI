@@ -4,17 +4,26 @@
 
 WHY THIS EXISTS
 
-Phase 1 of this panel ships a Run button that does not run anything, and two
-menu items that are not wired yet. That is a deliberate, staged decision -- the
-executor they would call has three defects that get fixed first -- but it is
-also exactly the shape that rots: someone tidies the "temporary" disabled
+Phase 1 of this panel shipped a Run button that did not run anything, and two
+menu items that were not wired yet. That was a deliberate, staged decision --
+the executor they would call had three defects that got fixed first -- but it
+is also exactly the shape that rots: someone tidies the "temporary" disabled
 attribute, or wires one item and forgets the label, and now the app has a
 control that lies.
 
-So the honesty is the CONTRACT, and it is tested. When execution lands, these
-assertions should FAIL and be updated in the same commit that makes them
-untrue. A red test here means "you changed what this panel promises" -- which
-is the moment to check that the promise still matches the code.
+So the honesty is the CONTRACT, and it is tested. Every one of the assertions
+below has now been through the cycle it was written for: Save as file went live
+in 2a, Toga copy/paste in 2b-ii, and RUN in 3b-ii -- and each time the
+assertion that said otherwise was rewritten in the same commit that made it
+untrue, never deleted and never silenced. A red test here means "you changed
+what this panel promises", which is the moment to check that the promise still
+matches the code.
+
+What the contract says NOW is the harder version of the same idea: the panel
+must not merely avoid lying about what it can do, it must be accurate about
+what running actually MEANS. Run is live, so the claims under test moved from
+"this button admits it does nothing" to "this button says whether your code is
+confined, and Expert admits that it is not".
 
 The rest is structure the other pieces depend on: the panel registry needs the
 view registered, the command palette needs data-view, and the cache-bust tool
@@ -116,18 +125,53 @@ ok("the editor is a textarea",
    re.search(r'<textarea[^>]*id="ide-editor"', HTML, re.S) is not None)
 ok("the editor has a label", 'for="ide-editor"' in HTML)
 
-print("\n=== 3. THE HONESTY CONTRACT (update these when Run lands) ===")
+print("\n=== 3. THE HONESTY CONTRACT ===")
 run_tag = re.search(r'<button[^>]*id="ide-run".*?</button>', HTML, re.S)
 ok("the Run button was found", run_tag is not None)
 if run_tag:
     tag = run_tag.group(0)
-    ok("Run is disabled", "disabled" in tag,
-       "Phase 1 ships no executor; an enabled Run would be a lie")
-    ok("...and its accessible name says so",
-       "not available" in tag.lower(),
-       'aria-label should tell a screen-reader user why it cannot be pressed')
-    ok("...and its tooltip explains when", "later build" in tag.lower(),
-       "a disabled control should say what would make it work")
+    # Phase 3b-ii: Run went LIVE. The three assertions that used to live here
+    # required it to be disabled, to say "not available" and to promise a
+    # "later build". All three were true when written and are false now, so
+    # they were rewritten here rather than removed -- the contract did not go
+    # away when the button started working, it got a harder job.
+    ok("Run is ENABLED", "disabled" not in tag,
+       "the executor defects are fixed and /api/ide/run exists")
+    ok("...and calls ideRun()", "ideRun()" in tag)
+    ok("...and no longer promises a later build",
+       "later build" not in tag.lower() and "not available" not in tag.lower())
+    ok("...and its tooltip says what running actually does to your machine",
+       "confined" in tag.lower(),
+       "the default modes confine the run; a Run button that does not say so "
+       "is the same class of omission as the old sandbox claim")
+    ok("...naming the three limits rather than just the word",
+       all(w in tag.lower() for w in ("network", "programs", "data folder")),
+       '"confined" on its own is a word, not a promise anyone can check')
+
+print("\n=== 3b. WHAT EXPERT MODE ADMITS ===")
+# The Expert dialog could only start saying this once it was TRUE -- which is
+# 3b-ii, not before. Until the confined runner existed there was nothing for
+# Expert to remove, and a dialog claiming otherwise would have been the exact
+# false-isolation problem the sandbox wording had.
+_dlg = IDEJS.split("function confirmExpert")[1].split("\n  /*")[0] \
+    if "function confirmExpert" in IDEJS else ""
+ok("the Expert dialog was found", bool(_dlg))
+ok("it says Expert REMOVES the confinement",
+   "removes the confinement" in _dlg.lower(),
+   "Expert's real cost is not just 'Toga may press Run' -- it is that Run "
+   "then reaches further")
+ok("...and says what the other modes give you instead",
+   "CONFINED_MEANS" in _dlg,
+   "the same sentence as the button and the blurb, from one variable, so the "
+   "three cannot drift into slightly different promises")
+ok("...and says confinement comes back on the way down",
+   "comes back" in _dlg.lower())
+ok("the ladder blurbs name confinement too",
+   IDEJS.count("confined") >= 2 or IDEJS.count("Confined") >= 2)
+ok("Cancel is never disabled",
+   'id="ide-expert-cancel">Cancel<' in _dlg
+   and "ide-expert-cancel\").disabled" not in _dlg,
+   "the way out of a scary dialog is never the thing you have to earn")
 
 menu = re.search(r'<div class="ide-menu"[^>]*>.*?</div>\s*</div>', HTML, re.S)
 ok("the menu was found", menu is not None)
@@ -173,7 +217,7 @@ if menu:
            "var allowed = _mode !== \"beginner\"" in IDEJS
            and "var on = allowed && _togaClip" in IDEJS)
 
-print("\n=== 3b. Save as file is wired end to end ===")
+print("\n=== 3c. Save as file is wired end to end ===")
 ok("ide.js defines ideSaveAs", "function ideSaveAs" in IDEJS)
 ok("...and exports it", "window.ideSaveAs" in IDEJS)
 ok("...posting to /api/downloads/save", "/api/downloads/save" in IDEJS)
@@ -320,5 +364,5 @@ if _fails:
     for f in _fails:
         print("   - " + f)
     sys.exit(1)
-print("ALL CHECKS PASSED - IDE + Display panel (Phase 1 shell)")
+print("ALL CHECKS PASSED - IDE + Display panel")
 sys.exit(0)

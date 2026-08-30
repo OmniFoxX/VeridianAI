@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=c723bae41c" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=4c91854d53" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -2146,24 +2146,27 @@
               data-tip="Expand to double width"
               onclick="ideToggleExpand()"
             ></button>
-            <!-- Run is DELIBERATELY disabled and says so. Execution arrives in
-                 its own release, after the executor defects are fixed; a
-                 button that looks live and does nothing is worse than one
-                 that admits it. -->
+            <!-- LIVE as of Phase 3b-ii. It shipped disabled and said so for
+                 two releases while the executor it calls was fixed; the
+                 assertions in test_ide_panel.py that said "disabled" changed
+                 in the same commit that made them untrue, which is the whole
+                 reason they were written down.
+
+                 ONE button, two states: Run, then Stop while something is
+                 running. ide.js paints the label and the tooltip -- the
+                 tooltip is mode-dependent, because Expert removes the
+                 confinement and the button is where a person would look to
+                 find that out. -->
             <button
               class="ide-run"
               id="ide-run"
               type="button"
-              disabled
-              aria-label="Run - not available yet"
-              aria-describedby="ide-run-note"
-              data-tip="Running code arrives in a later build. The editor and Save work now."
+              aria-label="Run the code in the editor"
+              data-tip="Run the editor's contents, confined - no network, no new programs, and no access to the app's own data folder."
+              onclick="ideRun()"
             >
               ▶ Run
             </button>
-            <span class="sr-only" id="ide-run-note"
-              >Running code is not available in this build.</span
-            >
             <!-- The authority ladder, attached to Run because that is what it
                  governs. The server stores and enforces it; this only shows
                  and changes it. -->
@@ -2291,7 +2294,7 @@
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
     <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
-    <script src="/static/js/ide.js?v=9acd30b54e"></script>
+    <script src="/static/js/ide.js?v=d146b39c05"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

@@ -32,6 +32,7 @@ The third is the one to re-read if this test ever goes red for wording: the
 assertion is not "avoid a word", it is "do not claim an isolation that does not
 exist".
 """
+import inspect
 import io
 import os
 import sys
@@ -68,14 +69,28 @@ ok("the default is minutes, not hours",
    1 <= se.CODE_EXEC_TIMEOUT_DEFAULT <= 600,
    "56000 SECONDS was 15h33m; anything in that class is the same bug")
 ok("the ceiling is an hour or less", se.CODE_EXEC_TIMEOUT_MAX <= 3600)
-ok("56000 is gone from the executor",
-   "56000" not in _read(_HERE, "sage_engine.py").split(
-       "def execute_python")[0].split("CODE_EXEC_TIMEOUT")[0][-400:]
-   or True)
-ok("execute_python defaults to None, then resolves",
-   "def execute_python(code: str, timeout: int = None)" in _read(
-       _HERE, "sage_engine.py"),
+# This check used to end in "or True", which made it a decoration rather than
+# a test. What it is for: the old 56000-second default must not have been left
+# behind anywhere in the executor's own body.
+_exec_src = _read(_HERE, "sage_engine.py")
+_exec_body = _exec_src.split("def execute_python(")[1].split(
+    "\ndef ")[0] if "def execute_python(" in _exec_src else ""
+ok("56000 is gone from the executor body",
+   "56000" not in _exec_body,
+   "the 15h33m default; a leftover copy is a second place to change it")
+
+# Asserted through inspect, not by matching the signature LINE. The line-match
+# version went red the moment execute_python grew an on_start parameter for the
+# Stop button -- a correct change reported as a defect, which is how a test
+# teaches people to stop reading it.
+_sig = inspect.signature(se.execute_python)
+ok("execute_python's timeout defaults to None, then resolves",
+   _sig.parameters["timeout"].default is None,
    "a literal in the signature is a second place to change it")
+ok("...and it can hand out the child process, so Stop can be real",
+   "on_start" in _sig.parameters
+   and "on_start" in inspect.signature(se.execute_python_confined).parameters,
+   "a Stop button that only stops caring is not a Stop button")
 
 print("\n=== 2. Out-of-range is REFUSED, not silently clamped ===")
 r = se.execute_python("print(1)", timeout=86400)

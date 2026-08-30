@@ -1923,10 +1923,24 @@ pre:hover .copy-btn {
   color: var(--gold);
 }
 /* Disabled and honest about it. Not hidden: the control is part of the design
-   and people should see where running will live. */
+   and people should see where running lives. Reached now only while a Stop is
+   in flight -- Run itself is live as of Phase 3b-ii. */
 .ide-run:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+/* Stop does not look like Run. Same button, and a person who glances at it
+   mid-run must be able to tell which one they are about to press without
+   reading the word -- so the colour changes too, not only the label. */
+.ide-run.is-running {
+  border-color: var(--error);
+  color: var(--error);
+}
+.ide-run.is-running:hover:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+  background: var(--surface-2);
 }
 
 /* Attached to Run, which is what it governs. Run keeps flex:1 and simply has

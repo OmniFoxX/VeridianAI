@@ -1,18 +1,23 @@
 /* ide.js -- the IDE + Display view in the Oracle panel.
  *
- * PHASE 1: THE SHELL. The display area, the menu bar, the editor, and the
- * expand/shrink control are real and work. RUNNING CODE DOES NOT EXIST YET and
- * the Run button says so rather than pretending: the executor it would call
- * (sage_engine.execute_python) is not sandboxed despite its docstring, its
- * default timeout is 56000 SECONDS, and code_exec_enabled has a
- * schema-says-off / fallback-says-on mismatch. Those get fixed before a button
- * in this panel can reach them.
+ * EVERYTHING IN HERE IS LIVE. It got there in stages, and the staging was the
+ * point: the Run button shipped visibly disabled and said so for two releases
+ * while the executor it would call was fixed (its timeout was 56000 SECONDS,
+ * its docstring claimed a sandbox it did not have, and code_exec_enabled read
+ * off in the schema and on in the fallback). A control that looks live and
+ * does nothing is worse than one that admits it -- so it admitted it, until it
+ * did not have to.
  *
- * "Save as file" IS live: /api/downloads/save now delegates to the one
- * executor and enforces an extension allowlist, so it is safe to point a
- * button at. "Allow Toga to Copy/Paste" stays disabled until the
- * Beginner/Advanced/Expert modes that govern it exist -- a control that looks
- * live and does nothing is worse than one that admits it.
+ * Run now posts to /api/ide/run, and the SERVER decides everything that
+ * matters: whether code execution is on at all, what Customs makes of the
+ * code, how long it may take, and -- from the mode ladder -- whether it runs
+ * confined. Beginner and Advanced run confined (no network, no new processes,
+ * no reach into the app's data folder, their own scratch directory); Expert
+ * runs unconfined, which is the honest thing Expert buys. None of that is
+ * decided here. This file shows a button and reports an answer.
+ *
+ * Stop is real: it kills the child process and anything it started, rather
+ * than merely stopping caring about the result.
  *
  * NO EDITOR LIBRARY. Monaco and CodeMirror both mean a CDN, and offline boot
  * is a hard requirement. A textarea with Tab handling is the honest answer at
@@ -31,10 +36,18 @@
    * of trusting the value we just set. */
   var MODES = ["beginner", "advanced", "expert"];
   var MODE_BLURB = {
-    beginner: "Beginner - the editor is yours alone. You write, you Run, you Save.",
-    advanced: "Advanced - Toga may read and write the editor. Only you press Run.",
-    expert: "Expert - Toga may read, write, AND run code by itself."
+    beginner: "Beginner - the editor is yours alone. You write, you Run, you "
+      + "Save. Code runs confined.",
+    advanced: "Advanced - Toga may read and write the editor. Only you press "
+      + "Run. Code runs confined.",
+    expert: "Expert - Toga may read, write, AND run code by itself. Code runs "
+      + "WITHOUT confinement."
   };
+  /* What "confined" means, in one sentence, wherever it has to be said. Kept
+   * in one place so the tooltip, the dialog and the blurb cannot drift into
+   * three slightly different promises. */
+  var CONFINED_MEANS = "no network, no new programs, and no access to the "
+    + "app's own data folder";
   var _mode = "beginner";
   /* Separate from the mode on purpose. The mode says what is PERMITTED; this
    * says whether it is switched ON right now. Advanced with the switch off
@@ -121,10 +134,12 @@
         expertOpt.textContent = _canExpert ? "Expert" : "Expert (owner only)";
       }
     }
-    // The copy/paste item is governed by the ladder. It is still not WIRED --
-    // that lands next -- so it stays disabled either way, but the reason it
-    // gives is the true one for the mode you are actually in.
+    // Both of these read the mode, so both get repainted when it changes.
+    // Run's tooltip is mode-dependent because CONFINEMENT is: the same button
+    // means something materially different in Expert, and the place a person
+    // looks to find that out is the button.
     applyTogaClip();
+    paintRun();
   }
 
   /* The switch itself. Beginner disables it AND forces the displayed state
@@ -306,15 +321,22 @@
         '<div class="modal-box" style="max-width:460px">' +
         '<div class="modal-title" id="ide-expert-title">Expert mode</div>' +
         '<div style="font-size:13px;line-height:1.55;color:var(--text)">' +
-        "<p style=\"margin:0 0 8px\"><strong>Expert mode lets Toga run code in the " +
-        "editor by itself.</strong></p>" +
-        "<p style=\"margin:0 0 8px\">It can write into the editor and press Run " +
-        "without asking you first. Code runs on this machine, with your " +
-        "account's access to your files and network.</p>" +
+        "<p style=\"margin:0 0 8px\"><strong>Expert mode does two things, and the " +
+        "second one is the one to read twice.</strong></p>" +
+        "<p style=\"margin:0 0 8px\"><strong>1.</strong> Toga may write into the " +
+        "editor and press Run without asking you first.</p>" +
+        "<p style=\"margin:0 0 8px\"><strong>2. It removes the confinement.</strong> " +
+        "In Beginner and Advanced your code runs with " + CONFINED_MEANS +
+        ". In Expert none of that applies: code runs with your account's full " +
+        "access to your files and your network.</p>" +
+        "<p style=\"margin:0 0 8px\">So this is not only \u201cToga may press " +
+        "Run\u201d. It is \u201cToga may press Run, and Run reaches " +
+        "further\u201d.</p>" +
         "<p style=\"margin:0 0 8px\">A model can be wrong, and it can be talked into " +
         "being wrong by something it reads. Use this when you are watching.</p>" +
         "<p style=\"margin:0\">You can drop back to Beginner or Advanced at any " +
-        "time, with no confirmation.</p>" +
+        "time, with no confirmation. Confinement comes back the moment you " +
+        "do.</p>" +
         "</div>" +
         (needTick
           ? '<label style="display:flex;gap:8px;align-items:flex-start;' +
@@ -455,6 +477,103 @@
 
   function ideClearOutput() { ideShowOutput(""); }
 
+
+  /* ---- run / stop -------------------------------------------------------
+   * ONE BUTTON. It is Run while nothing is running and Stop while something
+   * is, because two buttons where only ever one is usable is two things to
+   * look at to learn one fact.
+   *
+   * Nothing here decides whether the code MAY run, how long it may take, or
+   * whether it is confined. All of that is the server's, read from the
+   * caller's own stored mode -- a browser that says "I am in Expert" is a
+   * browser talking about itself. This shows a state and reports an answer.
+   */
+  var _running = false;
+  var _stopping = false;
+
+  function paintRun() {
+    var b = $("ide-run");
+    if (!b) return;
+    b.textContent = _stopping ? "Stopping…" : (_running ? "■ Stop" : "▶ Run");
+    b.disabled = _stopping;
+    b.classList.toggle("is-running", _running && !_stopping);
+    if (_running) {
+      b.setAttribute("aria-label", "Stop the running code");
+      b.setAttribute("data-tip", "Stop this run. The program and anything it "
+        + "started are ended.");
+      return;
+    }
+    b.setAttribute("aria-label", "Run the code in the editor");
+    b.setAttribute("data-tip", _mode === "expert"
+      ? "Run the editor's contents. Expert runs WITHOUT confinement: the code "
+        + "has your account's access to your files and network."
+      : "Run the editor's contents, confined - " + CONFINED_MEANS + ".");
+  }
+
+  async function ideRun() {
+    if (_stopping) return;
+    if (_running) { await ideStop(); return; }
+
+    var ta = $("ide-editor");
+    var code = ta ? ta.value : "";
+    if (!code.trim()) {
+      ideShowOutput("[nothing to run] The editor is empty.");
+      return;
+    }
+
+    _running = true; paintRun();
+    ideShowOutput("Running…");
+    try {
+      var res = await fetch("/api/ide/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code })
+      });
+      if (!res.ok) {
+        // The server's refusals name the thing that would fix them -- the
+        // consent toggle, or a run already in progress. Repeat them verbatim
+        // rather than inventing a friendlier version that is less useful.
+        var why = "Could not run.";
+        try {
+          var d = await res.json();
+          why = (d && (d.detail || d.error)) || why;
+          if (why && typeof why === "object") why = why.error || "Could not run.";
+        } catch (e) { /* keep the generic message */ }
+        ideShowOutput("[REFUSED] " + String(why));
+        return;
+      }
+      var data = await res.json();
+      ideShowOutput((data && data.output) || "[no output]");
+      if (window.Haptic) {
+        Haptic.vibrate(data && data.status === "ok"
+          ? Haptic.PATTERNS.toggle : Haptic.PATTERNS.error);
+      }
+    } catch (e) {
+      ideShowOutput("[EXECUTION ERROR] Could not reach the backend.");
+    } finally {
+      _running = false; _stopping = false; paintRun();
+    }
+  }
+
+  /* Fire-and-forget by design. The kill lands server-side and the RUN request
+   * -- still open -- is what comes back and repaints, carrying whatever the
+   * program managed to print before it was stopped. Resolving the button here
+   * instead would show "Run" while output was still arriving. */
+  async function ideStop() {
+    _stopping = true; paintRun();
+    try {
+      await fetch("/api/ide/stop", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}"
+      });
+    } catch (e) {
+      // The run request is the one that reports; if this never landed, it
+      // simply finishes normally and says so.
+      _stopping = false; paintRun();
+    }
+  }
+
   /* ---- save as file ----------------------------------------------------
    * Writes the buffer into the person's own downloads folder through
    * POST /api/downloads/save. The server decides what may be written -- see
@@ -528,6 +647,7 @@
     // Paint the safe end of the ladder before the server has answered. If the
     // fetch never lands, "Beginner" is the state the panel should be showing.
     applyMode("beginner");
+    paintRun();
 
     if (window.PanelViews) {
       window.PanelViews.register("ide", {
@@ -563,6 +683,7 @@
   window.ideUndoWrite = ideUndoWrite;
   window.ideMode = ideMode;
   window.ideMayTogaTouchBuffer = ideMayTogaTouchBuffer;
+  window.ideRun = ideRun;
   window.ideSaveAs = ideSaveAs;
   window.ideShowOutput = ideShowOutput;
   window.ideClearOutput = ideClearOutput;

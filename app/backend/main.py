@@ -3588,6 +3588,156 @@ async def api_set_ide_prefs(payload: dict, request: Request):
     return out
 
 
+# --- the IDE Run button -----------------------------------------------------
+# ONE RUN PER NAMESPACE, and that is what makes Stop simple: /api/ide/stop
+# needs no run id, because "your run" is unambiguous. An id supplied by the
+# client would be one more thing to validate for no gain -- a caller can only
+# ever reach its own namespace's entry anyway.
+#
+# The entry is created BEFORE the worker thread starts, so a Stop that arrives
+# in the first few milliseconds finds something to set. `proc` is filled in by
+# sage_engine's on_start callback once the child exists; if `cancelled` is
+# already true by then, the callback kills it immediately rather than letting a
+# run start that somebody has already stopped.
+_IDE_RUNS: dict = {}
+_IDE_RUNS_LOCK = threading.Lock()
+
+
+def _ide_run_output(raw: str, cancelled: bool) -> str:
+    """A killed child exits non-zero, and the executor honestly reports
+    `[EXIT CODE -9]`. That is the truth about the process and a lie about what
+    happened -- the person pressed Stop. Only the layer that did the killing
+    knows which it was, so the relabelling happens here and nowhere else."""
+    if not cancelled:
+        return raw
+    body = re.sub(r"\[EXIT CODE -?\d+\]\s*$", "", raw or "").rstrip()
+    return (body + "\n\n[STOPPED] You stopped this run.") if body \
+        else "[STOPPED] You stopped this run."
+
+
+@app.post("/api/ide/run")
+async def api_ide_run(payload: dict, request: Request):
+    """Run the editor's contents and return what it printed.
+
+    Three gates, in this order, and the order is the point:
+
+      1. `code_exec_enabled` -- the same consent toggle the [CODE:] path
+         obeys. The IDE does not get a private door around it.
+      2. CUSTOMS, origin="ide". Every executor registers an origin; a new one
+         that skipped it would be the first unpoliced path into the same
+         subprocess. Customs validates SHAPE, not safety, so this is a border
+         check and not a substitute for the confinement below.
+      3. The mode ladder decides WHICH executor. Beginner and Advanced run
+         confined -- no network, no new processes, no reach into the data
+         folder, their own scratch directory. Expert runs unconfined, and that
+         is the honest thing Expert buys.
+
+    The mode is read from the caller's own namespace, never from the payload.
+    A client that says "I am in Expert" is a client talking about itself.
+    """
+    code = payload.get("code", "")
+    if not isinstance(code, str):
+        code = str(code)
+    if not code.strip():
+        raise HTTPException(400, "there is nothing in the editor to run")
+
+    _ns = _safe_ns(_session_ns(request))
+    _eff = _effective_config(_session_ns(request))
+    if not _eff.get("code_exec_enabled", False):
+        # 403 and not a silent empty result: the fix is a toggle the person
+        # owns, so name it.
+        raise HTTPException(
+            403, "Code execution is off. Turn it on in Settings -> "
+                 "Code Execution to use Run.")
+
+    _cst = customs_daemon.inspect_tag("code", code, origin="ide")
+    if not _cst.allowed:
+        # A bounce is a refusal with a reason attached, and the reason is for
+        # the person -- so it goes to the display area like any other output
+        # rather than becoming an HTTP error the panel has to translate.
+        return {"status": "refused", "output": _cst.message,
+                "mode": _ide_mode(_ns), "confined": True}
+    code = _cst.content
+
+    try:
+        _timeout = int(_eff.get("code_exec_timeout",
+                                sage_engine.CODE_EXEC_TIMEOUT_DEFAULT))
+    except (TypeError, ValueError):
+        _timeout = sage_engine.CODE_EXEC_TIMEOUT_DEFAULT
+
+    _mode = _ide_mode(_ns)
+    _confined = _mode != "expert"
+
+    with _IDE_RUNS_LOCK:
+        if _ns in _IDE_RUNS:
+            raise HTTPException(409, "a run is already in progress")
+        entry = {"proc": None, "cancelled": False}
+        _IDE_RUNS[_ns] = entry
+
+    def _on_start(proc):
+        with _IDE_RUNS_LOCK:
+            entry["proc"] = proc
+            already = entry["cancelled"]
+        if already:
+            # Stopped between the endpoint accepting the run and the child
+            # existing. Without this the process would run to completion and
+            # the Stop would have done nothing.
+            sage_engine._kill_tree(proc)
+
+    _audit_api_action(request, "ide.run",
+                      {"mode": _mode, "confined": _confined,
+                       "chars": len(code)})
+    try:
+        loop = asyncio.get_event_loop()
+        # Positional, matching the [CODE:] call site below -- run_in_executor
+        # takes the arguments directly and there is no reason for this one
+        # path to reach for functools.
+        if _confined:
+            raw = await loop.run_in_executor(
+                None, sage_engine.execute_python_confined,
+                code, _timeout, _ns, _on_start)
+        else:
+            raw = await loop.run_in_executor(
+                None, sage_engine.execute_python,
+                code, _timeout, _on_start)
+    except Exception as e:
+        raw = f"[EXECUTION ERROR] {type(e).__name__}: {e}"
+    finally:
+        with _IDE_RUNS_LOCK:
+            was_cancelled = _IDE_RUNS.get(_ns, {}).get("cancelled", False)
+            _IDE_RUNS.pop(_ns, None)
+
+    out = _ide_run_output(raw, was_cancelled)
+    if was_cancelled:
+        status = "stopped"
+    elif out.startswith("[TIMEOUT]"):
+        status = "timeout"
+    elif out.startswith("[EXECUTION ERROR]"):
+        status = "error"
+    else:
+        status = "ok"
+    return {"status": status, "output": out, "mode": _mode,
+            "confined": _confined}
+
+
+@app.post("/api/ide/stop")
+async def api_ide_stop(request: Request):
+    """Stop this namespace's run, for real -- the child and anything it
+    started. Idempotent: stopping nothing is not an error, because the button
+    races the run finishing on its own and neither side should have to win."""
+    _ns = _safe_ns(_session_ns(request))
+    with _IDE_RUNS_LOCK:
+        entry = _IDE_RUNS.get(_ns)
+        if entry is None:
+            return {"stopped": False, "reason": "nothing running"}
+        entry["cancelled"] = True
+        proc = entry.get("proc")
+    if proc is not None:
+        sage_engine._kill_tree(proc)
+    _audit_api_action(request, "ide.stop", {})
+    return {"stopped": True}
+
+
 # --- API key rotation -------------------------------------------------------
 # The key exists so external tools (Continue.dev, Claude Desktop, curl) can
 # reach this machine. Until now it could only be rotated by running a .bat that
