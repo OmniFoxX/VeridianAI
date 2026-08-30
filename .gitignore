@@ -43,7 +43,14 @@ dyn_dispatch_core.dll
 onnx_custom_ops.dll
 onnxruntime_providers_ryzenai.dll
 onnxruntime_vitisai_ep.dll
-test_report_mechanism.py
+# test_report_mechanism.py was ignored here after CodeQL #193
+# (py/clear-text-logging-sensitive-data) fired on its own result
+# printer. The finding traced a loop variable literally named `secret`
+# -- a canary string the test plants so it can prove the string is
+# ABSENT from the report file. Renamed to `canary`, which is what it
+# always was, and the file is tracked again: it is the 49-check guard
+# for the reporting mechanism the Store rejected v2.16.1 over, and it
+# belongs in every tree.
 
 # Editor junk
 .vscode/

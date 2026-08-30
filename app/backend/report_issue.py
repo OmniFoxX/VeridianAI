@@ -20,7 +20,7 @@ person did not open, which is exactly what this product promises not to have.
 THE LEAST DATA THAT CAN STILL FIX THE PROBLEM
 
 Todd: "I don't want any more data than the absolute least that is needed to
-rectify whatever the issue was."
+rectify whatever the issue was." <- Verbatim & chain-witnessed I said that (TD)
 
 So the default report is the flagged reply plus the facts needed to reproduce
 it -- version, build, OS, backend, model. Nothing else. The prompt that caused
@@ -79,7 +79,7 @@ def _environment(detail: bool = False) -> Dict[str, str]:
     """The facts needed to reproduce a content problem, and no others.
 
     Deliberately NOT collected: username, machine name, IP, file paths, install
-    location, hardware serials. None of them help explain why a model said
+    location, hardware serials. None of them help explain why a model generated
     something, and every one of them identifies a person or a machine.
     """
     env = {}
@@ -97,7 +97,7 @@ def _environment(detail: bool = False) -> Dict[str, str]:
     env["Operating system"] = "%s %s" % (platform.system(), platform.release())
     if detail:
         # Only on request. The architecture and Python build occasionally
-        # matter for a crash; they never matter for "the model said something
+        # matter for a crash; they never matter for "the model generated something
         # wrong", which is what this feature is for.
         env["Architecture"] = platform.machine()
         env["Python"] = platform.python_version()

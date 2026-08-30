@@ -2,7 +2,7 @@
 
 **Status: aim and evidence, not a compliance claim.**
 
-VeridianAI is designed *toward* these standards and this file records, honestly,
+VeridianAI is designed _toward_ these standards and this file records, honestly,
 where it stands. Nothing here asserts compliance. Neither standard is
 self-certified in any meaningful sense — HIPAA compliance is a property of an
 organisation and its practices, not of a piece of software, and a WCAG
@@ -26,7 +26,7 @@ because it was built for other reasons:
   the user enables one. Data that never leaves the machine has a much smaller
   surface to protect.
 - **Encrypted at rest.** Fernet on conversations, memory, procedures, evidence.
-- **Tamper-evident.** The memory chain is hash-chained, which is the *shape* of
+- **Tamper-evident.** The memory chain is hash-chained, which is the _shape_ of
   an audit control even where it is not being used as one.
 - **Per-profile isolation.** `sage_data/users/<ns>/` with `_safe_ns` containment.
 - **Owner gating.** System-level actions are refused to non-owners with a
@@ -39,14 +39,14 @@ because it was built for other reasons:
 
 ### The strong parts
 
-| Safeguard (general terms) | Where it lives |
-|---|---|
-| Access control / unique user identification | per-profile namespaces, scrypt accounts, session gate |
-| Transmission security | loopback only by default; wss for the UI socket; TLS validation on outbound |
-| Encryption at rest | Fernet across all stored user content |
-| Integrity | hash-chained memory log, signed build manifest |
-| Disposal | ZDR burn, per-profile scoped |
-| Automatic logoff | auth cookie is session-scoped; window close clears it |
+| Safeguard (general terms)                   | Where it lives                                                              |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Access control / unique user identification | per-profile namespaces, scrypt accounts, session gate                       |
+| Transmission security                       | loopback only by default; wss for the UI socket; TLS validation on outbound |
+| Encryption at rest                          | Fernet across all stored user content                                       |
+| Integrity                                   | hash-chained memory log, signed build manifest                              |
+| Disposal                                    | ZDR burn, per-profile scoped                                                |
+| Automatic logoff                            | auth cookie is session-scoped; window close clears it                       |
 
 ### The gap that was here: **attribution on the API surface** -- CLOSED in v2.14
 
@@ -54,7 +54,7 @@ because it was built for other reasons:
 `.api_keystore.json` whose entries carried **labels, not owners**:
 
 ```json
-{"tokens": [{"label": "default (rotated)", "hash": "...", "scopes": ["*"]}]}
+{ "tokens": [{ "label": "default (rotated)", "hash": "...", "scopes": ["*"] }] }
 ```
 
 So UI actions were attributable -- a cookie session names the user -- and API
@@ -72,8 +72,8 @@ a single-user install, a string means that profile and nothing else -- so a
 token principal drops into the existing namespace plumbing rather than
 introducing a second notion of identity.
 
-**2. `_verify_token` returns a principal, not a scope list.** It answers *who*
-as well as *what may they do*. It had exactly one caller, which is why this was
+**2. `_verify_token` returns a principal, not a scope list.** It answers _who_
+as well as _what may they do_. It had exactly one caller, which is why this was
 tractable.
 
 **3. Containment is enforced in one place.** `require_scope` publishes the
@@ -129,13 +129,13 @@ kept because the shape of the mistake is worth keeping.
 
 **What the tokens gate** -- three endpoints, and only these:
 
-| endpoint | scope |
-|---|---|
+| endpoint                    | scope        |
+| --------------------------- | ------------ |
 | `POST /v1/chat/completions` | `chat:write` |
-| `GET /v1/models` | `chat:read` |
-| `POST /mcp/v1/jsonrpc` | `mcp:*` |
+| `GET /v1/models`            | `chat:read`  |
+| `POST /mcp/v1/jsonrpc`      | `mcp:*`      |
 
-**Two faults, not one.** The chat path was *broken* under multi-user, not
+**Two faults, not one.** The chat path was _broken_ under multi-user, not
 merely unscoped: `_ws_bridge`'s mock websocket lacked `.cookies` and `.close`,
 so `ws_chat`'s guard raised `AttributeError` straight out of the handler. It
 failed CLOSED -- nothing leaked, the endpoint simply stopped working. The MCP
@@ -158,19 +158,19 @@ read and wrote the owner's archives, downloads and procedural memory.
 - `access_policy.mcp_allowed`, default **True**, fail-open: same abilities for
   every profile, owner can revoke
 
-**The hash chain stays shared, deliberately.** Per-profile *data*; one
-tamper-evident *audit log*. Splitting the chain per user would turn "has
+**The hash chain stays shared, deliberately.** Per-profile _data_; one
+tamper-evident _audit log_. Splitting the chain per user would turn "has
 anything been tampered with?" into N questions and hide each profile's activity
 from the owner -- backwards for an audit control. Entries are attributed
 instead: `owner_ns` is stamped into every procedural witness.
 
 **Verification -- 86 checks across three layers:**
 
-| file | checks | proves |
-|---|---|---|
-| `test_api_ownership.py` | 39 | the keystore binds tokens to profiles |
-| `test_mcp_containment.py` | 28 | a namespace reaches the storage layer |
-| `test_api_http.py` | 19 | **over real HTTP**: the dependency publishes the principal where the endpoint reads it |
+| file                      | checks | proves                                                                                 |
+| ------------------------- | ------ | -------------------------------------------------------------------------------------- |
+| `test_api_ownership.py`   | 39     | the keystore binds tokens to profiles                                                  |
+| `test_mcp_containment.py` | 28     | a namespace reaches the storage layer                                                  |
+| `test_api_http.py`        | 19     | **over real HTTP**: the dependency publishes the principal where the endpoint reads it |
 
 That third file exists because of what went wrong here. The first two would
 have passed happily while the endpoints had no `request` parameter at all --
@@ -191,17 +191,17 @@ encryption keys are a stated goal and a larger change than this work.
 
 ### Fixed and verified this cycle
 
-| Item | Before | After |
-|---|---|---|
-| `--text-muted` on `--surface-2/-3` (parchment) | 4.40 / 3.88 | **#30281e**, >=4.72 on all five surfaces |
-| `--error` (parchment) | 4.43 / 3.91 | **#550c0c**, >=4.73 |
-| `--teal` on `--surface-3` -- control borders **and the focus ring** | **2.70** (fails 1.4.11) | **#0c4942**, >=3.33 |
-| `.status-text` -- the app's error channel | 11px at ~1.7:1 | `--text-muted`, 12px, `.is-error`, `role="alert"` |
-| Dialog focus handling | focus never moved in; never restored; Tab escaped behind the dialog | shared `modal-a11y.js` |
-| **`--text-faint` -- all 32 usages** | 1.45-1.85:1 parchment, 2.13-2.39:1 dark | **retired**; every usage moved to `--text-muted` |
-| `.input-disclaimer` `opacity: 0.85` | dragged even `--text-muted` to 3.76:1 | removed |
-| `.scoreboard-clear` | 9px | 11px |
-| Toggle knob, OFF state | 2.13:1 dark / 1.45:1 parchment against its own track | `--text-muted`, 5.44 / 4.72 |
+| Item                                                                | Before                                                              | After                                             |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------- |
+| `--text-muted` on `--surface-2/-3` (parchment)                      | 4.40 / 3.88                                                         | **#30281e**, >=4.72 on all five surfaces          |
+| `--error` (parchment)                                               | 4.43 / 3.91                                                         | **#550c0c**, >=4.73                               |
+| `--teal` on `--surface-3` -- control borders **and the focus ring** | **2.70** (fails 1.4.11)                                             | **#0c4942**, >=3.33                               |
+| `.status-text` -- the app's error channel                           | 11px at ~1.7:1                                                      | `--text-muted`, 12px, `.is-error`, `role="alert"` |
+| Dialog focus handling                                               | focus never moved in; never restored; Tab escaped behind the dialog | shared `modal-a11y.js`                            |
+| **`--text-faint` -- all 32 usages**                                 | 1.45-1.85:1 parchment, 2.13-2.39:1 dark                             | **retired**; every usage moved to `--text-muted`  |
+| `.input-disclaimer` `opacity: 0.85`                                 | dragged even `--text-muted` to 3.76:1                               | removed                                           |
+| `.scoreboard-clear`                                                 | 9px                                                                 | 11px                                              |
+| Toggle knob, OFF state                                              | 2.13:1 dark / 1.45:1 parchment against its own track                | `--text-muted`, 5.44 / 4.72                       |
 
 ### Corrections to what this document previously claimed
 
@@ -225,7 +225,7 @@ VeridianAI should be treated as unmeasured, not as passing.
 
 **2. "`--text-faint` is 1.45-1.85:1 on every light surface."**
 
-Also on every *dark* surface, at 2.13-2.39:1. The dark theme was never clean;
+Also on every _dark_ surface, at 2.13-2.39:1. The dark theme was never clean;
 it was never checked.
 
 ### What the auditor does now
@@ -247,7 +247,7 @@ it was never checked.
   audit run.
 - `check_tokens.py` -- **no browser needed.** Every text token against every
   surface token, both themes, in under a second. Thresholds follow each token's
-  *actual* declarations in the stylesheet, not its name: `color` usage is judged
+  _actual_ declarations in the stylesheet, not its name: `color` usage is judged
   at 4.5:1 and reported as a failure, border/outline usage at 3:1 and reported
   as review, because 1.4.11 exempts decorative dividers and a token cannot say
   which it is drawing.
@@ -266,14 +266,14 @@ function, and the rule logic is tested against stubbed probe output.
 none of which the old tooling could see. These are palette decisions, not
 mechanical fixes, so they are listed rather than changed:
 
-| Token | Theme | Range | Note |
-|---|---|---|---|
-| `--warning` | parchment | **1.42-1.82** | a warning that cannot be read is the worst case here |
-| `--success` | parchment | 2.59-3.32 | used for the "Detected" hardware badge |
-| `--teal` | parchment | 3.34-4.28 | passes as a *border* (3:1); fails where it is text |
-| `--teal-dim` | both | 3.22-4.22 | text usage |
-| `--gold-dim` | parchment | 3.41-4.38 | text usage |
-| `--gold` | parchment | 4.32 / 3.84 on `--surface-2/-3` | **the ladder gap, recurring** -- the earlier fix cleared `--bg` and `--surface` and stopped there |
+| Token        | Theme     | Range                           | Note                                                                                              |
+| ------------ | --------- | ------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `--warning`  | parchment | **1.42-1.82**                   | a warning that cannot be read is the worst case here                                              |
+| `--success`  | parchment | 2.59-3.32                       | used for the "Detected" hardware badge                                                            |
+| `--teal`     | parchment | 3.34-4.28                       | passes as a _border_ (3:1); fails where it is text                                                |
+| `--teal-dim` | both      | 3.22-4.22                       | text usage                                                                                        |
+| `--gold-dim` | parchment | 3.41-4.38                       | text usage                                                                                        |
+| `--gold`     | parchment | 4.32 / 3.84 on `--surface-2/-3` | **the ladder gap, recurring** -- the earlier fix cleared `--bg` and `--surface` and stopped there |
 
 `--gold` is the instructive one: it was deliberately tuned for AA in v2.12.7,
 and it still failed two surfaces down, because the check that blessed it only
@@ -350,3 +350,9 @@ which is a detection result and not text inside an inactive control; and the
 toggle knob is the visual indicator of the control's state, which 1.4.11
 covers explicitly. The knob was the closer call and the more consequential one
 -- in the OFF state it was reading as an empty track rather than an off one.
+
+# This document and all documentation has been generated by AI and Human edited.
+
+- A Human (Todd [That's Me, the Human]) Architect/Director/Editor led AI coding
+  team of multiple current leading online frontier models, and many local models
+  using VeridianAI's multi-model slots with Toga (very large local model library).

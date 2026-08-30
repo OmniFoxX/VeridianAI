@@ -14,19 +14,19 @@ comes up.
 
 ## Vocabulary quick-reference
 
-| Term | Plain meaning |
-|------|---------------|
-| **bind** | Which "doors" of the computer a program listens at for incoming connections. |
-| **loopback / `127.0.0.1` / localhost** | A special address meaning "this same computer only." Traffic to it never leaves the machine. |
-| **`0.0.0.0`** | "Listen on *every* door, including Wi-Fi/LAN" — other devices can reach it. |
-| **port** | The numbered door (e.g. `8080`). |
-| **plaintext** | Unencrypted; anyone who can see the network traffic can read it. |
-| **shell** | The command interpreter (`cmd.exe` / `bash`). Understands special symbols like `&&`, `\|`, `>`, `%VAR%`. |
-| **argv (argument list)** | A command expressed as separate items: `["python", "main.py", "--port", "8188"]`. |
-| **serialize / deserialize (load)** | Turn a live object into bytes to save (serialize); turn bytes back into a live object (deserialize/load). |
-| **pickle** | Python's built-in serialize format. Can store *code*, not just data — which is why loading an untrusted one is dangerous. |
-| **TLS** | The encryption behind `https://` and `wss://`. |
-| **`ws://` vs `wss://`** | WebSocket (a live two-way browser↔server channel), plaintext vs. encrypted. The extra `s` = secure. |
+| Term                                   | Plain meaning                                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| **bind**                               | Which "doors" of the computer a program listens at for incoming connections.                                              |
+| **loopback / `127.0.0.1` / localhost** | A special address meaning "this same computer only." Traffic to it never leaves the machine.                              |
+| **`0.0.0.0`**                          | "Listen on _every_ door, including Wi-Fi/LAN" — other devices can reach it.                                               |
+| **port**                               | The numbered door (e.g. `8080`).                                                                                          |
+| **plaintext**                          | Unencrypted; anyone who can see the network traffic can read it.                                                          |
+| **shell**                              | The command interpreter (`cmd.exe` / `bash`). Understands special symbols like `&&`, `\|`, `>`, `%VAR%`.                  |
+| **argv (argument list)**               | A command expressed as separate items: `["python", "main.py", "--port", "8188"]`.                                         |
+| **serialize / deserialize (load)**     | Turn a live object into bytes to save (serialize); turn bytes back into a live object (deserialize/load).                 |
+| **pickle**                             | Python's built-in serialize format. Can store _code_, not just data — which is why loading an untrusted one is dangerous. |
+| **TLS**                                | The encryption behind `https://` and `wss://`.                                                                            |
+| **`ws://` vs `wss://`**                | WebSocket (a live two-way browser↔server channel), plaintext vs. encrypted. The extra `s` = secure.                       |
 
 ---
 
@@ -84,7 +84,7 @@ the config at it (the launcher runs a file path safely).
 **Why:** `shell=True` enables **command injection** — if any part of the string
 can be influenced by input you don't fully control, an attacker could smuggle in
 extra commands. Here it was owner-only config (low real risk), but reviewers and
-HIPAA audits flag `shell=True` on sight. Removing it means there is *no path*
+HIPAA audits flag `shell=True` on sight. Removing it means there is _no path_
 where a string quietly becomes an unintended command.
 
 ---
@@ -95,7 +95,7 @@ where a string quietly becomes an unintended command.
 execute code stored inside that file — not just read data. So loading an
 untrusted model file can run code on your machine.
 
-**Before:** `torch.load(path)` reconstructed *any* object, including ones that
+**Before:** `torch.load(path)` reconstructed _any_ object, including ones that
 run code. A booby-trapped file could execute an attacker's code the instant it
 was loaded.
 
@@ -110,13 +110,13 @@ Loading a booby-trapped .pt file:
    Now:     raises "Weights only load failed..." and runs nothing.
 ```
 
-**Edge case:** if a *legitimate* file stores an unusual object type, the strict
+**Edge case:** if a _legitimate_ file stores an unusual object type, the strict
 loader may refuse it too. The fix is **not** to disable the safety — it is to
 vouch for that specific type: `torch.serialization.add_safe_globals([TheType])`.
 
 **Why:** integrity and provenance — being certain that loading a model can only
 ever load numbers. It matters most because Aether can pull model files from
-*other nodes*: once a file crosses a trust boundary, "loading runs code" is a real
+_other nodes_: once a file crosses a trust boundary, "loading runs code" is a real
 risk. (PyTorch is moving to make `weights_only=True` the default for this reason.)
 
 ---
@@ -133,7 +133,7 @@ underneath.
 **Now:** the code matches the channel to the page:
 
 ```js
-const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+const proto = location.protocol === "https:" ? "wss:" : "ws:";
 ```
 
 Read as: "if the page is HTTPS, use encrypted `wss:`, else `ws:`." (The `? :` is
@@ -145,7 +145,7 @@ https://myclinic.example.com →  wss://myclinic.example.com/ws/chat  (now encry
      (Before, it wrongly tried ws:// — plaintext under a secure page.)
 ```
 
-**Why:** same transmission-security principle as #1. The channel now *inherits*
+**Why:** same transmission-security principle as #1. The channel now _inherits_
 the page's security automatically, so a secure page can't accidentally send
 messages in the clear.
 
@@ -165,3 +165,9 @@ messages in the clear.
 5. **Never build a file path or URL directly from input you don't control**
    without validating or containing it first — that one sentence covers the whole
    path-traversal / SSRF family.
+
+# This document and all documentation has been generated by AI and Human edited.
+
+- A Human (Todd [That's Me, the Human]) Architect/Director/Editor led AI coding
+  team of multiple current leading online frontier models, and many local models
+  using VeridianAI's multi-model slots with Toga (very large local model library).
