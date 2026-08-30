@@ -229,18 +229,107 @@ const GameManager = (() => {
   return { init, start, stop, showReady, getScores, saveScores, checkHighScore, renderScoreboard, currentGameName: () => currentGameName };
 })();
 
+/* -- Panel view registry --------------------------------------------------
+ *
+ * WHAT THIS REPLACES, AND WHY IT HAD TO GO
+ *
+ * The Oracle panel used to hold exactly one non-game view (Socials), so the
+ * show/hide was written for exactly one: switchGame() special-cased the name
+ * 'socials', and socialsOnTab() reached across modules and set style.display
+ * on four elements it did not own.
+ *
+ * That works for one. It does not work for two. With Socials AND the IDE, a
+ * switch from IDE to Socials would hide the game chrome and show Socials --
+ * and leave the IDE showing underneath, because nothing tells a view to hide
+ * itself when it is not the one being asked for. The bug count is N x N and
+ * every new view adds a row and a column.
+ *
+ * So: each view declares the element ids it OWNS, and showing one hides every
+ * other. A new view is one register() call and knows nothing about its
+ * siblings. onEnter/onLeave carry the lifecycle (polling timers, animation
+ * loops) that used to be tangled into the display logic.
+ *
+ * onLeave fires only for the view actually being left -- not for every
+ * registered view on every switch -- so a stop hook can never be called for a
+ * view that was not running.
+ */
+const PanelViews = (() => {
+  const views = Object.create(null);
+  let current = null;
+
+  /* register(name, {ids, display, onEnter, onLeave})
+   *   ids      element ids this view owns (hidden when another view shows)
+   *   display  display value to restore ('' = whatever the stylesheet says,
+   *            which is what #game-canvas{display:block} relies on)
+   *   onEnter  called after this view becomes visible
+   *   onLeave  called before this view is hidden, only when leaving it   */
+  function register(name, spec) {
+    views[name] = {
+      ids: (spec && spec.ids) || [],
+      display: (spec && spec.display) || '',
+      onEnter: (spec && spec.onEnter) || null,
+      onLeave: (spec && spec.onLeave) || null,
+    };
+  }
+
+  function paint(v, visible) {
+    v.ids.forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = visible ? v.display : 'none';
+    });
+  }
+
+  function show(name) {
+    const target = views[name];
+    if (!target) return false;
+
+    if (current && current !== name && views[current] && views[current].onLeave) {
+      try { views[current].onLeave(); }
+      catch (e) { console.warn('[VeridianAI] panel view onLeave failed:', e); }
+    }
+    Object.keys(views).forEach(function (k) {
+      if (k !== name) paint(views[k], false);
+    });
+    paint(target, true);
+    current = name;
+    if (target.onEnter) {
+      try { target.onEnter(); }
+      catch (e) { console.warn('[VeridianAI] panel view onEnter failed:', e); }
+    }
+    return true;
+  }
+
+  return {
+    register: register,
+    show: show,
+    has: function (n) { return !!views[n]; },
+    current: function () { return current; },
+  };
+})();
+window.PanelViews = PanelViews;
+
+// The canvas games all share one view: this id list is the panel chrome that
+// belongs to playing a game. socials.js and (later) ide.js register their own.
+const GAME_VIEW = 'game';
+PanelViews.register(GAME_VIEW, {
+  ids: ['game-canvas', 'scoreboard-container', 'global-status-region',
+        'game-controls'],
+  display: '',
+});
+
 function switchGame(name, btn) {
   document.querySelectorAll('.game-tab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  // Socials is a non-game tab: it takes over the whole panel area.
-  if (name === 'socials') {
+
+  // A registered view name (socials, ide) takes over the panel area; anything
+  // else is a canvas game and runs in the shared game view.
+  if (name !== GAME_VIEW && PanelViews.has(name)) {
     GameManager.stop();
-    if (window.socialsOnTab) window.socialsOnTab(true);
-    Haptic.vibrate(Haptic.PATTERNS.toggle);
-    return;
+    PanelViews.show(name);
+  } else {
+    PanelViews.show(GAME_VIEW);
+    GameManager.showReady(name);
   }
-  if (window.socialsOnTab) window.socialsOnTab(false);
-  GameManager.showReady(name);
   Haptic.vibrate(Haptic.PATTERNS.toggle);
 }
 

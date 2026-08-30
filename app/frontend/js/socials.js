@@ -20,13 +20,25 @@
   var _peerFlags = {};       // node_id -> {compromised, revoked} from identity(), for the DM guard
 
   // Swap the game canvas/scoreboard/controls for the full Socials view.
+  // Socials is one view among several in the Oracle panel. It declares the
+  // element it owns plus its lifecycle hooks; PanelViews (games.js) decides
+  // what is visible. This module no longer reaches across and sets
+  // style.display on the game chrome -- see the registry comment in games.js
+  // for why that had to stop.
+  if (window.PanelViews) {
+    window.PanelViews.register("socials", {
+      ids: ["socials-view"],
+      display: "flex",
+      onEnter: function () { socialsRefresh(); _startFeed(); },
+      onLeave: function () { _stopFeed(); },
+    });
+  }
+
+  // Kept as a thin wrapper so every existing caller of socialsOnTab(true) /
+  // socialsOnTab(false) keeps working unchanged.
   function socialsOnTab(show) {
-    var els = [$("game-canvas"), $("scoreboard-container"), $("game-controls")];
-    var info = document.querySelector("#oracle-panel .game-info");
-    if (info) els.push(info);
-    els.forEach(function (el) { if (el) el.style.display = show ? "none" : ""; });
-    var v = $("socials-view"); if (v) v.style.display = show ? "flex" : "none";
-    if (show) { socialsRefresh(); _startFeed(); } else { _stopFeed(); }
+    if (!window.PanelViews) return;
+    window.PanelViews.show(show ? "socials" : "game");
   }
 
   function _renderChannels(d) {

@@ -1863,6 +1863,7 @@
             <button
               class="game-tab active"
               aria-label="☄ Asteroids"
+              data-view="asteroids"
               onclick="switchGame('asteroids', this)"
               data-tip="Asteroids"
             >
@@ -1871,6 +1872,7 @@
             <button
               class="game-tab"
               aria-label="🐍 Snake"
+              data-view="snake"
               onclick="switchGame('snake', this)"
               data-tip="Snake"
             >
@@ -1879,6 +1881,7 @@
             <button
               class="game-tab"
               aria-label="✕○ Tic-Tac-Toe"
+              data-view="tictactoe"
               onclick="switchGame('tictactoe', this)"
               data-tip="Tic-Tac-Toe"
             >
@@ -1887,6 +1890,7 @@
             <button
               class="game-tab"
               aria-label="📡 Socials"
+              data-view="socials"
               onclick="switchGame('socials', this)"
               data-tip="Socials"
             >
@@ -2131,8 +2135,8 @@
     <!-- v2.1.6: ?v=... cache-bust query strings force Electron's Chromium
      cache to fetch fresh after edits. Bump these when shipping a UI
      change so users don't have to hunt down Electron's userData cache. -->
-    <script src="/static/js/games.js?v=efddeb0a06"></script>
-    <script src="/static/js/socials.js?v=c16d09c1b3"></script>
+    <script src="/static/js/games.js?v=8cebc392c9"></script>
+    <script src="/static/js/socials.js?v=f66d2d32f2"></script>
     <script src="/static/js/hardware.js?v=f844dcfe34"></script>
     <script src="/static/js/settings.js?v=ea89d77fc8"></script>
     <script src="/static/js/chat.js?v=49a6c0a077"></script>
@@ -2155,7 +2159,7 @@
      command-palette.js never runs, the Ctrl+Shift+Space keydown listener
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
-    <script src="/static/js/command-palette.js?v=900fc76669"></script>
+    <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

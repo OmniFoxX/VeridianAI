@@ -448,7 +448,17 @@ def _extract_flags(payload: Any, depth: int = 0, visited=None) -> Dict[str, bool
             elif k in ENFORCEMENT_KEYS and bool(v) is False:
                 found[k] = True
             
-            if isinstance(v, (dict, list)):
+            # 2026-08-30 FIX: strings must be recursed into as well. The
+            # string branch below scans for tokens like "--no-sandbox", but a
+            # dict VALUE was only followed when it was a dict or a list -- so
+            # the single most likely real shape, a bypass flag inside a command
+            # STRING inside a payload dict ({"cmd": "chromium --no-sandbox"}),
+            # was invisible to IMPERIUM, whose whole job is witnessing exactly
+            # that. test_imperium.py check 36 has been asserting this and
+            # failing on it. `visited` only tracks dict/list, so recursing into
+            # a str carries no cycle risk, and the depth-12 ceiling still
+            # applies.
+            if isinstance(v, (dict, list, tuple, str)):
                 found.update(_extract_flags(v, depth + 1, visited))
     
     elif isinstance(payload, (list, tuple)):

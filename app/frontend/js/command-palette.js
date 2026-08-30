@@ -70,7 +70,10 @@
         // Open the Oracle panel, then select the Socials tab within it.
         safeCall('openGamePanel');
         setTimeout(function () {
-            const tab = document.querySelector('.game-tab[onclick*="switchGame(\'socials\'"]');
+            // Was a substring match on the inline onclick attribute, which
+            // made the palette silently depend on how switchGame() is
+            // spelled in the markup. data-view is the contract now.
+            const tab = document.querySelector('.game-tab[data-view="socials"]');
             if (tab) tab.click();
         }, 60);
     }

@@ -3,6 +3,7 @@
 # Follows the house pattern (test_customs.py / test_request_scheduler.py):
 # plain asserts, no pytest dependency, exit 1 on first failure.
 
+import re
 import json
 import time
 
@@ -38,8 +39,15 @@ class FakeLogger:
 
 
 print("== header constants ==")
-ok(IMPERIUM_VERSION == "2.0", "IMPERIUM_VERSION present and pinned")
-ok(PARENT_RELEASE.startswith("2.12"), "PARENT_RELEASE tracks shipping release")
+# 2026-08-30: these were pinned to the literals "2.0" and "2.12" and had been
+# failing silently in the suite ever since IMPERIUM moved to 2.1 (STAGING) and
+# 2.2 (Sentinel). A test that RESTATES a version is the same two-sources-of-
+# truth trap as the four stale copies of the release number -- it goes red for
+# the one reason that is never a defect. Assert the SHAPE, not the value.
+ok(bool(re.fullmatch(r"\d+\.\d+", IMPERIUM_VERSION or "")),
+   f"IMPERIUM_VERSION present and well-formed ({IMPERIUM_VERSION})")
+ok(bool(re.fullmatch(r"\d+\.\d+(\.\d+)?", PARENT_RELEASE or "")),
+   f"PARENT_RELEASE present and well-formed ({PARENT_RELEASE})")
 
 print("== layer 1: invariants ==")
 ok(SPECIFICATIONS["NO_SANDBOX_BYPASS"].check({"flags": {}}),
