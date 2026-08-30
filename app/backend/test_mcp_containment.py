@@ -128,9 +128,23 @@ _, br = run("search", None)
 ok("owner call binds browser_ns=None", br and br[0][2] is None, br)
 
 print("\n== _NS_TOOLS is the audit list, and it is complete ==")
-ok("contains exactly the five data-touching tools",
+# It held exactly five for as long as the list meant "touches per-profile
+# DATA". `code` joined it in 2026-08-30 for a different reason and the
+# assertion was rewritten in the same commit rather than loosened: the tool
+# stores nothing, but the switch that governs it (`code_exec_enabled`) is a
+# PER_USER key, so without the namespace it would read the OWNER's answer to
+# somebody else's question -- wrong in the unsafe direction, and invisible on a
+# single-user install.
+#
+# Kept as an exact set on purpose. This is the list somebody is meant to look
+# at when adding a tool, and a membership test that only checks the five would
+# not notice a sixth arriving by accident.
+ok("contains exactly the tools that need a namespace",
    set(NS_TOOLS) == {"search_memory", "save_file", "recall", "remember",
-                     "remember_fail"}, set(NS_TOOLS))
+                     "remember_fail", "code"}, set(NS_TOOLS))
+ok("...and `code` is there for its SWITCH, not for storage",
+   "code" in NS_TOOLS,
+   "see test_mcp_code_gate.py: the profile's own code_exec_enabled decides")
 ok("is a frozenset (cannot be mutated at runtime)",
    isinstance(NS_TOOLS, frozenset), type(NS_TOOLS))
 

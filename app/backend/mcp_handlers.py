@@ -535,7 +535,47 @@ def _tool_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
     return _result_text(str(out))
 
 
-def _tool_code(args: Dict[str, Any]) -> Dict[str, Any]:
+def _code_exec_allowed(ns=None) -> bool:
+    """Is code execution switched ON for this caller?
+
+    The Settings toggle is a promise, and a promise that only some callers keep
+    is not one. The chat path has always read `code_exec_enabled`; this tool
+    never did, so an API client holding a token could run Python on a machine
+    where the owner had switched Code Execution OFF. Same shape as the
+    schema-says-off / fallback-says-on defect fixed in the executor itself.
+
+    Read through main's `_effective_config` so a profile's own overlay counts --
+    `code_exec_enabled` is a PER_USER key, and reading only the shared config
+    would answer the owner's question for somebody else. main is fully imported
+    long before any tool runs, so the late import is safe and keeps this module
+    usable on its own.
+
+    ABSENT MEANS OFF, at every step. A missing key is precisely the case where
+    nobody has consented to anything.
+    """
+    try:
+        import main as _main
+        return bool(_main._effective_config(ns).get("code_exec_enabled", False))
+    except Exception:
+        pass
+    # The stdio-subprocess path, where main was never imported. Read the shared
+    # config the same way main does rather than inventing a second answer.
+    try:
+        from config_store import OracleConfig
+        from config import CONFIG_FILE
+        return bool(OracleConfig.load(CONFIG_FILE).to_flat_dict()
+                    .get("code_exec_enabled", False))
+    except Exception:
+        return False
+
+
+def _tool_code(args: Dict[str, Any], ns=None) -> Dict[str, Any]:
+    if not _code_exec_allowed(ns):
+        # Named, not vague: the fix is a switch the owner controls, and a tool
+        # that fails without saying which one wastes somebody's afternoon.
+        return _result_text(
+            "[refused] Code execution is switched off for this profile. "
+            "Turn it on in Settings -> Code Execution.", is_error=True)
     code = str(args.get("code", ""))
     # 56000 lived here too. One constant now, in the executor that owns it.
     timeout = int(args.get("timeout", _sage().CODE_EXEC_TIMEOUT_DEFAULT))
@@ -782,6 +822,12 @@ _NS_TOOLS = frozenset({
     "recall",           # procedural memory
     "remember",         # procedural memory
     "remember_fail",    # procedural memory
+    # `code` does not touch a profile's DATA -- it is here because the switch
+    # that governs it is per-profile. Without the namespace this tool would
+    # read the owner's answer to somebody else's question, which on a
+    # multi-user install is the wrong answer in the unsafe direction. The note
+    # above says "if you are unsure, put it here"; this is not even unsure.
+    "code",
 })
 
 
