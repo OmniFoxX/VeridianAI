@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=0e7ba92998" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=9dee57fd0d" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -1896,6 +1896,15 @@
             >
               📡
             </button>
+            <button
+              class="game-tab"
+              aria-label="🛠 IDE and display"
+              data-view="ide"
+              onclick="switchGame('ide', this)"
+              data-tip="IDE + Display"
+            >
+              🛠
+            </button>
           </div>
         </div>
         <canvas height="320" id="game-canvas" width="300"></canvas>
@@ -2113,6 +2122,99 @@
             </button>
           </div>
         </div>
+        <!-- IDE + Display: full-area tab view (hidden until the 🛠 tab is
+             selected). Three rows: what the code DID on top, the controls in
+             the middle, the code itself at the bottom. -->
+        <div class="ide-view" id="ide-view" style="display: none">
+          <div
+            class="ide-display"
+            id="ide-display"
+            role="region"
+            aria-label="Output display"
+          >
+            <p class="ide-display-idle" id="ide-display-idle">
+              Output appears here when code runs.
+            </p>
+            <pre class="ide-output" id="ide-output" role="status" aria-live="polite" hidden></pre>
+          </div>
+          <div class="ide-bar">
+            <button
+              class="ide-expand"
+              id="ide-expand"
+              type="button"
+              aria-label="Expand the panel to double width"
+              aria-pressed="false"
+              data-tip="Expand to double width"
+              onclick="ideToggleExpand()"
+            ></button>
+            <!-- Run is DELIBERATELY disabled and says so. Execution arrives in
+                 its own release, after the executor defects are fixed; a
+                 button that looks live and does nothing is worse than one
+                 that admits it. -->
+            <button
+              class="ide-run"
+              id="ide-run"
+              type="button"
+              disabled
+              aria-label="Run - not available yet"
+              aria-describedby="ide-run-note"
+              data-tip="Running code arrives in a later build. The editor and Save work now."
+            >
+              ▶ Run
+            </button>
+            <span class="sr-only" id="ide-run-note"
+              >Running code is not available in this build.</span
+            >
+            <div class="ide-menu-wrap">
+              <button
+                class="ide-menu-btn"
+                id="ide-menu-btn"
+                type="button"
+                aria-label="IDE menu"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-controls="ide-menu"
+                data-tip="IDE menu"
+                onclick="ideToggleMenu()"
+              >
+                ☰
+              </button>
+              <div class="ide-menu" id="ide-menu" role="menu" hidden>
+                <button
+                  class="ide-menu-item"
+                  type="button"
+                  role="menuitem"
+                  disabled
+                  data-tip="Arrives with the Beginner/Advanced/Expert modes in the next build."
+                >
+                  Allow Toga to Copy/Paste
+                  <span class="ide-menu-soon">next build</span>
+                </button>
+                <button
+                  class="ide-menu-item"
+                  type="button"
+                  role="menuitem"
+                  disabled
+                  data-tip="Arrives in the next build, together with the file-type allowlist."
+                >
+                  Save as file…
+                  <span class="ide-menu-soon">next build</span>
+                </button>
+              </div>
+            </div>
+          </div>
+          <label class="sr-only" for="ide-editor">Code editor</label>
+          <textarea
+            class="ide-editor"
+            id="ide-editor"
+            spellcheck="false"
+            autocapitalize="off"
+            autocomplete="off"
+            autocorrect="off"
+            wrap="off"
+            placeholder="Write code here…"
+          ></textarea>
+        </div>
       </aside>
     </div>
     <!-- .app-body -->
@@ -2160,6 +2262,7 @@
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
     <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
+    <script src="/static/js/ide.js?v=fd9b5ee57c"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

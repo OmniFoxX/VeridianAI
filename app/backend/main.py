@@ -3451,6 +3451,50 @@ async def api_set_browser_config(payload: dict, request: Request):
     return {"persist_cookies": val}
 
 
+# --- IDE + Display panel preferences ---------------------------------------
+# How the IDE panel should look when THIS PERSON opens it. Not owner-gated:
+# a panel width is nobody else's business and refusing it to a non-owner would
+# be friction with no security behind it.
+#
+# ui_prefs, not config.json: config.json is the distribution-synced schema, and
+# this is a fact about a person. It is deliberately NOT in ui_prefs.MACHINE_KEYS
+# -- one width for the whole install is the exact bug the cookie switch had,
+# where one profile's choice became everybody's default and never came back.
+_IDE_PREF_DEFAULTS = {"expanded": False}
+
+
+@app.get("/api/ide/prefs")
+async def api_get_ide_prefs(request: Request):
+    try:
+        import ui_prefs
+        _ns = _safe_ns(_session_ns(request))
+        return {"expanded": bool(ui_prefs.get("ide_expanded", False, ns=_ns))}
+    except Exception:
+        # A preference read must never be the reason a panel fails to open.
+        return dict(_IDE_PREF_DEFAULTS)
+
+
+@app.post("/api/ide/prefs")
+async def api_set_ide_prefs(payload: dict, request: Request):
+    """Store only the keys we know about, coerced to the type we expect.
+
+    The payload is web content. Writing whatever it contains into ui_prefs
+    would let a page put arbitrary keys into another subsystem's store -- the
+    daemons read that file. An allowlist here means an unknown key is ignored
+    rather than persisted."""
+    import ui_prefs
+    _ns = _safe_ns(_session_ns(request))
+    out = {}
+    for key, default in _IDE_PREF_DEFAULTS.items():
+        if key not in payload:
+            out[key] = bool(ui_prefs.get("ide_" + key, default, ns=_ns))
+            continue
+        val = bool(payload.get(key))
+        ui_prefs.set("ide_" + key, val, ns=_ns)
+        out[key] = val
+    return out
+
+
 # --- API key rotation -------------------------------------------------------
 # The key exists so external tools (Continue.dev, Claude Desktop, curl) can
 # reach this machine. Until now it could only be rotated by running a .bat that

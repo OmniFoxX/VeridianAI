@@ -114,6 +114,7 @@
 
   --sidebar-w: 280px;
   --oracle-w: 300px;
+  --oracle-w-x2: 600px;
   --header-h: 58px;
 
   --radius: 12px;
@@ -1799,6 +1800,16 @@ pre:hover .copy-btn {
   opacity: 1;
 }
 
+/* Double width. The panel is a flex sibling of <main>, so widening it just
+   narrows the chat -- no layout rework, and the width transition above
+   animates it for free. Only the IDE view offers this; switching to a game
+   or Socials drops back to the normal width (ide.js does that), because a
+   600px panel around a 300px canvas is just empty space. */
+.oracle-panel.visible.ide-expanded {
+  width: var(--oracle-w-x2);
+  min-width: var(--oracle-w-x2);
+}
+
 /* Socials tab: fill the panel below the header and scroll, so the expanded
    channel settings (BitChat sits at the very bottom) stay reachable on short
    screens. Same flex trap/fix as .messages-container — min-height:0 lets the
@@ -1808,6 +1819,235 @@ pre:hover .copy-btn {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+}
+
+/* -- IDE + Display view ---------------------------------------------------
+   Three rows in a column: the display area (what the code did), a menu bar,
+   and the editor. Display and editor share the leftover height; the bar is
+   fixed. min-height:0 on the flex children is what lets them SHRINK so their
+   own overflow engages instead of pushing the bar off the bottom -- the same
+   flex trap called out on .socials-view and .messages-container. */
+.ide-view {
+  width: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0;
+}
+
+.ide-display {
+  flex: 1 1 45%;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 12px;
+  background: #020810;
+  border-bottom: 1px solid var(--border);
+}
+[data-theme="light"] .ide-display {
+  background: var(--surface-2);
+}
+
+.ide-display-idle {
+  margin: 0;
+  font-size: 11.5px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.ide-output {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* The menu bar: expand on the left, Run in the middle, menu on the right. */
+.ide-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+/* Circular, per the design. 26px keeps it inside the 24px minimum target
+   (WCAG 2.2 SC 2.5.8) without crowding a 300px bar. */
+.ide-expand {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all var(--t);
+  position: relative;
+}
+.ide-expand::before {
+  content: "\2194";
+  font-size: 13px;
+  line-height: 1;
+}
+.ide-expand:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+  box-shadow: 0 0 8px var(--gold-glow);
+}
+.ide-expand[aria-pressed="true"] {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--gold-glow);
+}
+
+.ide-run {
+  flex: 1;
+  min-height: 26px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all var(--t);
+}
+.ide-run:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+/* Disabled and honest about it. Not hidden: the control is part of the design
+   and people should see where running will live. */
+.ide-run:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ide-menu-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.ide-menu-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-3);
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all var(--t);
+}
+.ide-menu-btn:hover,
+.ide-menu-btn[aria-expanded="true"] {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+
+.ide-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  z-index: 20;
+  min-width: 238px;
+  padding: 4px;
+  border: 1px solid var(--border-control);
+  border-radius: var(--radius-sm);
+  /* OPAQUE, and it takes two layers to get there. Every --surface* token in
+     this stylesheet is translucent (0.65-0.82 alpha) because they are meant
+     to sit ON the glass panel. A popup that floats OVER the editor is a
+     different job: at 0.82 the code read straight through the first draft of
+     this menu and the two were unreadable together.
+     --bg is the only opaque token, so it goes underneath, and --surface is
+     painted over it as a gradient layer. Result: the menu's own colour, fully
+     opaque, and it still follows the theme. */
+  background: linear-gradient(var(--surface), var(--surface)), var(--bg);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* THE [hidden] TRAP. `display: flex` above is a class selector (0,1,0); the
+   UA rule behind the hidden attribute is weaker, so `hidden` did nothing and
+   the menu was permanently open. This restores it, and at (0,2,0) it wins.
+   Any rule that gives an element `display` must answer for [hidden]. */
+.ide-menu[hidden] {
+  display: none;
+}
+
+.ide-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-height: 26px;
+  padding: 5px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--t);
+}
+.ide-menu-item:hover:not(:disabled) {
+  background: var(--gold-glow);
+  color: var(--gold);
+}
+.ide-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ide-menu-item > span:first-child,
+.ide-menu-item {
+  overflow-wrap: anywhere;
+}
+
+.ide-menu-soon {
+  flex-shrink: 0;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* A plain textarea, on purpose. Monaco and CodeMirror both mean a CDN, and
+   offline boot is a hard requirement -- see docs/. Tab is handled in ide.js
+   so it indents instead of leaving the field. */
+.ide-editor {
+  flex: 1 1 55%;
+  min-height: 0;
+  width: 100%;
+  resize: none;
+  border: none;
+  border-radius: 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  tab-size: 4;
+  outline-offset: -2px;
+}
+.ide-editor::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 .oracle-panel-header {
