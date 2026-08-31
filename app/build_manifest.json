@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.17.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "b312354d49e244968c4126ed2a26e9c6",
-    "built_utc": "2026-08-31T05:38:30.326599+00:00",
+    "build_id": "f8ac7cc268374c4aa1618d6e7f468c08",
+    "built_utc": "2026-08-31T06:54:38.249003+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -320,5 +320,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "fOLY2VstE9D0R5TmZ3UaACdGrE8lZXJnSn2r5MvXfrpmZTg9cKr3Q2Wp91THSF2oN5DZXgCNVL0zeBAWrrZwCg=="
+  "signature_b64": "LxibCFWfdahHv/hvzBSLB7SL5dhlZtIt8MeJjSMb1AjxNQAvzJ2NTf5zB1BP70Xj2fc9lDlRH9SpWlOXi43qDg=="
 }
