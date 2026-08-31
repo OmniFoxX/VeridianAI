@@ -50,3 +50,21 @@ playwright>=1.47,<1.60
 # is what produced "No module named 'playwright_stealth'" in the 2.14.0 MSIX
 # while the portable build worked -- the dev machine had it, the bundle did not.
 playwright-stealth>=1.1.0
+# Static analysis for the IDE panel's Check button and the [IDE_CHECK] tag.
+# It reads code and NEVER runs it -- ast.parse builds a tree, pyflakes walks
+# it, nothing is imported or evaluated -- which is why checking needs none of
+# the gates running does and works in every mode with code execution off.
+#
+# PINNED EXACTLY, unlike most of this file, because it is the only third-party
+# package here that exists to inspect the user's own code:
+#   MIT licence, ZERO transitive dependencies, pure Python (no .pyd/.dll/.so),
+#   62 KB wheel, sha256
+#   84b5be138a2dfbb40689ca07e2152deb896a65c3a3e24c251c5c62489568074a
+# Installed into every bundled runtime from that one local wheel rather than
+# fetched per-tree, so all four trees carry identical bytes and a machine with
+# no internet can still build. Offline boot is a hard requirement.
+#
+# OPTIONAL AT RUNTIME. sage_engine.check_python_code degrades to the ast-only
+# syntax check when it is absent, and SAYS which checker ran, so a thin answer
+# is never mistaken for a clean bill of health.
+pyflakes==3.2.0

@@ -1909,6 +1909,146 @@ def execute_python_confined(code: str, timeout: int = None, ns=None,
                 pass
 
 
+# ============================================================================
+# Checking code WITHOUT running it
+# ============================================================================
+# This is deliberately not gated the way running is, and the reason is simple:
+# it does not execute anything. ast.parse() builds a tree and throws it away;
+# pyflakes walks that tree. Neither imports the module, neither evaluates a
+# single expression, and a file full of `os.system("rm -rf /")` is exactly as
+# inert here as a file full of comments.
+#
+# So this needs no Expert mode, no confinement decision and no
+# code_exec_enabled. It works for everyone, in every mode, on a machine where
+# code execution is switched off entirely -- which is precisely when a person
+# most wants to know whether what they just wrote is even valid.
+#
+# pyflakes is OPTIONAL. Absent, this still does the syntax half, and says which
+# checker ran so nobody mistakes a thin answer for a clean bill of health.
+
+_PYFLAKES_STATUS = None      # None = not yet probed; str = a short description
+
+
+def _pyflakes():
+    """The pyflakes API, or None. Probed once, never raises."""
+    global _PYFLAKES_STATUS
+    try:
+        from pyflakes import api as _api, reporter as _rep
+        if _PYFLAKES_STATUS is None:
+            try:
+                import pyflakes as _pf
+                _PYFLAKES_STATUS = "pyflakes " + getattr(_pf, "__version__", "?")
+            except Exception:
+                _PYFLAKES_STATUS = "pyflakes"
+        return _api, _rep
+    except Exception:
+        _PYFLAKES_STATUS = "not installed"
+        return None
+
+
+class _FlakeCollector:
+    """pyflakes reports through a writer pair; this collects instead of printing."""
+
+    def __init__(self):
+        self.items = []
+
+    def unexpectedError(self, filename, msg):
+        self.items.append({"line": 0, "col": 0, "kind": "error",
+                           "msg": str(msg)})
+
+    def syntaxError(self, filename, msg, lineno, offset, text):
+        # Never reached in practice: ast.parse() below runs first and returns
+        # on SyntaxError, so pyflakes only ever sees code that already parses.
+        self.items.append({"line": int(lineno or 0),
+                           "col": int(offset or 0),
+                           "kind": "error", "msg": str(msg)})
+
+    def flake(self, message):
+        self.items.append({
+            "line": int(getattr(message, "lineno", 0) or 0),
+            "col": int(getattr(message, "col", 0) or 0) + 1,
+            "kind": "warning",
+            "msg": str(message.message % message.message_args)
+            if getattr(message, "message_args", None) else str(message),
+        })
+
+
+def check_python_code(code: str, filename: str = "editor") -> dict:
+    """Parse `code` and report problems. NOTHING IS EXECUTED.
+
+    Returns:
+      {"ok": bool,               # nothing worse than a warning
+       "syntax_ok": bool,
+       "checker": str,           # what actually ran, so a thin answer is visible
+       "issues": [{"line", "col", "kind", "msg"}]}
+
+    A syntax error short-circuits: pyflakes cannot say anything useful about
+    code that does not parse, and reporting twenty follow-on warnings caused by
+    one missing colon buries the missing colon.
+    """
+    if not isinstance(code, str):
+        code = str(code or "")
+    if not code.strip():
+        return {"ok": False, "syntax_ok": False, "checker": "ast",
+                "issues": [{"line": 0, "col": 0, "kind": "error",
+                            "msg": "there is nothing to check"}]}
+
+    import ast as _ast
+    try:
+        _ast.parse(code, filename=filename)
+    except SyntaxError as e:
+        return {"ok": False, "syntax_ok": False, "checker": "ast",
+                "issues": [{"line": int(e.lineno or 0),
+                            "col": int(e.offset or 0),
+                            "kind": "error",
+                            "msg": e.msg or "invalid syntax"}]}
+    except (ValueError, MemoryError, RecursionError) as e:
+        # Null bytes, absurd nesting. Still not execution -- still a report.
+        return {"ok": False, "syntax_ok": False, "checker": "ast",
+                "issues": [{"line": 0, "col": 0, "kind": "error",
+                            "msg": "%s: %s" % (type(e).__name__, e)}]}
+
+    pf = _pyflakes()
+    if pf is None:
+        return {"ok": True, "syntax_ok": True, "checker": "ast (syntax only)",
+                "issues": []}
+    _api, _ = pf
+    col = _FlakeCollector()
+    try:
+        _api.check(code, filename, reporter=col)
+    except Exception as e:
+        # A checker that falls over must not become a failed check. Say so.
+        return {"ok": True, "syntax_ok": True,
+                "checker": "ast (syntax only -- pyflakes errored: %s)"
+                           % type(e).__name__,
+                "issues": []}
+    issues = sorted(col.items, key=lambda i: (i["line"], i["col"]))
+    return {"ok": not any(i["kind"] == "error" for i in issues),
+            "syntax_ok": True,
+            "checker": "ast + " + (_PYFLAKES_STATUS or "pyflakes"),
+            "issues": issues}
+
+
+def format_check_result(res: dict) -> str:
+    """One human-readable block, for the display area and for the model."""
+    issues = res.get("issues") or []
+    checker = res.get("checker", "ast")
+    if not res.get("syntax_ok"):
+        i = issues[0] if issues else {"line": 0, "col": 0, "msg": "invalid syntax"}
+        where = "line %s" % i.get("line", 0)
+        if i.get("col"):
+            where += ", column %s" % i["col"]
+        return "[SYNTAX ERROR] %s: %s\n(checked with %s)" % (
+            where, i.get("msg", "invalid syntax"), checker)
+    if not issues:
+        return "[OK] No problems found.\n(checked with %s)" % checker
+    lines = ["[%d issue%s]" % (len(issues), "" if len(issues) == 1 else "s")]
+    for i in issues:
+        lines.append("  line %s: %s" % (i.get("line", 0), i.get("msg", "")))
+    lines.append("(checked with %s)" % checker)
+    return "\n".join(lines)
+
+
 def verify_written_file(path: str) -> str:
     """
     Verify a written file without executing it.
@@ -2735,7 +2875,7 @@ _ORPHAN_TAG_RE = re.compile(
 
 
 _KNOWN_TAG_NAMES = (
-    "SAVE_FILE", "VERIFY_FILE", "IDE_WRITE", "IDE_RUN", "CODE",
+    "SAVE_FILE", "VERIFY_FILE", "IDE_WRITE", "IDE_RUN", "IDE_CHECK", "CODE",
     "SEARCH_GENERAL", "SEARCH_MEMORY",
     "SEARCH", "WEATHER", "BROWSE", "WEB_SEARCH", "REMEMBER_FAIL",
     "REMEMBER", "RECALL", "PRIORITISE", "GENERATE_IMAGE", "LINT_EXPR",
@@ -3015,6 +3155,9 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
         # models emit all three, any payload is ignored, and group(1) is always
         # a string so the shared `m.group(1).strip()` below cannot trip on None.
         (r"\[IDE_RUN:?\s*(.*?)\]",     "ide_run"),
+        # Checks the editor without running it. Payload-free for the same
+        # reason as IDE_RUN -- it inspects the buffer the person is looking at.
+        (r"\[IDE_CHECK:?\s*(.*?)\]",   "ide_check"),
         (r"\[LINT_EXPR:\s*(.*?)\]",  "lint_expr"),
         (r"\[PARSE_EXPR:\s*(.*?)\]", "parse_expr"),
     )

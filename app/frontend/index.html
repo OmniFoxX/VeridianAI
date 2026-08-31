@@ -19,7 +19,7 @@
       media="print"
       onload="this.media='all'; this.onload=null;"
     />
-    <link href="/static/css/styles.css?v=4c91854d53" rel="stylesheet" />
+    <link href="/static/css/styles.css?v=6af93babe0" rel="stylesheet" />
     <link href="/static/css/command-palette.css?v=0c4b63333e" rel="stylesheet" />
     <link
       href="/static/css/hljs-github-dark-dimmed.css?v=be946d7e2d"
@@ -2167,6 +2167,20 @@
             >
               ▶ Run
             </button>
+            <!-- CHECKING RUNS NOTHING, so this button has no gate and no
+                 mode. It works for everyone, in every mode, with code
+                 execution switched off entirely -- which is exactly when
+                 somebody most wants to know whether what they wrote parses. -->
+            <button
+              class="ide-check"
+              id="ide-check"
+              type="button"
+              aria-label="Check the code for errors without running it"
+              data-tip="Check for syntax errors and problems. Runs nothing."
+              onclick="ideCheck()"
+            >
+              ✓ Check
+            </button>
             <!-- The authority ladder, attached to Run because that is what it
                  governs. The server stores and enforces it; this only shows
                  and changes it. -->
@@ -2294,7 +2308,7 @@
      never attaches, and the palette is unreachable even though both the
      JS file and its CSS file are on disk. -->
     <script src="/static/js/command-palette.js?v=98f5bfe602"></script>
-    <script src="/static/js/ide.js?v=2a6f6a0a13"></script>
+    <script src="/static/js/ide.js?v=c0ac7d8a51"></script>
     <!-- WCAG 3.3.3 - Error announcement region -->
     <div
       aria-atomic="true"

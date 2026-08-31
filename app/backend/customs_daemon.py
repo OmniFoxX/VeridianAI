@@ -198,6 +198,11 @@ if BaseModel is not None:
         # harmless word would teach nothing. It is never executed.
         note: str = Field(default="", max_length=200)
 
+    class IdeCheckArgs(BaseModel):
+        # Payload-free, like IdeRunArgs. Nothing is executed by this tool at
+        # all, so there is even less to validate -- but it still gets an entry.
+        note: str = Field(default="", max_length=200)
+
     class SaveFileArgs(BaseModel):
         filename: str = Field(min_length=1, max_length=255)
         content: str = Field(json_schema_extra={"sensitive": True})
@@ -533,6 +538,23 @@ class IdeRunValidator(ToolValidator):
         return "(runs the current editor buffer)"
 
 
+class IdeCheckValidator(ToolValidator):
+    """ide_check: parse the person's editor contents and report problems.
+
+    The one tool in this family that runs NOTHING. ast.parse builds a tree,
+    pyflakes walks it, and neither imports nor evaluates anything -- so unlike
+    ide_run this needs no mode gate at all. It is registered here anyway
+    because an executor-adjacent tool that Customs has never heard of is a tool
+    nobody can audit, and "which of these touched my code" should have one
+    answer rather than two.
+    """
+    tool_name = "ide_check"
+    schema = IdeCheckArgs if BaseModel is not None else None
+
+    def safe_preview(self, args):
+        return "(checks the current editor buffer, runs nothing)"
+
+
 class IdeWriteValidator(ToolValidator):
     """ide_write: the model proposing new contents for the IDE editor.
 
@@ -690,7 +712,7 @@ for _v in (BrowserToolValidator(), SearchValidator(),
            SearchGeneralValidator(), SearchMemoryValidator(),
            RecallValidator(), WebSearchBrowserValidator(),
            WeatherValidator(), CodeValidator(), IdeWriteValidator(),
-           IdeRunValidator(),
+           IdeRunValidator(), IdeCheckValidator(),
            SaveFileValidator(),
            GenerateImageValidator(), VerifyFileValidator(),
            RememberValidator(), RememberFailValidator(),
@@ -878,6 +900,7 @@ _TAG_TO_ARGS: Dict[str, Callable[[Any], Dict[str, Any]]] = {
     "code":               lambda c: {"code": str(c)},
     "ide_write":          lambda c: {"code": str(c)},
     "ide_run":            lambda c: {"note": str(c or "")[:200]},
+    "ide_check":          lambda c: {"note": str(c or "")[:200]},
     "generate_image":     lambda c: {"prompt": str(c)},
     "verify_file":        lambda c: {"path": str(c)},
     "lint_expr":          lambda c: {"expr": str(c)},
@@ -905,6 +928,7 @@ _ARGS_TO_TAG: Dict[str, Callable[[Dict[str, Any]], Any]] = {
     "code":               lambda a: a["code"],
     "ide_write":          lambda a: a["code"],
     "ide_run":            lambda a: a.get("note", ""),
+    "ide_check":          lambda a: a.get("note", ""),
     "generate_image":     lambda a: a["prompt"],
     "verify_file":        lambda a: a["path"],
     "lint_expr":          lambda a: a["expr"],

@@ -513,6 +513,67 @@
       : "Run the editor's contents, confined - " + CONFINED_MEANS + ".");
   }
 
+  /* ---- check ------------------------------------------------------------
+   * NOT gated, and that is the feature. Checking parses the code and throws
+   * the tree away; it imports nothing and evaluates nothing, so none of Run's
+   * ceremony applies -- no mode, no confinement, no consent toggle. It is the
+   * one control here that works identically for everybody, including on an
+   * install with code execution switched off.
+   *
+   * Also never disabled while a run is in flight: wanting to know why your
+   * code is wrong is not less reasonable because something is executing.
+   */
+  async function ideCheck() {
+    var ta = $("ide-editor");
+    var code = ta ? ta.value : "";
+    if (!code.trim()) {
+      ideShowOutput("[nothing to check] The editor is empty.");
+      return;
+    }
+    ideShowOutput("Checking\u2026");
+    try {
+      var res = await fetch("/api/ide/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: code })
+      });
+      if (!res.ok) {
+        ideShowOutput("[CHECK FAILED] The backend refused the request.");
+        return;
+      }
+      var data = await res.json();
+      ideShowOutput((data && data.text) || "[no result]");
+      // The editor is where the error IS, so put the caret on it. A line
+      // number you then have to go hunting for is half an answer.
+      var first = (data && data.issues && data.issues[0]) || null;
+      if (first && first.line > 0 && ta) focusEditorLine(ta, first.line, first.col);
+      if (window.Haptic) {
+        Haptic.vibrate(data && data.ok
+          ? Haptic.PATTERNS.toggle : Haptic.PATTERNS.error);
+      }
+    } catch (e) {
+      ideShowOutput("[CHECK FAILED] Could not reach the backend.");
+    }
+  }
+
+  /* Put the caret at (line, col), 1-based, and scroll it into view. */
+  function focusEditorLine(ta, line, col) {
+    try {
+      var lines = ta.value.split("\n");
+      var idx = 0;
+      for (var i = 0; i < Math.min(line - 1, lines.length); i++) {
+        idx += lines[i].length + 1;
+      }
+      idx += Math.max(0, (col || 1) - 1);
+      idx = Math.min(idx, ta.value.length);
+      ta.focus();
+      ta.setSelectionRange(idx, idx);
+      // Rough but effective: scroll proportionally to where the line sits.
+      var frac = (line - 1) / Math.max(1, lines.length);
+      ta.scrollTop = Math.max(0, frac * ta.scrollHeight - ta.clientHeight / 2);
+    } catch (e) { /* a caret that will not move is not worth an error */ }
+  }
+
   async function ideRun() {
     if (_stopping) return;
     if (_running) { await ideStop(); return; }
@@ -686,6 +747,7 @@
   window.ideUndoWrite = ideUndoWrite;
   window.ideMode = ideMode;
   window.ideMayTogaTouchBuffer = ideMayTogaTouchBuffer;
+  window.ideCheck = ideCheck;
   window.ideRun = ideRun;
   window.ideSaveAs = ideSaveAs;
   window.ideShowOutput = ideShowOutput;

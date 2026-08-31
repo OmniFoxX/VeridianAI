@@ -3789,6 +3789,33 @@ async def api_ide_run(payload: dict, request: Request):
             "confined": _confined}
 
 
+@app.post("/api/ide/check")
+async def api_ide_check(payload: dict, request: Request):
+    """Check the editor's code WITHOUT running it.
+
+    DELIBERATELY UNGATED, beyond being a request this app answers at all. No
+    Expert mode, no confinement decision, no `code_exec_enabled`: nothing here
+    executes. `ast.parse` builds a tree and discards it; pyflakes walks that
+    tree. A buffer full of `os.system(...)` is exactly as inert as one full of
+    comments.
+
+    Which means this is the one thing in the IDE that works for everyone, in
+    every mode, on a machine with code execution switched off entirely -- and
+    that is the moment a person most wants to know whether what they just wrote
+    is even valid. Gating it would have been cargo-culting the Run button's
+    ceremony onto something that does not need it.
+
+    No Customs origin either, for the same reason: Customs guards dispatch into
+    executors, and this reaches none.
+    """
+    code = payload.get("code", "")
+    if not isinstance(code, str):
+        code = str(code)
+    res = sage_engine.check_python_code(code)
+    res["text"] = sage_engine.format_check_result(res)
+    return res
+
+
 @app.post("/api/ide/stop")
 async def api_ide_stop(request: Request):
     """Stop this namespace's run, for real -- the child and anything it
@@ -8825,6 +8852,11 @@ async def ws_chat(websocket: WebSocket):
                     "normal and expected -- if they ask you to put code there, "
                     "this is how, and simply printing it in chat instead is "
                     "not doing what they asked.\n"
+                    + "To CHECK it without running it, emit [IDE_CHECK] -- "
+                      "it reports syntax errors and problems like undefined "
+                      "names, executes nothing, and works whatever their mode "
+                      "is. Prefer it before running, and always after writing "
+                      "code you have not checked.\n"
                     + ("To RUN what is in the editor, emit exactly one\n"
                        "  [IDE_RUN]\n"
                        "with no payload. It runs the editor's CURRENT contents "
@@ -9591,6 +9623,32 @@ async def ws_chat(websocket: WebSocket):
                                         "output": f"editor updated "
                                                   f"({len(content)} chars)",
                                     })
+
+                            elif action_type == "ide_check":
+                                # CHECKING RUNS NOTHING, so it is gated only on
+                                # being able to SEE the buffer -- the same bar
+                                # as reading it, not the Expert bar running
+                                # needs. Advanced is enough. A model that can
+                                # read your code should be able to tell you it
+                                # will not parse.
+                                executed_any = True
+                                if not _ide_buf.strip():
+                                    _cmsg = ("[REFUSED] Their editor is empty, "
+                                             "so there is nothing to check.")
+                                else:
+                                    _cres = sage_engine.check_python_code(_ide_buf)
+                                    _cmsg = sage_engine.format_check_result(_cres)
+                                    # The display area too: the person asked
+                                    # about THEIR code and should see the
+                                    # answer beside it, not only in the chat.
+                                    await websocket.send_json({
+                                        "type": "ide_output", "content": _cmsg,
+                                    })
+                                tool_results_acc[f"ide_check_step_{step}"] = _cmsg
+                                await websocket.send_json({
+                                    "type": "tool_result",
+                                    "tool": "ide_check", "output": _cmsg,
+                                })
 
                             elif action_type == "ide_run":
                                 # RUN WHAT IS IN THE EDITOR, and put the output
