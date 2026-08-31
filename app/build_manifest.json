@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.17.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "7ba66e1aad4242a8b6be27e4013daf18",
-    "built_utc": "2026-08-31T05:26:30.465060+00:00",
+    "build_id": "b312354d49e244968c4126ed2a26e9c6",
+    "built_utc": "2026-08-31T05:38:30.326599+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -139,7 +139,7 @@
       "backend/request_scheduler.py": "f662779a754097c4619a214bf8d53b8ca7ad1e336f31e6dde4c9d11c5dee3e8a",
       "backend/sage_daemon.py": "8b00ea170e5e83e985b6b4a7510540cd1929f1a0ea6acfe3ea2b213f30e719d4",
       "backend/sage_daemon_client.py": "fed83c0f91c813eddc29e705e7b555b1ab6e66d9ef791ea5c7d899c7c04e34bc",
-      "backend/sage_engine.py": "72a9b9a6bd8658cf4eff43388e8f81e61cff0535eaa0b2123d6d3e94b0188301",
+      "backend/sage_engine.py": "1f4f64c7f14ac12f0eeca2b6dd948416055499757286374d2ffc0a40fcfe59e2",
       "backend/sage_messaging_adapter.py": "339761c5f2e3c78bd3c5c8b9f3bf79c6789633fdf463aabbbf3a22d8c4b64617",
       "backend/sage_rag.py": "7ca658001913cf2fdccc23235e3bb76bc5b2d860a833a80d04bfdcd098f813ec",
       "backend/secret_locator.py": "9887808c78a152f9deeb081deb21f80e2adb403c13296b8b06e7ab99fd562ca9",
@@ -196,7 +196,7 @@
       "backend/test_export_symlink_containment.py": "c8b65b1fbe0d4d08030b3f4ba67304c3100bf987cc316e479f31d1572d95bfe6",
       "backend/test_expression_engine.py": "8a1e6b2652308ab45e10534662d36a3d159b1b45b887197150e851a318efab1e",
       "backend/test_first_run_ownership.py": "cd780c5155b500bffc96283ba3edc916cfab55754166bbfb6c704a8bd068ec0e",
-      "backend/test_ide_check.py": "a76820a20a313fb7e6e99d1cd45ea67bc106542b97676a74dc3e80fc01665285",
+      "backend/test_ide_check.py": "b1c1ccab42e54b5e7ec5f8fe83c54497dbe32e5e96195bcacfbf39bf05c1d66c",
       "backend/test_ide_multiuser.py": "6e4f08f7d2b87127b8e09fc29c8aa79ca86378708a9ba163e33888594da3e03c",
       "backend/test_ide_panel.py": "0fa8cf1578b3da57163f3ec230468bd51ea1caff986b9d495c6f2f258832746d",
       "backend/test_ide_run.py": "1be164bc5aafe6b49cd468a48063821c1f4e3ccf2dc3e500922525f7e193e7d3",
@@ -320,5 +320,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "MkwxLenmftoJ6Vr/yDSCNz4hKT+uvV8XW58wOvZEpQXKDSWhjdyz0YYSIWxiq9ov2NCviTFULJhR5HyOHCYnCw=="
+  "signature_b64": "fOLY2VstE9D0R5TmZ3UaACdGrE8lZXJnSn2r5MvXfrpmZTg9cKr3Q2Wp91THSF2oN5DZXgCNVL0zeBAWrrZwCg=="
 }

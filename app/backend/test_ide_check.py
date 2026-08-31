@@ -243,6 +243,88 @@ if main is not None:
     ok("...and its result reaches the display area",
        '"type": "ide_output"' in _br)
 
+print("\n=== 6. What of an exception may reach the browser ===")
+# CodeQL alert 201, py/stack-trace-exposure, on this endpoint's `return res`.
+# It was RIGHT about the dataflow and partly right about the risk. Six places
+# put exception-derived text in the result; two of them ARE the feature and
+# four were gratuitous:
+#
+#   KEPT   SyntaxError.msg / .lineno / .offset -- the parser's diagnostic about
+#          source THE PERSON SUBMITTED. Bounded, and the whole point.
+#   KEPT   pyflakes findings ("'os' imported but unused") -- likewise.
+#   GONE   "%s: %s" % (type(e).__name__, e) for ValueError/MemoryError/
+#          RecursionError -- arbitrary interpreter text.
+#   GONE   the pyflakes class name in the checker label.
+#   GONE   pyflakes' unexpectedError message (checker internals).
+#   GONE   the collector's syntaxError message.
+#
+# What follows holds that line: the first two stay, the other four do not
+# come back.
+_res_src = io.open(os.path.join(_HERE, "sage_engine.py"),
+                   encoding="utf-8").read()
+_chk = _res_src.split("def check_python_code")[1].split(
+    "\ndef format_check_result")[0]
+_col = _res_src.split("class _FlakeCollector")[1].split(
+    "\ndef check_python_code")[0]
+
+
+def _strip(src):
+    # Same stripper as section 4, same reason: assertions about code must not
+    # read the prose explaining the code.
+    _qd, _qs = chr(34) * 3, chr(39) * 3
+    out, in_doc = [], False
+    for line in src.split("\n"):
+        t = line.strip()
+        q = _qd if t.startswith(_qd) else (_qs if t.startswith(_qs) else None)
+        if q is not None:
+            if not (len(t) > 3 and t.endswith(q)):
+                in_doc = not in_doc
+            continue
+        if in_doc or t.startswith("#"):
+            continue
+        out.append(line)
+    return "\n".join(out)
+
+
+_chk_code, _col_code = _strip(_chk), _strip(_col)
+ok("no exception CLASS NAME reaches the result",
+   "type(e).__name__" not in _chk_code, _chk_code)
+ok("no exception is str()'d into a message",
+   "% e)" not in _chk_code and "str(e)" not in _chk_code, _chk_code)
+ok("pyflakes' own error text does not travel",
+   "str(msg)" not in _col_code, _col_code)
+ok("...and SyntaxError.msg still does, because that is the feature",
+   "e.msg" in _chk_code,
+   "the parser telling somebody why THEIR code will not parse is the "
+   "entire product; suppressing it would close the alert and remove the "
+   "reason the endpoint exists")
+
+# Behavioural: the inputs that used to leak interpreter text now do not.
+for label, code, banned in (
+    ("null byte", "x = 1\x00", ("ValueError", "null bytes")),
+    ("deep nesting", "(" * 300 + ")" * 300, ("RecursionError",)),
+):
+    m = se.check_python_code(code)["issues"][0]["msg"]
+    ok("%s reports without naming the exception" % label,
+       not any(b in m for b in banned if b.endswith("Error")), m)
+    ok("...and still says something useful", len(m) > 15, m)
+
+# The response as a whole: only these keys, so nothing can ride along unseen.
+_r = asyncio.run(main.api_ide_check({"code": "def f(\n"}, _Req())) \
+    if main is not None else None
+if _r is not None:
+    ok("the response has a fixed, small shape",
+       set(_r.keys()) == {"ok", "syntax_ok", "checker", "issues", "text"},
+       sorted(_r.keys()))
+    ok("...and each issue does too",
+       all(set(i.keys()) == {"line", "col", "kind", "msg"}
+           for i in _r["issues"]), _r["issues"])
+    ok("no server path appears in the response",
+       _HERE.lower() not in str(_r).lower()
+       and "sage_engine" not in str(_r),
+       "ast.parse is given filename='editor' precisely so nothing of ours "
+       "can end up in a SyntaxError")
+
 print("")
 if _fails:
     print("%d CHECK(S) FAILED" % len(_fails))

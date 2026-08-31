@@ -1953,15 +1953,19 @@ class _FlakeCollector:
         self.items = []
 
     def unexpectedError(self, filename, msg):
+        # pyflakes failing is OUR problem, not a finding about their code, and
+        # its message is checker internals. CodeQL alert 201 (
+        # py/stack-trace-exposure) was right that exception text was reaching
+        # the browser from here; a fixed sentence loses the person nothing.
         self.items.append({"line": 0, "col": 0, "kind": "error",
-                           "msg": str(msg)})
+                           "msg": "the checker could not read this code"})
 
     def syntaxError(self, filename, msg, lineno, offset, text):
         # Never reached in practice: ast.parse() below runs first and returns
         # on SyntaxError, so pyflakes only ever sees code that already parses.
         self.items.append({"line": int(lineno or 0),
                            "col": int(offset or 0),
-                           "kind": "error", "msg": str(msg)})
+                           "kind": "error", "msg": "invalid syntax"})
 
     def flake(self, message):
         self.items.append({
@@ -2003,10 +2007,20 @@ def check_python_code(code: str, filename: str = "editor") -> dict:
                             "kind": "error",
                             "msg": e.msg or "invalid syntax"}]}
     except (ValueError, MemoryError, RecursionError) as e:
-        # Null bytes, absurd nesting. Still not execution -- still a report.
+        # Null bytes, absurd nesting, a buffer too big to parse. Still not
+        # execution -- still a report. The exception TEXT does not travel:
+        # a fixed sentence per cause says more to a person than
+        # "ValueError: source code string cannot contain null bytes", and
+        # keeps interpreter internals out of an HTTP response (CodeQL
+        # py/stack-trace-exposure, alert 201).
+        _why = {ValueError: "this code contains characters Python cannot "
+                            "parse, such as a null byte",
+                RecursionError: "this code is nested too deeply to analyse",
+                MemoryError: "this code is too large to analyse"}
         return {"ok": False, "syntax_ok": False, "checker": "ast",
                 "issues": [{"line": 0, "col": 0, "kind": "error",
-                            "msg": "%s: %s" % (type(e).__name__, e)}]}
+                            "msg": _why.get(type(e),
+                                            "this code could not be parsed")}]}
 
     pf = _pyflakes()
     if pf is None:
@@ -2018,9 +2032,11 @@ def check_python_code(code: str, filename: str = "editor") -> dict:
         _api.check(code, filename, reporter=col)
     except Exception as e:
         # A checker that falls over must not become a failed check. Say so.
+        # The class name told the person nothing and was one more piece of
+        # our internals on the wire. That it FELL BACK is the useful part.
+        print("[CHECK] pyflakes failed, syntax-only result: %r" % (e,))
         return {"ok": True, "syntax_ok": True,
-                "checker": "ast (syntax only -- pyflakes errored: %s)"
-                           % type(e).__name__,
+                "checker": "ast (syntax only -- the linter was unavailable)",
                 "issues": []}
     issues = sorted(col.items, key=lambda i: (i["line"], i["col"]))
     return {"ok": not any(i["kind"] == "error" for i in issues),
