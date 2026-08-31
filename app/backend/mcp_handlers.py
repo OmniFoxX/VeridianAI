@@ -526,13 +526,37 @@ def _tool_browse(args: Dict[str, Any]) -> Dict[str, Any]:
     return _result_text(str(out))
 
 
-def _tool_web_search(args: Dict[str, Any]) -> Dict[str, Any]:
+def _tool_web_search(args: Dict[str, Any], ns=None) -> Dict[str, Any]:
+    # Same gap as _tool_code had, and the same fix: this reaches the NETWORK
+    # from a machine whose owner may have switched web search off. The chat
+    # path has always read this flag; until now the MCP tool did not, so an API
+    # client holding a token was exempt from a control the owner believed
+    # applied everywhere.
+    if not _feature_allowed("web_search_enabled", ns):
+        return _result_text(
+            "[refused] Web search is switched off for this profile. "
+            "Turn it on in Settings -> Web Search.", is_error=True)
     q = str(args.get("query", "")).strip()
     n = int(args.get("num_results", 5))
     if not q:
         return _result_text("[error] empty query", is_error=True)
     out = _sage().web_search_browser(q, num_results=n)
     return _result_text(str(out))
+
+
+def _feature_allowed(key: str, ns=None) -> bool:
+    """Is `key` switched ON for this caller? See _code_exec_allowed below."""
+    try:
+        import main as _main
+        return bool(_main._effective_config(ns).get(key, False))
+    except Exception:
+        pass
+    try:
+        from config_store import OracleConfig
+        from config import CONFIG_FILE
+        return bool(OracleConfig.load(CONFIG_FILE).to_flat_dict().get(key, False))
+    except Exception:
+        return False
 
 
 def _code_exec_allowed(ns=None) -> bool:
@@ -553,20 +577,7 @@ def _code_exec_allowed(ns=None) -> bool:
     ABSENT MEANS OFF, at every step. A missing key is precisely the case where
     nobody has consented to anything.
     """
-    try:
-        import main as _main
-        return bool(_main._effective_config(ns).get("code_exec_enabled", False))
-    except Exception:
-        pass
-    # The stdio-subprocess path, where main was never imported. Read the shared
-    # config the same way main does rather than inventing a second answer.
-    try:
-        from config_store import OracleConfig
-        from config import CONFIG_FILE
-        return bool(OracleConfig.load(CONFIG_FILE).to_flat_dict()
-                    .get("code_exec_enabled", False))
-    except Exception:
-        return False
+    return _feature_allowed("code_exec_enabled", ns)
 
 
 def _tool_code(args: Dict[str, Any], ns=None) -> Dict[str, Any]:
@@ -822,12 +833,13 @@ _NS_TOOLS = frozenset({
     "recall",           # procedural memory
     "remember",         # procedural memory
     "remember_fail",    # procedural memory
-    # `code` does not touch a profile's DATA -- it is here because the switch
-    # that governs it is per-profile. Without the namespace this tool would
+    # `code` and `web_search` do not touch a profile's DATA -- they are here
+    # because the switches that govern them are per-profile. Without the namespace this tool would
     # read the owner's answer to somebody else's question, which on a
     # multi-user install is the wrong answer in the unsafe direction. The note
     # above says "if you are unsure, put it here"; this is not even unsure.
     "code",
+    "web_search",
 })
 
 

@@ -97,19 +97,55 @@ ok("the gate runs BEFORE the executor is reached",
 ok("`code` receives the namespace",
    '"code",' in _src.split("_NS_TOOLS = frozenset({")[1].split("})")[0],
    "without it the tool cannot know whose switch to read")
-ok("absent-means-off is spelled out at every read",
-   _src.count('"code_exec_enabled", False') >= 2,
+# Was `_src.count('"code_exec_enabled", False') >= 2` -- true while the gate
+# was copy-pasted, and false the moment the two gates were consolidated into
+# _feature_allowed(key, ns). Counting duplicates of a security check is a
+# strange thing to require; what matters is that BOTH read paths inside that
+# one helper default to False.
+ok("absent-means-off at both read paths",
+   _src.count(".get(key, False)") >= 2,
    "the default belongs at the read, not in somebody's memory")
 
-print("\n=== 4. Its sibling, for the record ===")
-# NOT a failure, and deliberately not fixed here: web_search reaches the
-# network from the same dispatcher and does not consult web_search_enabled.
-# It is the same shape as this bug, it was found while fixing this one, and it
-# is left as a decision for its owner rather than a change smuggled in beside
-# an approved one. If someone gates it later, turn this into a real assertion.
-_ws_gated = "web_search_enabled" in _src
-print("  note   web_search consults web_search_enabled: %s" % _ws_gated)
-print("         (same shape as this bug; not fixed here on purpose)")
+print("\n=== 4. Its sibling, now gated too ===")
+# This was a printed NOTE, not an assertion: web_search had the identical gap
+# and was deliberately left alone rather than smuggled in beside an approved
+# change. Todd asked for it, so the note became a real check -- which is what
+# the note said should happen.
+def wcall(ns=None):
+    txt = str(m.call_tool("web_search", {"query": "anything"}, ns=ns))
+    return ("refused" in txt.lower(), "Web Search" in txt)
+
+_saved_ws = main.config.get("web_search_enabled")
+main.config["web_search_enabled"] = False
+_ref, _named = wcall()
+ok("web search OFF refuses", _ref)
+ok("...and names the switch", _named)
+
+main.config.pop("web_search_enabled", None)
+ok("ABSENT means OFF for web search too", wcall()[0])
+
+main.config["web_search_enabled"] = True
+_real_overlay2 = main._load_user_overlay
+main._load_user_overlay = (
+    lambda ns: {"web_search_enabled": False} if ns == "alice" else {})
+try:
+    ok("alice's own OFF beats the shared ON", wcall(ns="alice")[0],
+       "web_search_enabled is a PER_USER key, exactly like code_exec_enabled")
+finally:
+    main._load_user_overlay = _real_overlay2
+
+ok("web_search receives the namespace",
+   '"web_search",' in _src.split("_NS_TOOLS = frozenset({")[1].split("})")[0])
+ok("both gates share ONE implementation",
+   _src.count("def _feature_allowed") == 1
+   and "_feature_allowed(\"code_exec_enabled\"" in _src
+   and "_feature_allowed(\"web_search_enabled\"" in _src,
+   "two copies of a security check is two places to fix it next time")
+
+if _saved_ws is None:
+    main.config.pop("web_search_enabled", None)
+else:
+    main.config["web_search_enabled"] = _saved_ws
 
 if _saved is None:
     main.config.pop("code_exec_enabled", None)

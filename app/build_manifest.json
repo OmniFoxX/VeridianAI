@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.17.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "13264de53dbf49eea0cf59f8b194de31",
-    "built_utc": "2026-08-31T02:28:58.551360+00:00",
+    "build_id": "157e62e2276846779ecf0447a92879bd",
+    "built_utc": "2026-08-31T03:26:27.197581+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -64,7 +64,7 @@
       "backend/comfyui_models.py": "fe7ea01eb2ae95d8de784e86cba83d7377f457257f7612a2ee38af050912a74c",
       "backend/comfyui_setup.py": "b7dbdbd4d6b9df13588fc606358478f935baf68cbb7ca0afb3f26a478ae389bf",
       "backend/config.py": "6199d4615db395398c7709891b8f649eb418465f32cf39da7830791e4b5e0d7a",
-      "backend/config_store.py": "69eb7de2b1890dd2b834d7126839a6d6120132e2ab5aa89c4d520bece2016d0a",
+      "backend/config_store.py": "e4cf7aa0247564aa1b219612089dd2f09b3bb0d7a3e0eb69b98dea825d469cd6",
       "backend/context_fatigue_detector.py": "d09abac49ce9ff6cffb8355014404a08158afb03503313f5c1355f00a84227b3",
       "backend/coordinator_signal.py": "397941401b0ebb76f405da832de661b83035057beada28e691a460361f2a6384",
       "backend/craiid/archivist_compression_worker.py": "57a16a4abcd20ce1ba85c99ce1f0f382365c9d71b1abe5c9807c535f2d13bb94",
@@ -108,8 +108,8 @@
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "55b874afeedd4e606674311aec412d708407cb0c287e1fd8abfd7d48b2cf3376",
-      "backend/mcp_handlers.py": "0e98ef36c3fdfad11d451965eeb70ddb04a5f0f481cc3c2a8b60d242aae15e1b",
+      "backend/main.py": "a98f78516edf8784b80b8b4cd6da5bf1d3f3ec39e3e0f49cf6a5b7d27fc3052a",
+      "backend/mcp_handlers.py": "ebf599a0be994996a5112ed557bdd45d69230f01cd90b6a31dadee8b3988d7b6",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "ad11d18057ce37a438ebe5d76ef6523c5652089555ac244eae505bcbbd01ff35",
       "backend/mfa.py": "f5f38dd6336301a5c263fb537a2aed364f47ef51c9caccad826710daf5c53376",
@@ -170,6 +170,7 @@
       "backend/test_atrest_call_sites.py": "daec0a17eea0d55d873692ae5fa615fd3659927b295551a9a8fb13708741e354",
       "backend/test_atrest_ns.py": "4570d80a983a385114721e07c5f4f9d1de87ccf8b8901519ac5a346d2cc2b7ce",
       "backend/test_auth_elevation.py": "c95f898378985d55734a163c282ce162e3021293a135630bfacf813d7e7a99b9",
+      "backend/test_bb_gate_confined.py": "8dc0c3b014a2ea142c607c8876b60f7058378016436d487295b40459fb8093ff",
       "backend/test_bitchat_wire.py": "4c4653278c0408c0465ed588b49792680fc24e237a60b63fe55f3d59f4486142",
       "backend/test_browser.py": "bb4120b286a75f99ea49a12a117ebd934eac81e5e901a1a31435fbabb8ff6ec4",
       "backend/test_build_gate_containment.py": "20b7ad5bd52c2b686f371dab1b85f2dab56b1bea7b9f041d317f1d4af92b615e",
@@ -207,7 +208,7 @@
       "backend/test_key_migration.py": "081d808f64ae4bcfcd7c08b68102af4d258167586f8809523710017c24d6db11",
       "backend/test_keywrap.py": "c2a256d478d7ecf56bff9349f696a487235b746386c02bb43da95249519b9ac2",
       "backend/test_manifest_package_agree.py": "b788eaa1c7fcd9beb250eb7a919305da624e4dd90826933d8663e65c6d871256",
-      "backend/test_mcp_code_gate.py": "a0eb44dc2ea5b22e60e1dacf6f574f1cf26307099c0a8f4dded5ec8d9af080e5",
+      "backend/test_mcp_code_gate.py": "53fd45094ab99a840dc6f2121c766d777115e94f41420a7c9b9463a79c8c3772",
       "backend/test_mcp_containment.py": "cbbdf50833aaaf01654d94b29f0060382d5fc019b96ffab7c01d8162d6d2193f",
       "backend/test_mfa.py": "5c64e4e93ed4acdaa61affcbbc05a61fbb9cc6862c41366e1bcb6bdc33003d18",
       "backend/test_no_content_leak.py": "e01c6655ed0a11ae6d6c2ee792cc4a5c45969c148ccb923be3ab35919d833189",
@@ -317,5 +318,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "8dCqCA/N25Hm283Kw4szyfGHgpZQnU7ooPj3JaW0LVjMCNMbFyFeXZ/EVFKM7N2UrSWglaDfLJn2ZfdZtORZAg=="
+  "signature_b64": "lGJ6Uam6BJL2F2HCKWHHe066LnmAHA70Spx8l+UJoP6MWSbSA97GZh4ByQkePrzVs+HOuq7bATXGy3upDLdTAw=="
 }

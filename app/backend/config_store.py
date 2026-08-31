@@ -290,6 +290,29 @@ class TogaSection:
     imperium_enforce: bool = False
     imperium_window_seconds: float = 5.0
     imperium_violation_threshold: int = 3
+    # SENTINEL WATCH: behavioural-anomaly observer riding Imperium's log chain.
+    # Separate knob from imperium_* on purpose -- it is a different question
+    # ("is this strange?") from Imperium's ("is this allowed?").
+    #
+    # THESE LIVE IN THE SCHEMA BECAUSE HAND-ADDED KEYS DO NOT SURVIVE.
+    # OracleConfig is a strict schema: load() keeps only what it declares and
+    # save_config() writes only what it holds, so a knob added straight into
+    # config.json is silently dropped the next time anything saves settings.
+    # That is what erased a working sentinel_watch block, and no amount of
+    # careful JSON editing would have kept it. A knob is real when it is here.
+    #
+    # FLAT, matching what imperium.py's _cfg() actually reads. A nested
+    # {"sentinel_watch": {...}} block reads naturally but is not what the code
+    # asks for, so it would be inert even if it did survive.
+    #
+    # OFF by default, and observe-only: SentinelWatcher emits through the
+    # Overseer alert hook and enforces nothing. It needs a baseline of ordinary
+    # use before its numbers mean anything.
+    sentinel_watch_enabled: bool = False
+    sentinel_window: float = 300.0
+    sentinel_sigma: float = 2.5
+    sentinel_min_samples: int = 10
+    sentinel_poll: float = 10.0
     privacy_mode: bool = False
     # v2.12.1 personalization: the assistant's NAME (persona self-reference)
     # and the voice/socials WAKE WORD. assistant_name is per-user capable
@@ -547,6 +570,18 @@ class OracleConfig:
             "imperium_enforce":        self.sage.imperium_enforce,
             "imperium_window_seconds": self.sage.imperium_window_seconds,
             "imperium_violation_threshold": self.sage.imperium_violation_threshold,
+            # Coerced on the way OUT, because _hydrate_section assigns v2
+            # nested values onto the dataclass with deliberately light typing --
+            # so `"sentinel_sigma": "2.5"` (or a typo) lands here as a string.
+            # imperium.py does float() on these inside a try, so a bad value
+            # would not crash anything; it would just mean the watcher silently
+            # never starts, which is the exact failure this whole knob exists
+            # to get away from. A junk value falls back to the default instead.
+            "sentinel_watch_enabled":  bool(self.sage.sentinel_watch_enabled),
+            "sentinel_window":         _num(self.sage.sentinel_window, 300.0),
+            "sentinel_sigma":          _num(self.sage.sentinel_sigma, 2.5),
+            "sentinel_min_samples":    int(_num(self.sage.sentinel_min_samples, 10)),
+            "sentinel_poll":           _num(self.sage.sentinel_poll, 10.0),
             "privacy_mode":            self.sage.privacy_mode,
             # v2.12.1 personalization
             "assistant_name":          self.sage.assistant_name,
@@ -711,6 +746,15 @@ class OracleConfig:
             cfg.sage.imperium_violation_threshold = int(_g("imperium_violation_threshold", cfg.sage.imperium_violation_threshold))
         except (TypeError, ValueError):
             pass  # malformed knob -> keep defaults, never crash boot
+        cfg.sage.sentinel_watch_enabled = bool(
+            _g("sentinel_watch_enabled", cfg.sage.sentinel_watch_enabled))
+        try:
+            cfg.sage.sentinel_window     = float(_g("sentinel_window",     cfg.sage.sentinel_window))
+            cfg.sage.sentinel_sigma      = float(_g("sentinel_sigma",      cfg.sage.sentinel_sigma))
+            cfg.sage.sentinel_min_samples = int(_g("sentinel_min_samples", cfg.sage.sentinel_min_samples))
+            cfg.sage.sentinel_poll       = float(_g("sentinel_poll",       cfg.sage.sentinel_poll))
+        except (TypeError, ValueError):
+            pass  # same rule as the imperium knobs above: never crash boot
         cfg.sage.privacy_mode       = bool(_g("privacy_mode",       cfg.sage.privacy_mode))
         # v2.12.1 personalization — sanitized: printable, no quotes/brackets
         # (they'd break prompt framing and tag parsing), max 24 chars.
@@ -802,6 +846,20 @@ def _sanitize_max_tokens(v) -> int:
     if n <= 0:
         return -1
     return n
+
+
+def _num(value: Any, default: float) -> float:
+    """A number, or the default. Never raises.
+
+    Config values reach the dataclass through _hydrate_section, which does a
+    light-touch setattr and will happily store a string. Everything that reads
+    these knobs wants a number.
+    """
+    try:
+        n = float(value)
+    except (TypeError, ValueError):
+        return default
+    return n if n == n and n not in (float("inf"), float("-inf")) else default
 
 
 def _hydrate_section(section_obj: Any, raw: dict) -> None:

@@ -7906,15 +7906,30 @@ def _bb_gate_summary(raw):
 
 async def _bb_run_gate(candidate_code, test_content, module_name, test_filename, timeout=60):
     """Run a gate test against candidate code in a temp dir. Writes
-    <module>.py + the test into a temp dir, runs the test as a subprocess, and
-    returns (passed, raw_output). Off-thread so the event loop is not blocked."""
+    <module>.py + the test into a temp dir inside a CONFINED child interpreter,
+    executes the test there with runpy, and returns (passed, raw_output).
+    Off-thread so the event loop is not blocked."""
     import base64 as _b64
     import asyncio as _aio
-    # NOT a sandbox, and this docstring used to call it one. It is a temp
-    # directory and a subprocess with the same rights as this process --
-    # see sage_engine.execute_python. The isolation here is that the
-    # candidate cannot overwrite the real module, not that it cannot reach
-    # the machine.
+    # CONFINED since 2026-08-31. This runs code a MODEL just wrote, purely to
+    # find out whether it passes a test suite -- which needs no network, no new
+    # processes, and no reach into VeridianAI's data folder. Todd's words for
+    # why: "I don't want them somehow competing themselves into the open web
+    # and beyond."
+    #
+    # It used to say "NOT a sandbox", correctly, because it was
+    # execute_python: a temp directory and a subprocess with this process's own
+    # rights. The isolation was that the candidate could not overwrite the real
+    # module, not that it could not reach the machine. Now confinement covers
+    # the second half too -- see sage_engine.execute_python_confined.
+    #
+    # THE DRIVER HAD TO CHANGE TO MAKE THAT POSSIBLE. It used to launch the
+    # test file with subprocess.run, and the confined runner blocks exactly
+    # that -- so confining it naively would have turned every gate into a
+    # failure. The test is now executed IN the confined child with runpy, which
+    # is the same isolation that mattered (a fresh interpreter state, in a temp
+    # directory, unable to touch the real module) minus the process hop the
+    # confinement forbids.
     # ── CUSTOMS gate (v2.13): model-produced candidate code enters the
     # sandbox through here. Structure check only (Customs never needs to
     # understand the code -- that's the gate test's job).
@@ -7935,19 +7950,38 @@ async def _bb_run_gate(candidate_code, test_content, module_name, test_filename,
         return False, "[CUSTOMS] gate test rejected: " + (_ct.correction or "")
     cb = _b64.b64encode((candidate_code or "").encode("utf-8")).decode("ascii")
     tb = _b64.b64encode((test_content or "").encode("utf-8")).decode("ascii")
+    # runpy, not subprocess. The output contract is unchanged: a GATE_RC= line
+    # that _bb_gate_summary and the caller both key off, then the test's own
+    # stdout. SystemExit is what a self-running test raises via sys.exit(), so
+    # its code IS the return code; any other exception is a failing gate and
+    # its traceback is the useful part.
     driver = (
-        "import base64,os,sys,subprocess,tempfile\n"
+        "import base64,io,os,runpy,sys,tempfile,traceback,contextlib\n"
         "cand=base64.b64decode('" + cb + "').decode('utf-8')\n"
         "test=base64.b64decode('" + tb + "').decode('utf-8')\n"
         "d=tempfile.mkdtemp(prefix='bbgate_')\n"
         "open(os.path.join(d," + repr(module_name + '.py') + "),'w',encoding='utf-8').write(cand)\n"
-        "open(os.path.join(d," + repr(test_filename) + "),'w',encoding='utf-8').write(test)\n"
-        "r=subprocess.run([sys.executable,'-X','utf8',os.path.join(d," + repr(test_filename) + ")],cwd=d,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=" + str(int(timeout)) + ")\n"
-        "print('GATE_RC='+str(r.returncode))\n"
-        "print((r.stdout or '')[-3000:])\n"
-        "if r.stderr: print('[GATE_STDERR] '+r.stderr[-1500:])\n"
+        "tp=os.path.join(d," + repr(test_filename) + ")\n"
+        "open(tp,'w',encoding='utf-8').write(test)\n"
+        "os.chdir(d); sys.path.insert(0,d)\n"
+        "buf=io.StringIO(); err=io.StringIO(); rc=0\n"
+        "try:\n"
+        "    with contextlib.redirect_stdout(buf), contextlib.redirect_stderr(err):\n"
+        "        runpy.run_path(tp, run_name='__main__')\n"
+        "except SystemExit as e:\n"
+        "    rc = e.code if isinstance(e.code,int) else (0 if e.code is None else 1)\n"
+        "except BaseException:\n"
+        "    rc = 1\n"
+        "    err.write(traceback.format_exc())\n"
+        "print('GATE_RC='+str(rc))\n"
+        "print(buf.getvalue()[-3000:])\n"
+        "_e=err.getvalue()\n"
+        "if _e: print('[GATE_STDERR] '+_e[-1500:])\n"
     )
-    raw = await _aio.to_thread(sage_engine.execute_python, driver, int(timeout) + 30)
+    # ns=None: the gate is a system operation, not a person's workspace. Its
+    # scratch directory is the shared one, and nothing it writes is kept.
+    raw = await _aio.to_thread(
+        sage_engine.execute_python_confined, driver, int(timeout) + 30, None)
     return ("GATE_RC=0" in raw), raw
 
 
