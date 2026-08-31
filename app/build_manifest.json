@@ -5,8 +5,8 @@
     "product": "VeridianAI",
     "version": "2.17.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "237748c7b7b34de4a380623e241ea3b2",
-    "built_utc": "2026-08-31T03:32:57.303138+00:00",
+    "build_id": "00951a8de5024080bbc9dbdad30ca70b",
+    "built_utc": "2026-08-31T04:01:18.472592+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -99,7 +99,7 @@
       "backend/gguf_probe.py": "1e693a7d9bba3034cff6613e383d5009e832917f9b4b4e96036fb631b06ca351",
       "backend/handoff_guard.py": "5c1c14b4ca540680a17b5d1948fcd4407e8f8beb698e0b4d3ebcf0fd58546285",
       "backend/hw_utils.py": "19daf3619f78c4b6af72cb3fcf46756eb8838ddb26469d364bbab53de8a7ffab",
-      "backend/imperium.py": "e8a5f0120f927f6055f781cdaafe267fb3d20361d10e67e82456f793b2fc7598",
+      "backend/imperium.py": "3d262219cc707accf3104fc5e4953df8ac087ef7faa9d402b9f68c2c76122dfd",
       "backend/infer_plm_daemon_v2.py": "442f7dca54aa786d57d204c88fe431afbe403b25b6c4c20b6f46e641ee8423c0",
       "backend/intent_scope.py": "b439f6749ec6eaa167b757718c97bfe353913d04ab64d739c318c0c1e5459775",
       "backend/ip_access.py": "d71364a681e69747d48fa55f229d2d00d1a0589e4fdbd5d303af5e65b99c2902",
@@ -318,5 +318,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "IJ/YRcgOlM3Stbl7aOXfKvQxZ/FVBeRvZ+0ofnW4sXBzwlABwUuouIy0gOZnasHYhW5yE4EFNm6itdxQfTyiBA=="
+  "signature_b64": "eAIX63zlXbn0CtiCUr636WRbSHZp1L0ObbqX6YsApWDV0zLmlW7dmUivisAdjTxNC/HBZrkvb2mDcCXd3+fKCQ=="
 }

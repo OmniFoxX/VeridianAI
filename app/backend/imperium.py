@@ -35,7 +35,7 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Union
 
 IMPERIUM_VERSION = "2.1"          # module iteration lineage: imperium_v2
-PARENT_RELEASE = "2.16.2"         # Updated to match current release context
+PARENT_RELEASE = "2.17.0"         # Updated to match current release context
 
 
 # ----------------------------------------------------------------------
