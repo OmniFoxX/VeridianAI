@@ -3,10 +3,10 @@
     "schema": "veridianai_build_manifest",
     "manifest_version": 1,
     "product": "VeridianAI",
-    "version": "2.16.2",
+    "version": "2.17.0",
     "canonical_repo": "https://github.com/OmniFoxX",
-    "build_id": "94cecbf7f87842b5ac1e89ee57d91a89",
-    "built_utc": "2026-08-30T18:48:23.951721+00:00",
+    "build_id": "b1b42133634749c19fc59ef80302dbe8",
+    "built_utc": "2026-08-31T02:03:14.426695+00:00",
     "fingerprint": "a6275345d8a615469f687dcb404d87cf",
     "integrity_sensitive": [
       "backend/atrest.py",
@@ -108,8 +108,8 @@
       "backend/journalist_ops_detector.py": "41ca74c00311237ee723d230f91a47dd13789385f74cfe81abe3d40a09ff9a22",
       "backend/key_migration.py": "d6ed0b07ef5da1671ae13c3ddb546e25f1cc921f9640569c233fb75270c36873",
       "backend/keywrap.py": "2b059383edfd4201b9a16063146fb8ffdc393ba6047f14812604c6f4df8b2f60",
-      "backend/main.py": "251dd5ab2ece39380f1f5d6f1f835702a119a5473cbf1385b5bd5805e792d207",
-      "backend/mcp_handlers.py": "c4352f19567b9caf38b9643bbe0d3bcf717ab2d5cd214bf562a0725a8dea3351",
+      "backend/main.py": "a5a0fc5fb5d1d6cf7fae4143f5f9bb3a01171f7634c8cef0db2981dec27d7efb",
+      "backend/mcp_handlers.py": "0e98ef36c3fdfad11d451965eeb70ddb04a5f0f481cc3c2a8b60d242aae15e1b",
       "backend/mcp_server.py": "99bd71481a24735073282bb968444062ce29e736767543710945c0e3df73d1c1",
       "backend/memory_logger_surprise.py": "ad11d18057ce37a438ebe5d76ef6523c5652089555ac244eae505bcbbd01ff35",
       "backend/mfa.py": "f5f38dd6336301a5c263fb537a2aed364f47ef51c9caccad826710daf5c53376",
@@ -303,8 +303,8 @@
       "frontend/manifest.webmanifest": "d6e2a017c08dbf7f5b4dda36943810d19828fe0680bdcb9c5d14149961cfefce",
       "frontend/offline.html": "ac88e9cb27c56234a57b7240de73b3e326d4d54b8dd4f18d3a7a16340d68fee6",
       "frontend/sw.js": "6231f99d9f1e54eb7d8028a0c14aa83b9ba02590d3792e4aac9672f29631d25c",
-      "start.bat": "d8ffed36672ea8eb2d27862904ceadbb26cb1edf658ad98fc977af8553afde71",
-      "start.py": "88f750ba613e59a411b069a4d8b22ceda3609d8346f0c8097d884f62fbb0993b",
+      "start.bat": "b306087541530d18ea205312736515426f409bb958b33d12fe0b0aa180ed46bb",
+      "start.py": "f10032ba7495d384cfaa4247a743dd9bc1a9ba0ebd77bc50135d50dcc046a3eb",
       "store_launch.py": "848d5a2b4b7ff4b36cfb50cfea8722781ba96347d655321543d220a1cc6e9c15",
       "tools/aiq_nudge_send.py": "9e6daa3e6dd997f3a3523298bf20ce7f2e82eadce950d166a4d673a49e5691d5",
       "tools/build_asar.js": "dd99e5108b7e0f0b0a67a79ef9248a6d090882eab4ec7d85dd24422f251fde3d",
@@ -317,5 +317,5 @@
     }
   },
   "algo": "ed25519",
-  "signature_b64": "vCH0/BXhnyAhDzUEOw72ShBFIQizhfjMA6vmCEW9gkMNEhyDdnZ9Znp5Og5Ji08LHmT6GOOxbNi7vd46j+IbDQ=="
+  "signature_b64": "AgJM4WwbEVsVBcwnV57jE3sUFJqlqqZekvMGv+P28NuHX5tDbZb2DDzmkct3pmKpDTDQAdAXi+VA8zTpvnsEBw=="
 }
