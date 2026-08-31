@@ -8382,10 +8382,17 @@ async def ws_chat(websocket: WebSocket):
             # NOT get to say what mode it is in. The stored mode decides,
             # here, from this connection's namespace.
             _ide_buf = ""
+            _clip_on = False
+            _ide_may_write = False
             try:
                 import ui_prefs as _uip
                 _clip_on = bool(_uip.get("ide_toga_clip", False, ns=_ws_ns))
-                if _clip_on and _ide_mode_at_least(_ws_ns, "advanced"):
+                # PERMISSION, not content. These are two different questions and
+                # conflating them is what made "write hello world into the
+                # editor" impossible: see the injection block below.
+                _ide_may_write = _clip_on and _ide_mode_at_least(
+                    _ws_ns, "advanced")
+                if _ide_may_write:
                     _raw_buf = data.get("ide_buffer")
                     if isinstance(_raw_buf, str):
                         # A ceiling, because this is prompt context and an
@@ -8754,27 +8761,65 @@ async def ws_chat(websocket: WebSocket):
                       f"{_pm_e}")
 
             # --- the editor, and what may be done with it ----------------
-            # Only present when the person actually shared it. A model that is
-            # never told about [IDE_WRITE:] cannot be argued into emitting it,
-            # and in Beginner there is nothing to describe anyway.
-            if _ide_buf:
+            # THE CONDITION IS PERMISSION, NOT CONTENT, and that distinction is
+            # the whole bug this replaced.
+            #
+            # This block used to be gated on `if _ide_buf:` -- on the editor
+            # having text in it. So the most natural first thing anyone asks --
+            # "put a hello world in the editor for me" -- was the one case that
+            # could never work: an EMPTY editor meant no block, which meant
+            # Toga was never told [IDE_WRITE:] exists, which meant she did the
+            # nearest thing she knew and reported success. Twice, for Todd,
+            # before anyone thought to look here.
+            #
+            # The safety property the old comment was protecting is real and is
+            # kept: a model never told the tag exists cannot be argued into
+            # emitting it. So the tag is still named ONLY when the person has
+            # actually granted access. What changed is that "granted access"
+            # is now a question about their SETTINGS rather than about whether
+            # they happened to have typed something first.
+            if _ide_may_write:
                 _may_run = _ide_mode_at_least(_ws_ns, "expert")
                 sys_prompt += (
                     "\n\n=== THE PERSON'S CODE EDITOR (internal — do not "
                     "display) ===\n"
-                    "They have opened the IDE panel's editor to you. Its "
-                    "current contents are between the markers below. Do not "
-                    "echo this section back at them; they can already see it.\n"
+                    "They have opened the IDE panel's editor to you.\n"
                     "To REPLACE the editor contents, emit exactly one\n"
                     "  [IDE_WRITE: <the complete new contents>]\n"
                     "It replaces the whole buffer, so send the whole file, not "
-                    "a fragment or a diff. Only do this when they asked you to "
-                    "change the code.\n"
+                    "a fragment or a diff. Writing into an EMPTY editor is "
+                    "normal and expected -- if they ask you to put code there, "
+                    "this is how, and simply printing it in chat instead is "
+                    "not doing what they asked.\n"
                     + ("You may also run it with [CODE:] when they ask.\n"
                        if _may_run else
                        "You may NOT run it. They press Run themselves.\n")
-                    + "--- EDITOR BEGIN ---\n" + _ide_buf
-                    + "\n--- EDITOR END ===\n"
+                    + (("Its current contents are between the markers below. "
+                        "Do not echo this section back at them; they can "
+                        "already see it.\n"
+                        "--- EDITOR BEGIN ---\n" + _ide_buf
+                        + "\n--- EDITOR END ---\n")
+                       if _ide_buf else
+                       "The editor is currently EMPTY.\n")
+                )
+            else:
+                # Not permitted -- and saying nothing is what produced a
+                # confident "done" over an editor that never changed. The tag
+                # is deliberately NOT named here, so the safety property above
+                # still holds; what she gets is enough to tell the truth and
+                # name the two switches that would change the answer.
+                sys_prompt += (
+                    "\n\n=== THE PERSON'S CODE EDITOR (internal — do not "
+                    "display) ===\n"
+                    "VeridianAI has an IDE panel with a code editor. You "
+                    "currently have NO access to it: you can neither read it "
+                    "nor write into it.\n"
+                    "If they ask you to put code in the editor, say plainly "
+                    "that you cannot reach it yet, and tell them how: set the "
+                    "IDE panel's mode dropdown to Advanced (or Expert), then "
+                    "open the IDE menu and switch on 'Allow Toga to "
+                    "Copy/Paste'. Offer the code in chat in the meantime.\n"
+                    "NEVER say you have written to their editor. You cannot.\n"
                 )
 
             if not messages or messages[0].get("role") != "system":
@@ -9467,10 +9512,18 @@ async def ws_chat(websocket: WebSocket):
                                     _clip_ok = False
                                 if not (_clip_ok and _ide_mode_at_least(
                                         _ws_ns, "advanced")):
+                                    # Names the two switches, so the model can
+                                    # relay something the person can act on
+                                    # rather than a dead end. Same principle as
+                                    # /api/ide/run's 403.
                                     tool_results_acc[f"ide_write_step_{step}"] = (
-                                        "[REFUSED] The person's IDE mode does "
-                                        "not allow you to write to their "
-                                        "editor.")
+                                        "[REFUSED] You do not have access to "
+                                        "their editor. Tell them they can "
+                                        "grant it by setting the IDE panel's "
+                                        "mode to Advanced or Expert and "
+                                        "switching on 'Allow Toga to "
+                                        "Copy/Paste' in the IDE menu. Do not "
+                                        "claim the editor was changed.")
                                 else:
                                     await websocket.send_json({
                                         "type": "tool_call",
