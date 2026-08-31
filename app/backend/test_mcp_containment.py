@@ -141,10 +141,12 @@ print("\n== _NS_TOOLS is the audit list, and it is complete ==")
 # not notice a sixth arriving by accident.
 ok("contains exactly the tools that need a namespace",
    set(NS_TOOLS) == {"search_memory", "save_file", "recall", "remember",
-                     "remember_fail", "code"}, set(NS_TOOLS))
-ok("...and `code` is there for its SWITCH, not for storage",
-   "code" in NS_TOOLS,
-   "see test_mcp_code_gate.py: the profile's own code_exec_enabled decides")
+                     "remember_fail", "code", "web_search"}, set(NS_TOOLS))
+ok("...and `code`/`web_search` are there for their SWITCHES, not for storage",
+   "code" in NS_TOOLS and "web_search" in NS_TOOLS,
+   "see test_mcp_code_gate.py: the profile's own code_exec_enabled and "
+   "web_search_enabled decide, and reading the owner's answer instead would "
+   "be wrong in the unsafe direction")
 ok("is a frozenset (cannot be mutated at runtime)",
    isinstance(NS_TOOLS, frozenset), type(NS_TOOLS))
 
