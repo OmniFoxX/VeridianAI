@@ -205,7 +205,17 @@ ok("...and Advanced is told it may not run it",
    "You may NOT run it" in _adv_full)
 
 _exp_full = _build(True, "x = 1\n", "expert")
-ok("EXPERT is told it may run", "may also run it" in _exp_full)
+# Was `"may also run it" in _exp_full`, which pinned a sentence rather than a
+# capability -- and went red the moment Expert got a REAL way to run the editor.
+# Before [IDE_RUN] existed, "you may also run it with [CODE:]" was the only
+# thing that could be said, and it did not work: [CODE:] runs the model's
+# retyped copy and reports into the chat, so the display area stayed empty
+# while the model said it had run. See test_ide_run_tag.py.
+ok("EXPERT is told HOW to run the editor", "[IDE_RUN]" in _exp_full,
+   _exp_full[:200])
+ok("...and told not to retype it into [CODE:] instead",
+   "Do NOT retype" in _exp_full,
+   "a retyped copy can differ from what is on their screen")
 
 _denied = _build(False, "", "beginner")
 ok("NOT PERMITTED does not name the tag",

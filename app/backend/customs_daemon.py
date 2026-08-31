@@ -190,6 +190,14 @@ if BaseModel is not None:
         # person's working code and must never reach an audit preview.
         code: str = Field(json_schema_extra={"sensitive": True})
 
+    class IdeRunArgs(BaseModel):
+        # Deliberately EMPTY of payload. [IDE_RUN] carries no code: the thing
+        # it runs is whatever is already in the person's editor, read
+        # server-side. `note` exists only because models emit
+        # "[IDE_RUN: the editor]" as often as "[IDE_RUN]", and bouncing a
+        # harmless word would teach nothing. It is never executed.
+        note: str = Field(default="", max_length=200)
+
     class SaveFileArgs(BaseModel):
         filename: str = Field(min_length=1, max_length=255)
         content: str = Field(json_schema_extra={"sensitive": True})
@@ -502,6 +510,29 @@ class CodeValidator(ToolValidator):
         return None
 
 
+class IdeRunValidator(ToolValidator):
+    """ide_run: the model asking to run what is ALREADY in the person's editor.
+
+    There is no code in this call, and that is the design. The buffer is read
+    server-side from the request that carried it, so what runs is byte for byte
+    what the person is looking at -- a model retyping the code into [CODE:]
+    could run something subtly different from what is on their screen, and
+    neither of them would notice.
+
+    So Customs has almost nothing to validate here, and the entry it writes is
+    the point: "the model ran my editor" becomes a fact in the audit chain
+    rather than a memory. The gates that decide whether it MAY run are in
+    main.py -- expert mode, the copy/paste switch, and code_exec_enabled --
+    and they are re-checked at dispatch, not inherited from this call.
+    """
+    tool_name = "ide_run"
+    schema = IdeRunArgs if BaseModel is not None else None
+
+    def safe_preview(self, args):
+        # Nothing to preview: no payload, and the buffer never enters this call.
+        return "(runs the current editor buffer)"
+
+
 class IdeWriteValidator(ToolValidator):
     """ide_write: the model proposing new contents for the IDE editor.
 
@@ -659,6 +690,7 @@ for _v in (BrowserToolValidator(), SearchValidator(),
            SearchGeneralValidator(), SearchMemoryValidator(),
            RecallValidator(), WebSearchBrowserValidator(),
            WeatherValidator(), CodeValidator(), IdeWriteValidator(),
+           IdeRunValidator(),
            SaveFileValidator(),
            GenerateImageValidator(), VerifyFileValidator(),
            RememberValidator(), RememberFailValidator(),
@@ -845,6 +877,7 @@ _TAG_TO_ARGS: Dict[str, Callable[[Any], Dict[str, Any]]] = {
     "weather":            lambda c: {"location": str(c)},
     "code":               lambda c: {"code": str(c)},
     "ide_write":          lambda c: {"code": str(c)},
+    "ide_run":            lambda c: {"note": str(c or "")[:200]},
     "generate_image":     lambda c: {"prompt": str(c)},
     "verify_file":        lambda c: {"path": str(c)},
     "lint_expr":          lambda c: {"expr": str(c)},
@@ -871,6 +904,7 @@ _ARGS_TO_TAG: Dict[str, Callable[[Dict[str, Any]], Any]] = {
     "weather":            lambda a: a["location"],
     "code":               lambda a: a["code"],
     "ide_write":          lambda a: a["code"],
+    "ide_run":            lambda a: a.get("note", ""),
     "generate_image":     lambda a: a["prompt"],
     "verify_file":        lambda a: a["path"],
     "lint_expr":          lambda a: a["expr"],

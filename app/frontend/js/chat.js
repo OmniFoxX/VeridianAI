@@ -93,6 +93,12 @@ function connectWS() {
     // decides what to do with this -- including keeping the previous contents
     // for undo. Guarded because ide.js may not have loaded yet on a slow
     // first paint, and a dropped write is better than a thrown error.
+    else if (data.type === "ide_output") {
+      // Toga ran the editor. The output belongs in the DISPLAY AREA, which is
+      // where a person watching the IDE is looking -- it also arrives as an
+      // ordinary tool_result in the chat, and that is not the same thing.
+      if (window.ideShowOutput) window.ideShowOutput(data.content);
+    }
     else if (data.type === "ide_write") {
       if (window.ideApplyWrite) window.ideApplyWrite(data.content);
     }

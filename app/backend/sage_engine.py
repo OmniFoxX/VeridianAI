@@ -2735,7 +2735,8 @@ _ORPHAN_TAG_RE = re.compile(
 
 
 _KNOWN_TAG_NAMES = (
-    "SAVE_FILE", "VERIFY_FILE", "IDE_WRITE", "CODE", "SEARCH_GENERAL", "SEARCH_MEMORY",
+    "SAVE_FILE", "VERIFY_FILE", "IDE_WRITE", "IDE_RUN", "CODE",
+    "SEARCH_GENERAL", "SEARCH_MEMORY",
     "SEARCH", "WEATHER", "BROWSE", "WEB_SEARCH", "REMEMBER_FAIL",
     "REMEMBER", "RECALL", "PRIORITISE", "GENERATE_IMAGE", "LINT_EXPR",
     "PARSE_EXPR", "TASK_DONE",
@@ -3007,6 +3008,13 @@ def parse_agent_actions(text: str, return_ranges: bool = False):
         # Expression engine tags (safe math/logic, no Python eval). Payload is
         # the raw expression string; dispatched in main.py's agentic loop via
         # expression_engine. Imported directly so it works with sage plugins off.
+        # Run whatever is CURRENTLY IN THE EDITOR. Deliberately payload-free:
+        # the whole point is that it runs the buffer the person is looking at,
+        # byte for byte, rather than a retyped copy that can drift from it.
+        # `:?\s*(.*?)` accepts [IDE_RUN], [IDE_RUN:] and [IDE_RUN: anything] --
+        # models emit all three, any payload is ignored, and group(1) is always
+        # a string so the shared `m.group(1).strip()` below cannot trip on None.
+        (r"\[IDE_RUN:?\s*(.*?)\]",     "ide_run"),
         (r"\[LINT_EXPR:\s*(.*?)\]",  "lint_expr"),
         (r"\[PARSE_EXPR:\s*(.*?)\]", "parse_expr"),
     )

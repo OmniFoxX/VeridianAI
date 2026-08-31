@@ -8825,7 +8825,15 @@ async def ws_chat(websocket: WebSocket):
                     "normal and expected -- if they ask you to put code there, "
                     "this is how, and simply printing it in chat instead is "
                     "not doing what they asked.\n"
-                    + ("You may also run it with [CODE:] when they ask.\n"
+                    + ("To RUN what is in the editor, emit exactly one\n"
+                       "  [IDE_RUN]\n"
+                       "with no payload. It runs the editor's CURRENT contents "
+                       "and puts the output in their display area, where they "
+                       "are looking. Do NOT retype the code into [CODE:] to run "
+                       "it -- that runs your copy, which can differ from what "
+                       "is on their screen, and the output lands in the chat "
+                       "instead of the editor's output box. Write first with "
+                       "[IDE_WRITE:], then run with [IDE_RUN].\n"
                        if _may_run else
                        "You may NOT run it. They press Run themselves.\n")
                     + (("Its current contents are between the markers below. "
@@ -9582,6 +9590,85 @@ async def ws_chat(websocket: WebSocket):
                                         "tool": "ide_write",
                                         "output": f"editor updated "
                                                   f"({len(content)} chars)",
+                                    })
+
+                            elif action_type == "ide_run":
+                                # RUN WHAT IS IN THE EDITOR, and put the output
+                                # where the person is looking.
+                                #
+                                # Before this existed, Expert mode's only way to
+                                # "run the code" was [CODE:], which runs the
+                                # code inside the TAG and reports into the chat.
+                                # Two things went wrong with that, and Todd hit
+                                # both: the model had to retype the buffer (so
+                                # it could run something subtly different from
+                                # what is on screen), and nothing ever wrote to
+                                # the IDE display -- ideShowOutput was reachable
+                                # only from the Run button. So the person
+                                # watched an empty output box while the model,
+                                # holding a perfectly real tool result, said it
+                                # had run. A capability with no route to where
+                                # someone is looking reads exactly like a lie.
+                                executed_any = True
+                                _run_buf = _ide_buf   # what rode in THIS turn
+                                try:
+                                    import ui_prefs as _uip3
+                                    _clip_r = bool(_uip3.get(
+                                        "ide_toga_clip", False, ns=_ws_ns))
+                                except Exception:
+                                    _clip_r = False
+                                # Every gate re-checked here, not inherited.
+                                # Running is a strictly larger authority than
+                                # writing, so it asks for EXPERT.
+                                if not code_ok:
+                                    _msg = ("[REFUSED] Code execution is "
+                                            "switched off. Tell them they can "
+                                            "turn it on in Settings -> Code "
+                                            "Execution. Do not claim it ran.")
+                                elif not (_clip_r and _ide_mode_at_least(
+                                        _ws_ns, "expert")):
+                                    _msg = ("[REFUSED] You may not run their "
+                                            "editor. That needs Expert mode "
+                                            "with 'Allow Toga to Copy/Paste' "
+                                            "on. They can press Run themselves "
+                                            "instead. Do not claim it ran.")
+                                elif not _run_buf.strip():
+                                    _msg = ("[REFUSED] Their editor is empty, "
+                                            "so there is nothing to run.")
+                                else:
+                                    _msg = None
+                                if _msg is not None:
+                                    tool_results_acc[f"ide_run_step_{step}"] = _msg
+                                    await websocket.send_json({
+                                        "type": "tool_result",
+                                        "tool": "ide_run", "output": _msg,
+                                    })
+                                else:
+                                    await websocket.send_json({
+                                        "type": "tool_call",
+                                        "tool": "ide_run",
+                                        "input": f"{len(_run_buf)} chars",
+                                        "message": "\u25b6 Running the editor\u2026",
+                                    })
+                                    # Expert is the only mode that reaches here,
+                                    # and Expert is unconfined -- the same
+                                    # bargain the Run button makes, decided in
+                                    # one place.
+                                    _loop_ide = asyncio.get_event_loop()
+                                    _ide_out = await _loop_ide.run_in_executor(
+                                        None, sage_engine.execute_python,
+                                        _run_buf, _code_timeout)
+                                    # The DISPLAY, not just the chat. This is
+                                    # the whole point of the tag.
+                                    await websocket.send_json({
+                                        "type": "ide_output",
+                                        "content": _ide_out,
+                                    })
+                                    tool_results_acc[f"ide_run_step_{step}"] = (
+                                        _ide_out)
+                                    await websocket.send_json({
+                                        "type": "tool_result",
+                                        "tool": "ide_run", "output": _ide_out,
                                     })
 
                             elif action_type == "search_memory":
