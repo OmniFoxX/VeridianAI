@@ -54,10 +54,12 @@
     }
   },
   "devDependencies": {
-    "electron": "42.9.2",
-    "electron-builder": "26.15.3"
+    "electron": "42.11.14",
+    "electron-builder": "26.5.0"
   },
   "overrides": {
-    "fast-uri": ">=4.1.5"
+    "fast-uri": "^4.1.5",
+    "brace-expansion": "^1.1.21",
+    "undici": "^7.30.0"
   }
 }
